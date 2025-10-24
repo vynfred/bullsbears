@@ -6,6 +6,11 @@ from typing import List, Optional
 from pydantic import validator, Field
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+from dotenv import load_dotenv
+
+# Load environment variables from both backend/.env and root .env
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", "..", ".env"))  # Root .env
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", "..", "backend", ".env"))  # Backend .env
 
 
 class Settings(BaseSettings):

@@ -65,7 +65,7 @@ async def lifespan(app: FastAPI):
         # Log API configuration status
         import os
         critical_apis = {
-            "Alpha Vantage": bool(os.getenv("ALPHA_VANTAGE_API_KEY")),
+            "Alpha Vantage": bool(os.getenv("ALPHA_VANTAGE_API_KEY") and os.getenv("ALPHA_VANTAGE_API_KEY") != "demo"),
             "News API": bool(os.getenv("NEWS_API_KEY") and os.getenv("NEWS_API_KEY") != "demo")
         }
         optional_apis = {
@@ -274,7 +274,7 @@ async def configuration_health_check():
     # Define API configurations
     api_configs = {
         "critical": {
-            "alpha_vantage": bool(os.getenv("ALPHA_VANTAGE_API_KEY")),
+            "alpha_vantage": bool(os.getenv("ALPHA_VANTAGE_API_KEY") and os.getenv("ALPHA_VANTAGE_API_KEY") != "demo"),
             "news_api": bool(os.getenv("NEWS_API_KEY") and os.getenv("NEWS_API_KEY") != "demo")
         },
         "optional": {

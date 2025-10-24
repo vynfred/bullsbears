@@ -54,26 +54,28 @@ class GrokAIService:
         if self.session:
             await self.session.close()
     
-    async def analyze_option_play(self, 
+    async def analyze_option_play(self,
                                 symbol: str,
                                 technical_data: Dict[str, Any],
                                 news_data: Dict[str, Any],
+                                social_data: Dict[str, Any],
                                 polymarket_data: List[Dict[str, Any]],
                                 catalyst_data: Dict[str, Any],
                                 unusual_volume_data: Dict[str, Any],
                                 confidence_score: float) -> Optional[GrokAnalysis]:
         """
         Get Grok AI analysis of the complete option play data.
-        
+
         Args:
             symbol: Stock symbol
             technical_data: Technical analysis results
             news_data: News sentiment analysis
+            social_data: Social media sentiment analysis
             polymarket_data: Prediction market data
             catalyst_data: Upcoming catalysts
             unusual_volume_data: Unusual volume analysis
             confidence_score: Current confidence score
-            
+
         Returns:
             GrokAnalysis object with AI recommendations
         """
@@ -85,12 +87,12 @@ class GrokAIService:
             if not self.session:
                 async with self:
                     return await self._perform_analysis(
-                        symbol, technical_data, news_data, polymarket_data,
+                        symbol, technical_data, news_data, social_data, polymarket_data,
                         catalyst_data, unusual_volume_data, confidence_score
                     )
             else:
                 return await self._perform_analysis(
-                    symbol, technical_data, news_data, polymarket_data,
+                    symbol, technical_data, news_data, social_data, polymarket_data,
                     catalyst_data, unusual_volume_data, confidence_score
                 )
                 
@@ -99,14 +101,14 @@ class GrokAIService:
             return None
     
     async def _perform_analysis(self, symbol: str, technical_data: Dict, news_data: Dict,
-                              polymarket_data: List[Dict], catalyst_data: Dict,
+                              social_data: Dict, polymarket_data: List[Dict], catalyst_data: Dict,
                               unusual_volume_data: Dict, confidence_score: float) -> Optional[GrokAnalysis]:
         """Perform the actual AI analysis."""
         
         # Prepare the analysis prompt
         prompt = self._build_analysis_prompt(
-            symbol, technical_data, news_data, polymarket_data,
-            catalyst_data, unusual_volume_data, confidence_score
+            symbol, technical_data, news_data, social_data, polymarket_data,
+            catalyst_data, unusual_volume_data, all_data.get('options_flow', {}), confidence_score
         )
         
         try:
@@ -139,10 +141,49 @@ class GrokAIService:
         except Exception as e:
             logger.error(f"Error calling Grok API: {e}")
             return None
+
+    async def analyze_comprehensive_option_play(self, symbol: str, all_data: Dict, confidence_score: float) -> Optional[GrokAnalysis]:
+        """Analyze option play with comprehensive data package."""
+        return await self.analyze_option_play(
+            symbol=symbol,
+            technical_data=all_data.get('technical', {}),
+            news_data=all_data.get('news', {}),
+            social_data=all_data.get('social', {}),
+            polymarket_data=all_data.get('polymarket', []),
+            catalyst_data=all_data.get('catalysts', {}),
+            unusual_volume_data=all_data.get('volume', {}),
+            confidence_score=confidence_score
+        )
+
+    async def analyze_comprehensive_option_play(self, symbol: str, all_data: Dict, confidence_score: float) -> Optional[GrokAnalysis]:
+        """Analyze option play with comprehensive data package."""
+        return await self.analyze_option_play(
+            symbol=symbol,
+            technical_data=all_data.get('technical', {}),
+            news_data=all_data.get('news', {}),
+            social_data=all_data.get('social', {}),
+            polymarket_data=all_data.get('polymarket', []),
+            catalyst_data=all_data.get('catalysts', {}),
+            unusual_volume_data=all_data.get('volume', {}),
+            confidence_score=confidence_score
+        )
+
+    async def analyze_comprehensive_option_play(self, symbol: str, all_data: Dict, confidence_score: float) -> Optional[GrokAnalysis]:
+        """Analyze option play with comprehensive data package."""
+        return await self.analyze_option_play(
+            symbol=symbol,
+            technical_data=all_data.get('technical', {}),
+            news_data=all_data.get('news', {}),
+            social_data=all_data.get('social', {}),
+            polymarket_data=all_data.get('polymarket', []),
+            catalyst_data=all_data.get('catalysts', {}),
+            unusual_volume_data=all_data.get('volume', {}),
+            confidence_score=confidence_score
+        )
     
     def _build_analysis_prompt(self, symbol: str, technical_data: Dict, news_data: Dict,
-                             polymarket_data: List[Dict], catalyst_data: Dict,
-                             unusual_volume_data: Dict, confidence_score: float) -> str:
+                             social_data: Dict, polymarket_data: List[Dict], catalyst_data: Dict,
+                             unusual_volume_data: Dict, options_flow_data: Dict, confidence_score: float) -> str:
         """Build the analysis prompt for Grok AI."""
         
         prompt = f"""
@@ -156,6 +197,9 @@ TECHNICAL ANALYSIS:
 NEWS SENTIMENT:
 {self._format_news_data(news_data)}
 
+SOCIAL MEDIA SENTIMENT:
+{self._format_social_data(social_data)}
+
 PREDICTION MARKETS (High Probability Events):
 {self._format_polymarket_data(polymarket_data)}
 
@@ -164,6 +208,9 @@ UPCOMING CATALYSTS:
 
 UNUSUAL VOLUME ACTIVITY:
 {self._format_volume_data(unusual_volume_data)}
+
+OPTIONS FLOW ANALYSIS:
+{self._format_options_flow_data(options_flow_data)}
 
 Please provide your analysis in this exact JSON format:
 {{
@@ -221,7 +268,32 @@ Focus on:
         sentiment_label = "Positive" if sentiment > 0.1 else "Negative" if sentiment < -0.1 else "Neutral"
         
         return f"Sentiment: {sentiment_label} (Score: {sentiment:.2f}, Articles: {article_count})"
-    
+
+    def _format_social_data(self, data: Dict) -> str:
+        """Format social media sentiment data for the prompt."""
+        if not data:
+            return "No social media data available"
+
+        social_score = data.get('social_score', 50)
+        sentiment_label = "Positive" if social_score > 60 else "Negative" if social_score < 40 else "Neutral"
+
+        platforms = []
+        if 'reddit_data' in data and data['reddit_data']:
+            reddit_posts = len(data['reddit_data'].get('posts', []))
+            platforms.append(f"Reddit: {reddit_posts} posts")
+
+        if 'twitter_data' in data and data['twitter_data']:
+            twitter_posts = len(data['twitter_data'].get('tweets', []))
+            platforms.append(f"Twitter: {twitter_posts} tweets")
+
+        if 'stocktwits_data' in data and data['stocktwits_data']:
+            stocktwits_posts = len(data['stocktwits_data'].get('messages', []))
+            platforms.append(f"StockTwits: {stocktwits_posts} messages")
+
+        platform_summary = ", ".join(platforms) if platforms else "Limited platform data"
+
+        return f"Sentiment: {sentiment_label} (Score: {social_score:.1f}/100, Sources: {platform_summary})"
+
     def _format_polymarket_data(self, data: List[Dict]) -> str:
         """Format Polymarket prediction data for the prompt."""
         if not data:
@@ -278,7 +350,48 @@ Focus on:
                 lines.append(f"{len(blocks)} large block trades detected")
         
         return "\n".join(lines) if lines else "Normal volume patterns"
-    
+
+    def _format_options_flow_data(self, data: Dict) -> str:
+        """Format options flow data for the prompt."""
+        if not data or 'error' in data:
+            return "No options flow data available"
+
+        lines = []
+
+        # Flow sentiment
+        flow_sentiment = data.get('flow_sentiment', 'NEUTRAL')
+        bullish_ratio = data.get('bullish_flow_ratio', 0.5) * 100
+        lines.append(f"Flow Sentiment: {flow_sentiment} ({bullish_ratio:.1f}% bullish)")
+
+        # Volume metrics
+        total_volume = data.get('total_options_volume', 0)
+        if total_volume > 0:
+            lines.append(f"Total Options Volume: {total_volume:,} contracts")
+
+        # Unusual activity
+        unusual_score = data.get('unusual_activity_score', 0)
+        if unusual_score > 5:
+            lines.append(f"Unusual Activity Score: {unusual_score}/10 (HIGH)")
+
+            unusual_contracts = data.get('unusual_contracts', [])
+            if unusual_contracts:
+                lines.append("Top Unusual Contracts:")
+                for contract in unusual_contracts[:3]:
+                    contract_type = contract.get('type', 'UNKNOWN')
+                    strike = contract.get('strike', 0)
+                    ratio = contract.get('volume_oi_ratio', 0)
+                    lines.append(f"  • {contract_type} ${strike} (Vol/OI: {ratio:.1f}x)")
+
+        # Large trades
+        large_trades = data.get('large_trades', [])
+        if large_trades:
+            lines.append("Large Premium Trades:")
+            for trade in large_trades[:2]:
+                premium = trade.get('premium_value', 0)
+                lines.append(f"  • ${premium:,.0f} premium trade")
+
+        return "\n".join(lines) if lines else "Limited options flow data"
+
     def _parse_grok_response(self, response: Dict) -> Optional[GrokAnalysis]:
         """Parse Grok AI response into structured data."""
         try:
@@ -317,6 +430,7 @@ async def get_ai_analysis(symbol: str, all_data: Dict) -> Optional[GrokAnalysis]
             symbol=symbol,
             technical_data=all_data.get('technical', {}),
             news_data=all_data.get('news', {}),
+            social_data=all_data.get('social', {}),
             polymarket_data=all_data.get('polymarket', []),
             catalyst_data=all_data.get('catalysts', {}),
             unusual_volume_data=all_data.get('volume', {}),

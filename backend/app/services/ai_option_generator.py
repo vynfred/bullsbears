@@ -17,6 +17,7 @@ from .catalyst_detector import CatalystDetector, Catalyst
 from .volume_analyzer import VolumeAnalyzer, VolumeAlert
 from ..analyzers.technical import TechnicalAnalyzer
 from ..analyzers.news import NewsAnalyzer
+from ..analyzers.social import SocialMediaAnalyzer
 from ..analyzers.confidence import ConfidenceScorer
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,7 @@ class AIOptionGenerator:
         self.ticker_selector = TickerSelector()
         self.technical_analyzer = TechnicalAnalyzer()
         self.news_analyzer = NewsAnalyzer()
+        self.social_analyzer = SocialMediaAnalyzer()
         self.confidence_scorer = ConfidenceScorer()
         self.options_analyzer = OptionsAnalyzer()
         self.catalyst_detector = CatalystDetector()
@@ -112,10 +114,10 @@ class AIOptionGenerator:
         
         logger.info(f"Generating {max_plays} option plays with {min_confidence}% min confidence")
 
-        # Check if we're in demo mode (API keys are "demo" or None)
+        # Check if we're in demo mode (API keys are "demo", None, or empty)
         import os
         alpha_key = os.getenv("ALPHA_VANTAGE_API_KEY")
-        if alpha_key in [None, ""]:
+        if alpha_key in [None, "", "demo"]:
             logger.info("Demo mode detected - generating mock play for testing")
             return await self._generate_demo_play(min_confidence, timeframe_days, position_size_dollars, directional_bias)
 
@@ -200,25 +202,29 @@ class AIOptionGenerator:
         symbol = candidate.symbol
         
         try:
-            # Run all analysis concurrently
+            # Run all analysis concurrently for maximum efficiency
             tasks = [
                 self.technical_analyzer.analyze(symbol),
                 self.news_analyzer.analyze_sentiment(symbol, candidate.company_name),
+                self.social_analyzer.analyze(symbol),
                 self.catalyst_detector.detect_catalysts(symbol, timeframe_days),
                 self.volume_analyzer.analyze_unusual_volume(symbol),
+                self._analyze_options_flow(symbol),  # Enhanced options flow analysis
             ]
             
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            
+
             technical_data = results[0] if not isinstance(results[0], Exception) else {}
             news_data = results[1] if not isinstance(results[1], Exception) else {}
-            catalysts = results[2] if not isinstance(results[2], Exception) else []
-            volume_data = results[3] if not isinstance(results[3], Exception) else {}
+            social_data = results[2] if not isinstance(results[2], Exception) else {}
+            catalysts = results[3] if not isinstance(results[3], Exception) else []
+            volume_data = results[4] if not isinstance(results[4], Exception) else {}
+            options_flow_data = results[5] if not isinstance(results[5], Exception) else {}
             
-            # Calculate enhanced confidence score
+            # Calculate enhanced confidence score with all data sources
             confidence_score = await self._calculate_enhanced_confidence(
-                candidate, technical_data, news_data, catalysts, 
-                volume_data, polymarket_events
+                candidate, technical_data, news_data, social_data, catalysts,
+                volume_data, options_flow_data, polymarket_events
             )
             
             # Generate option recommendation
@@ -230,22 +236,22 @@ class AIOptionGenerator:
             if not option_rec:
                 return None
             
-            # Get AI analysis from Grok
+            # Get AI analysis from Grok with comprehensive data
             all_data = {
                 'technical': technical_data,
                 'news': news_data,
+                'social': social_data,
                 'polymarket': [event.__dict__ for event in polymarket_events],
                 'catalysts': {'catalysts': [cat.__dict__ for cat in catalysts]},
                 'volume': volume_data,
+                'options_flow': options_flow_data,
                 'confidence_score': confidence_score
             }
             
             async with GrokAIService() as grok:
-                ai_analysis = await grok.analyze_option_play(
-                    symbol, technical_data, news_data,
-                    [event.__dict__ for event in polymarket_events],
-                    {'catalysts': [cat.__dict__ for cat in catalysts]},
-                    volume_data, confidence_score
+                # Create a comprehensive data package for Grok analysis
+                ai_analysis = await grok.analyze_comprehensive_option_play(
+                    symbol, all_data, confidence_score
                 )
             
             # Create complete option play
@@ -298,42 +304,82 @@ class AIOptionGenerator:
             logger.error(f"Error generating play for {symbol}: {e}")
             return None
     
-    async def _calculate_enhanced_confidence(self, 
+    async def _calculate_enhanced_confidence(self,
                                            candidate: TickerCandidate,
                                            technical_data: Dict,
                                            news_data: Dict,
+                                           social_data: Dict,
                                            catalysts: List[Catalyst],
                                            volume_data: Dict,
+                                           options_flow_data: Dict,
                                            polymarket_events: List[PredictionMarket]) -> float:
-        """Calculate enhanced confidence score with all factors."""
-        
+        """Calculate enhanced confidence score with all factors including social sentiment."""
+
         # Base confidence from ticker selection
         base_confidence = candidate.confidence_score
-        
+
+        # Technical analysis boost/penalty
+        technical_boost = 0.0
+        if technical_data.get('technical_score'):
+            tech_score = technical_data['technical_score']
+            if tech_score > 70:
+                technical_boost = (tech_score - 70) * 0.3  # Up to 9 points for 100 score
+            elif tech_score < 30:
+                technical_boost = (tech_score - 30) * 0.3  # Negative for bearish signals
+
+        # News sentiment boost/penalty
+        news_boost = 0.0
+        if news_data.get('news_score'):
+            news_score = news_data['news_score']
+            if news_score > 60:
+                news_boost = (news_score - 60) * 0.2  # Up to 8 points for 100 score
+            elif news_score < 40:
+                news_boost = (news_score - 40) * 0.2  # Negative for bearish news
+
+        # Social media sentiment boost/penalty
+        social_boost = 0.0
+        if social_data.get('social_score'):
+            social_score = social_data['social_score']
+            if social_score > 60:
+                social_boost = (social_score - 60) * 0.15  # Up to 6 points for 100 score
+            elif social_score < 40:
+                social_boost = (social_score - 40) * 0.15  # Negative for bearish sentiment
+
         # Catalyst boost
         catalyst_boost = 0.0
         for catalyst in catalysts:
             if catalyst.impact_score >= 7:  # High impact catalysts
                 catalyst_boost += catalyst.impact_score * 2
         catalyst_boost = min(catalyst_boost, 15)  # Cap at 15 points
-        
+
         # Volume boost
         volume_boost = 0.0
         if volume_data.get('stock_volume', {}).get('unusual_activity', False):
             volume_ratio = volume_data['stock_volume'].get('volume_ratio', 1)
             volume_boost = min(volume_ratio * 2, 10)  # Cap at 10 points
-        
+
+        # Options flow boost/penalty
+        options_flow_boost = 0.0
+        if options_flow_data.get('bullish_flow_ratio', 0) > 0.7:
+            options_flow_boost = 8  # Strong bullish flow
+        elif options_flow_data.get('bullish_flow_ratio', 0) < 0.3:
+            options_flow_boost = -8  # Strong bearish flow
+        elif options_flow_data.get('unusual_activity_score', 0) > 7:
+            options_flow_boost = 5  # High unusual activity
+
         # Polymarket boost
         polymarket_boost = 0.0
         for event in polymarket_events:
             if event.impact_level == 'HIGH' and event.probability > 0.85:
                 polymarket_boost += 5
         polymarket_boost = min(polymarket_boost, 10)  # Cap at 10 points
-        
-        # Calculate final confidence
-        enhanced_confidence = base_confidence + catalyst_boost + volume_boost + polymarket_boost
-        
-        return min(enhanced_confidence, 100.0)
+
+        # Calculate final confidence with all factors
+        enhanced_confidence = (base_confidence + technical_boost + news_boost +
+                             social_boost + catalyst_boost + volume_boost +
+                             options_flow_boost + polymarket_boost)
+
+        return min(max(enhanced_confidence, 0.0), 100.0)  # Clamp between 0-100
     
     def _calculate_catalyst_impact(self, catalysts: List[Catalyst]) -> float:
         """Calculate overall catalyst impact score."""
@@ -388,6 +434,83 @@ class AIOptionGenerator:
             self.last_reset_date = current_date
         
         return self.generation_count < self.daily_generation_limit
+
+    async def _analyze_options_flow(self, symbol: str) -> Dict[str, Any]:
+        """Analyze options flow patterns for enhanced insights."""
+        try:
+            # Get recent options data
+            from ..services.stock_data import StockDataService
+
+            async with StockDataService() as stock_service:
+                options_data = await stock_service.get_options_chain(symbol)
+
+                if not options_data:
+                    return {}
+
+                # Analyze call/put ratio
+                calls = options_data.get('calls', [])
+                puts = options_data.get('puts', [])
+
+                total_call_volume = sum(opt.get('volume', 0) for opt in calls)
+                total_put_volume = sum(opt.get('volume', 0) for opt in puts)
+                total_volume = total_call_volume + total_put_volume
+
+                if total_volume == 0:
+                    return {'error': 'No options volume data available'}
+
+                # Calculate flow metrics
+                bullish_flow_ratio = total_call_volume / total_volume if total_volume > 0 else 0.5
+
+                # Identify unusual activity
+                unusual_contracts = []
+                for contract in calls + puts:
+                    volume = contract.get('volume', 0)
+                    open_interest = contract.get('open_interest', 1)
+
+                    # Volume to OI ratio > 2 indicates unusual activity
+                    if volume > 0 and open_interest > 0 and (volume / open_interest) > 2:
+                        unusual_contracts.append({
+                            'contract': contract.get('contract_symbol', ''),
+                            'type': contract.get('option_type', ''),
+                            'strike': contract.get('strike_price', 0),
+                            'volume': volume,
+                            'open_interest': open_interest,
+                            'volume_oi_ratio': volume / open_interest
+                        })
+
+                # Calculate unusual activity score
+                unusual_activity_score = min(len(unusual_contracts) * 2, 10)
+
+                # Analyze large trades (premium > $50k equivalent)
+                large_trades = []
+                for contract in calls + puts:
+                    volume = contract.get('volume', 0)
+                    last_price = contract.get('last_price', 0)
+
+                    if volume > 0 and last_price > 0:
+                        premium_value = volume * last_price * 100  # Options are per 100 shares
+                        if premium_value > 50000:  # $50k+ trades
+                            large_trades.append({
+                                'contract': contract.get('contract_symbol', ''),
+                                'premium_value': premium_value,
+                                'volume': volume
+                            })
+
+                return {
+                    'symbol': symbol,
+                    'total_options_volume': total_volume,
+                    'call_volume': total_call_volume,
+                    'put_volume': total_put_volume,
+                    'bullish_flow_ratio': bullish_flow_ratio,
+                    'unusual_contracts': unusual_contracts[:5],  # Top 5
+                    'unusual_activity_score': unusual_activity_score,
+                    'large_trades': large_trades[:3],  # Top 3
+                    'flow_sentiment': 'BULLISH' if bullish_flow_ratio > 0.6 else 'BEARISH' if bullish_flow_ratio < 0.4 else 'NEUTRAL'
+                }
+
+        except Exception as e:
+            logger.warning(f"Error analyzing options flow for {symbol}: {e}")
+            return {'error': f'Options flow analysis failed: {str(e)}'}
 
     async def _generate_demo_play(self, min_confidence: float, timeframe_days: int, position_size_dollars: float, directional_bias: str = "AI_DECIDES") -> List[AIOptionPlay]:
         """Generate a demo play for testing when API keys are not available."""
