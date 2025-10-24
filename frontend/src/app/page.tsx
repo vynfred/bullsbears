@@ -3,13 +3,15 @@
 import React, { useState } from 'react';
 import AIPlayGenerator from '@/components/AIPlayGenerator';
 import AIPlayResults from '@/components/AIPlayResults';
+import OptionPlayCard from '@/components/OptionPlayCard';
 import NotificationSystem from '@/components/NotificationSystem';
 import HistoryTab from '@/components/HistoryTab';
 import StockAnalyzer from '@/components/StockAnalyzer';
 import ActivityTabs from '@/components/ActivityTabs';
+import PortfolioTracker from '@/components/PortfolioTracker';
 
 import { api, AIOptionPlay } from '@/lib/api';
-import { Terminal, Wifi, WifiOff, History, TrendingUp, Search, BarChart3, List, Menu, X } from 'lucide-react';
+import { Terminal, Wifi, WifiOff, History, TrendingUp, Search, BarChart3, List, Menu, X, AlertTriangle } from 'lucide-react';
 import { DirectionalBias } from '@/components/AIPlayGenerator';
 
 type ActiveTool = 'ai-generator' | 'stock-analyzer' | 'portfolio' | 'unusual-options' | 'activity';
@@ -28,6 +30,7 @@ export default function Home() {
   // System state
   const [backendStatus, setBackendStatus] = useState<boolean | null>(null);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   // Legacy history state (will be integrated into tools)
   const [showHistory, setShowHistory] = useState(false);
@@ -39,6 +42,18 @@ export default function Home() {
     try {
       const isHealthy = await api.healthCheck();
       setBackendStatus(isHealthy);
+
+      // Check if backend is in demo mode
+      if (isHealthy) {
+        try {
+          const response = await fetch('http://localhost:8000/');
+          const data = await response.json();
+          // Check if demo mode indicators are present in logs or response
+          setIsDemoMode(true); // For now, assume demo mode since API keys are set to "demo"
+        } catch (err) {
+          console.log('Could not check demo mode status');
+        }
+      }
     } catch (error) {
       console.log('Backend health check failed - this is normal if backend is not running');
       setBackendStatus(false);
@@ -164,6 +179,26 @@ export default function Home() {
       );
     }
 
+    // Demo Mode Warning
+    const demoModeWarning = isDemoMode && (
+      <div className="mb-6 cyber-panel border-[var(--accent-yellow)]">
+        <div className="flex items-center">
+          <AlertTriangle className="h-5 w-5 text-[var(--accent-yellow)] mr-3" />
+          <div>
+            <h3 className="font-mono text-[var(--accent-yellow)] font-bold uppercase">
+              [DEMO MODE] Using Simulated Data
+            </h3>
+            <p className="text-sm text-[var(--text-muted)] mt-1 font-mono">
+              &gt; API keys not configured - showing demo data for testing purposes
+            </p>
+            <p className="text-xs text-[var(--text-muted)] mt-1 font-mono">
+              &gt; Configure Alpha Vantage and News API keys in backend/.env for real market data
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+
     // Legacy history view
     if (showHistory) {
       return (
@@ -176,11 +211,17 @@ export default function Home() {
     // Main tool content
     switch (activeTool) {
       case 'activity':
-        return <ActivityTabs />;
+        return (
+          <>
+            {demoModeWarning}
+            <ActivityTabs />
+          </>
+        );
 
       case 'ai-generator':
         return (
           <>
+            {demoModeWarning}
             {/* AI Play Generator */}
             <div className="cyber-panel mb-6">
               <div className="flex items-center gap-2 mb-4">
@@ -199,16 +240,28 @@ export default function Home() {
               />
             </div>
 
-            {/* AI Play Results */}
+            {/* AI Play Results - Card Layout */}
             {aiPlays.length > 0 && (
               <div className="cyber-panel">
-                <div className="flex items-center gap-2 mb-4">
+                <div className="flex items-center gap-2 mb-6">
                   <div className="w-2 h-2 bg-[var(--accent-yellow)] rounded-full animate-pulse"></div>
                   <h2 className="text-xl font-mono text-[var(--accent-yellow)] uppercase tracking-wider">
-                    ANALYSIS RESULTS
+                    ANALYSIS RESULTS ({aiPlays.length})
                   </h2>
                 </div>
-                <AIPlayResults plays={aiPlays} onChooseOption={handleChooseOption} />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {aiPlays.map((play, index) => (
+                    <OptionPlayCard
+                      key={index}
+                      play={play}
+                      onChoosePlay={handleChooseOption}
+                      onSharePlay={(play) => {
+                        // TODO: Implement share functionality
+                        console.log('Share play:', play.symbol);
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
             )}
 
@@ -233,27 +286,19 @@ export default function Home() {
         );
 
       case 'stock-analyzer':
-        return <StockAnalyzer />;
+        return (
+          <>
+            {demoModeWarning}
+            <StockAnalyzer />
+          </>
+        );
 
       case 'portfolio':
         return (
-          <div className="cyber-panel text-center">
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <BarChart3 className="w-8 h-8 text-[var(--accent-cyan)]" />
-              <h2 className="text-xl font-mono text-[var(--accent-cyan)] uppercase tracking-wider">
-                Portfolio Tracker
-              </h2>
-            </div>
-            <p className="font-mono text-[var(--text-secondary)] mb-4">
-              &gt; Coming Soon - Track your trading performance
-            </p>
-            <button
-              onClick={() => setShowHistory(true)}
-              className="neon-button"
-            >
-              View Trading History
-            </button>
-          </div>
+          <>
+            {demoModeWarning}
+            <PortfolioTracker />
+          </>
         );
 
       case 'unusual-options':
