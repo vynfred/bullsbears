@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import {
   TrendingUp, TrendingDown, Shield, Brain,
-  ChevronDown, ChevronRight, Zap
+  ChevronDown, ChevronRight, Zap, BookmarkPlus
 } from 'lucide-react';
 import { AIOptionPlay } from '@/lib/api';
 
@@ -12,8 +12,17 @@ interface AIPlayResultsProps {
   onChooseOption?: (play: AIOptionPlay) => void;
 }
 
+interface WatchlistState {
+  [key: number]: {
+    isAdding: boolean;
+    success: string | null;
+    error: string | null;
+  };
+}
+
 export default function AIPlayResults({ plays, onChooseOption }: AIPlayResultsProps) {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [watchlistStates, setWatchlistStates] = useState<WatchlistState>({});
 
   if (!plays || plays.length === 0) {
     return null;
@@ -27,6 +36,85 @@ export default function AIPlayResults({ plays, onChooseOption }: AIPlayResultsPr
       newExpanded.add(index);
     }
     setExpandedRows(newExpanded);
+  };
+
+  const handleAddToWatchlist = async (play: AIOptionPlay, index: number) => {
+    // Update state to show loading
+    setWatchlistStates(prev => ({
+      ...prev,
+      [index]: { isAdding: true, success: null, error: null }
+    }));
+
+    try {
+      const watchlistData = {
+        symbol: play.symbol,
+        company_name: play.company_name,
+        entry_type: play.option_type === 'CALL' ? 'OPTION_CALL' : 'OPTION_PUT',
+        entry_price: play.entry_price,
+        target_price: play.target_price,
+        stop_loss_price: play.stop_loss,
+        ai_confidence_score: play.confidence_score,
+        ai_recommendation: play.ai_recommendation,
+        ai_reasoning: play.summary,
+        ai_key_factors: play.key_factors || [],
+        position_size_dollars: play.entry_price * play.position_size * 100, // Options are per 100 shares
+        strike_price: play.strike,
+        expiration_date: new Date(play.expiration).toISOString(),
+        option_contract_symbol: `${play.symbol}${play.expiration.replace(/-/g, '')}${play.option_type}${play.strike}`
+      };
+
+      const response = await fetch('http://localhost:8000/api/v1/watchlist/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(watchlistData),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to add to watchlist: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        setWatchlistStates(prev => ({
+          ...prev,
+          [index]: {
+            isAdding: false,
+            success: `✅ ${play.symbol} ${play.option_type} added to watchlist!`,
+            error: null
+          }
+        }));
+
+        // Clear success message after 5 seconds
+        setTimeout(() => {
+          setWatchlistStates(prev => ({
+            ...prev,
+            [index]: { ...prev[index], success: null }
+          }));
+        }, 5000);
+      } else {
+        throw new Error(result.message || 'Failed to add to watchlist');
+      }
+    } catch (err) {
+      setWatchlistStates(prev => ({
+        ...prev,
+        [index]: {
+          isAdding: false,
+          success: null,
+          error: err instanceof Error ? err.message : 'Failed to add to watchlist'
+        }
+      }));
+
+      // Clear error message after 5 seconds
+      setTimeout(() => {
+        setWatchlistStates(prev => ({
+          ...prev,
+          [index]: { ...prev[index], error: null }
+        }));
+      }, 5000);
+    }
   };
 
   const getRecommendationColor = (recommendation: string) => {
@@ -218,20 +306,64 @@ export default function AIPlayResults({ plays, onChooseOption }: AIPlayResultsPr
                           </div>
                         )}
 
-                        {/* Action Button */}
-                        {onChooseOption && (
-                          <div className="text-center">
+                        {/* Watchlist Status Messages */}
+                        {watchlistStates[index]?.success && (
+                          <div className="bg-[var(--bg-tertiary)] border border-[var(--accent-cyan)] rounded p-3 mb-4">
+                            <div className="flex items-center gap-2">
+                              <BookmarkPlus className="w-4 h-4 text-[var(--accent-cyan)]" />
+                              <span className="font-mono text-[var(--accent-cyan)] text-sm">
+                                {watchlistStates[index].success}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {watchlistStates[index]?.error && (
+                          <div className="bg-[var(--bg-tertiary)] border border-[var(--accent-red)] rounded p-3 mb-4">
+                            <div className="flex items-center gap-2">
+                              <Shield className="w-4 h-4 text-[var(--accent-red)]" />
+                              <span className="font-mono text-[var(--accent-red)] text-sm">
+                                {watchlistStates[index].error}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-3 justify-center">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAddToWatchlist(play, index);
+                            }}
+                            disabled={watchlistStates[index]?.isAdding}
+                            className="neon-button px-6 py-2 font-bold uppercase flex items-center gap-2"
+                          >
+                            {watchlistStates[index]?.isAdding ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border border-[var(--accent-cyan)] border-t-transparent"></div>
+                                Adding...
+                              </>
+                            ) : (
+                              <>
+                                <BookmarkPlus className="w-4 h-4" />
+                                Add to Watchlist
+                              </>
+                            )}
+                          </button>
+
+                          {onChooseOption && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 onChooseOption(play);
                               }}
-                              className="neon-button px-6 py-2 font-bold uppercase"
+                              className="neon-button-secondary px-6 py-2 font-bold uppercase"
                             >
                               Execute Trade
                             </button>
-                          </div>
-                        )}
+                          )}
+                        </div>
 
                         {/* Timestamp */}
                         <div className="text-center text-xs text-[var(--text-muted)] border-t border-[var(--border-color)] pt-2">

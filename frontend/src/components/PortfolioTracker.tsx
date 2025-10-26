@@ -85,8 +85,8 @@ export default function PortfolioTracker() {
     fetchPortfolioData();
   }, []);
 
-  const formatCurrency = (value: number) => `$${value.toFixed(2)}`;
-  const formatPercent = (value: number) => `${(value * 100).toFixed(1)}%`;
+  const formatCurrency = (value: number | undefined) => `$${(value || 0).toFixed(2)}`;
+  const formatPercent = (value: number | undefined) => `${((value || 0) * 100).toFixed(1)}%`;
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString();
 
   const getStatusColor = (option: ChosenOption) => {

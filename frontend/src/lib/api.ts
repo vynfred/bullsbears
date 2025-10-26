@@ -171,6 +171,67 @@ export interface OptionsData {
   disclaimer: string;
 }
 
+export interface UnusualOptionsActivity {
+  success: boolean;
+  data: {
+    timestamp: string;
+    time_range: string;
+    filter_criteria: {
+      min_volume_ratio: number;
+      min_premium: number;
+      symbols_analyzed: number;
+    };
+    ai_summary: {
+      summary: string;
+      key_trends: string[];
+      market_sentiment: string;
+      confidence: number;
+      last_updated: string;
+    };
+    unusual_options: UnusualOptionContract[];
+    large_trades: LargeOptionTrade[];
+    sector_activity: Record<string, SectorActivity>;
+    market_metrics: {
+      total_unusual_contracts: number;
+      total_large_trades: number;
+      total_premium_flow: number;
+      call_put_ratio: number;
+    };
+  };
+  disclaimer: string;
+}
+
+export interface UnusualOptionContract {
+  symbol: string;
+  contract_symbol: string;
+  option_type: string;
+  strike: number;
+  expiration: string;
+  volume: number;
+  open_interest: number;
+  volume_oi_ratio: number;
+  last_price: number;
+  premium_value: number;
+  timestamp: string;
+}
+
+export interface LargeOptionTrade {
+  symbol: string;
+  contract_symbol: string;
+  option_type: string;
+  strike: number;
+  premium_value: number;
+  volume: number;
+  last_price: number;
+  timestamp: string;
+}
+
+export interface SectorActivity {
+  call_volume: number;
+  put_volume: number;
+  total_premium: number;
+}
+
 export interface OptionContract {
   strike: number;
   option_type: 'CALL' | 'PUT';
@@ -324,6 +385,25 @@ export const api = {
   },
 
   /**
+   * Get unusual options activity across all symbols
+   */
+  getUnusualOptionsActivity: async (
+    limit?: number,
+    minVolumeRatio?: number,
+    minPremium?: number,
+    timeRange?: string
+  ): Promise<UnusualOptionsActivity> => {
+    const params: any = {};
+    if (limit) params.limit = limit;
+    if (minVolumeRatio) params.min_volume_ratio = minVolumeRatio;
+    if (minPremium) params.min_premium = minPremium;
+    if (timeRange) params.time_range = timeRange;
+
+    const response = await apiClient.get('/api/v1/unusual-options', { params });
+    return response.data;
+  },
+
+  /**
    * Get detailed sentiment breakdown
    */
   getSentimentData: async (symbol: string, companyName?: string): Promise<SentimentData> => {
@@ -398,6 +478,19 @@ export const api = {
       optional_apis: { configured: 0, total: 4, apis: {} },
       timestamp: Date.now()
     };
+  },
+
+  // Stock OHLC data for charts
+  async fetchStockOHLC(symbol: string, period: string = '1y', interval: string = '1d') {
+    try {
+      const response = await apiClient.get(`/api/v1/stock/${symbol}/ohlc`, {
+        params: { period, interval }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching OHLC data:', error);
+      throw error;
+    }
   }
 };
 

@@ -1,9 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, Calendar, Newspaper, Filter, RefreshCw, ExternalLink } from 'lucide-react';
+import { TrendingUp, Calendar, Newspaper, Filter, RefreshCw, ExternalLink, Zap } from 'lucide-react';
+import { api, UnusualOptionsActivity, UnusualOptionContract, LargeOptionTrade } from '../lib/api';
+import { cn, priceChangeUtils, numberUtils, dateUtils } from '../lib/styles';
+import styles from '../styles/components.module.css';
+import layoutStyles from '../styles/layout.module.css';
+import utilStyles from '../styles/utilities.module.css';
 
-type ActivityTab = 'trending' | 'earnings' | 'news';
+type ActivityTab = 'trending' | 'earnings' | 'news' | 'unusual-options';
 
 interface TrendingStock {
   symbol: string;
@@ -25,6 +30,14 @@ interface EarningsEvent {
   actual_eps?: number;
   surprise_percent?: number;
   market_cap: number;
+  last_quarter_eps?: number;
+  last_quarter_surprise?: number;
+  ai_sentiment?: string;
+  ai_summary?: string;
+  sector: string;
+  time: 'BMO' | 'AMC' | 'TBD'; // Before Market Open, After Market Close, To Be Determined
+  has_analysis?: boolean; // Whether analysis exists for this stock
+  analysis_age_minutes?: number; // How old the analysis is in minutes
 }
 
 interface NewsItem {
@@ -38,16 +51,21 @@ interface NewsItem {
   url: string;
 }
 
-export default function ActivityTabs() {
+interface ActivityTabsProps {
+  onNavigateToAnalyzer?: (symbol: string, companyName: string) => void;
+}
+
+export default function ActivityTabs({ onNavigateToAnalyzer }: ActivityTabsProps = {}) {
   const [activeTab, setActiveTab] = useState<ActivityTab>('trending');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Data states
   const [trendingStocks, setTrendingStocks] = useState<TrendingStock[]>([]);
   const [earningsEvents, setEarningsEvents] = useState<EarningsEvent[]>([]);
   const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
-  
+  const [unusualOptionsData, setUnusualOptionsData] = useState<UnusualOptionsActivity | null>(null);
+
   // Filter states
   const [newsFilter, setNewsFilter] = useState<'all' | 'portfolio'>('all');
 
@@ -55,6 +73,7 @@ export default function ActivityTabs() {
     { id: 'trending' as ActivityTab, name: 'Trending Stocks', icon: TrendingUp },
     { id: 'earnings' as ActivityTab, name: 'Earnings', icon: Calendar },
     { id: 'news' as ActivityTab, name: 'News', icon: Newspaper },
+    { id: 'unusual-options' as ActivityTab, name: 'Unusual Options', icon: Zap },
   ];
 
   const fetchTrendingStocks = async () => {
@@ -79,29 +98,197 @@ export default function ActivityTabs() {
 
   const fetchEarningsCalendar = async () => {
     try {
-      // TODO: Implement earnings calendar endpoint
-      // For now, using mock data
+      // Fetch real earnings data from backend
+      const response = await fetch('http://localhost:8000/api/v1/earnings/calendar?days_ahead=7&include_analysis_status=true');
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch earnings calendar: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      // Transform backend data to match frontend interface
+      const transformedEarnings: EarningsEvent[] = data.events.map((event: any) => ({
+        symbol: event.symbol,
+        company_name: event.company_name,
+        earnings_date: event.earnings_date,
+        estimated_eps: event.estimated_eps || 0,
+        actual_eps: event.actual_eps,
+        surprise_percent: event.surprise_percent,
+        market_cap: event.market_cap || 1000000000,
+        last_quarter_eps: event.last_quarter_eps,
+        last_quarter_surprise: event.last_quarter_surprise,
+        ai_sentiment: event.ai_sentiment,
+        ai_summary: event.ai_summary,
+        sector: event.sector,
+        time: event.time,
+        has_analysis: event.has_analysis,
+        analysis_age_minutes: event.analysis_age_minutes
+      }));
+
+      setEarningsEvents(transformedEarnings);
+
+      // If no real data available, fall back to mock data
+      if (transformedEarnings.length === 0) {
+        await fetchMockEarningsData();
+      }
+
+    } catch (err) {
+      console.error('Error fetching earnings calendar:', err);
+      // Fall back to mock data on error
+      await fetchMockEarningsData();
+    }
+  };
+
+  const fetchMockEarningsData = async () => {
+    try {
+      // Helper function to get next market days
+      const getNextMarketDays = () => {
+        const days = [];
+        const today = new Date();
+        let currentDate = new Date(today);
+
+        while (days.length < 7) {
+          const dayOfWeek = currentDate.getDay();
+          // Skip weekends (0 = Sunday, 6 = Saturday)
+          if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+            days.push(new Date(currentDate));
+          }
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+        return days;
+      };
+
+      const marketDays = getNextMarketDays();
       const mockEarnings: EarningsEvent[] = [
+        // Day 1
         {
           symbol: 'AAPL',
           company_name: 'Apple Inc.',
-          earnings_date: '2024-01-25T16:30:00Z',
+          earnings_date: marketDays[0].toISOString(),
           estimated_eps: 2.10,
+          last_quarter_eps: 1.95,
+          last_quarter_surprise: 7.7,
           market_cap: 3000000000000,
+          sector: 'Technology',
+          time: 'AMC',
+          ai_sentiment: 'Bullish',
+          ai_summary: 'Strong iPhone 15 sales and services growth expected. AI integration narrative driving optimism.'
         },
         {
           symbol: 'MSFT',
           company_name: 'Microsoft Corporation',
-          earnings_date: '2024-01-24T16:30:00Z',
+          earnings_date: marketDays[0].toISOString(),
           estimated_eps: 2.78,
-          actual_eps: 2.93,
-          surprise_percent: 5.4,
+          last_quarter_eps: 2.69,
+          last_quarter_surprise: 3.3,
           market_cap: 2800000000000,
+          sector: 'Technology',
+          time: 'AMC',
+          ai_sentiment: 'Bullish',
+          ai_summary: 'Azure cloud growth and AI Copilot adoption driving revenue. Strong enterprise demand expected.'
         },
+        // Day 2
+        {
+          symbol: 'GOOGL',
+          company_name: 'Alphabet Inc.',
+          earnings_date: marketDays[1].toISOString(),
+          estimated_eps: 1.45,
+          last_quarter_eps: 1.55,
+          last_quarter_surprise: -6.5,
+          market_cap: 1700000000000,
+          sector: 'Technology',
+          time: 'AMC',
+          ai_sentiment: 'Neutral',
+          ai_summary: 'Ad revenue recovery uncertain. Cloud growth positive but competitive pressure from AI costs.'
+        },
+        // Day 3
+        {
+          symbol: 'TSLA',
+          company_name: 'Tesla Inc.',
+          earnings_date: marketDays[2].toISOString(),
+          estimated_eps: 0.85,
+          last_quarter_eps: 0.91,
+          last_quarter_surprise: -6.6,
+          market_cap: 800000000000,
+          sector: 'Consumer Discretionary',
+          time: 'AMC',
+          ai_sentiment: 'Bearish',
+          ai_summary: 'Delivery concerns and margin pressure from price cuts. Cybertruck ramp uncertainty.'
+        },
+        {
+          symbol: 'NFLX',
+          company_name: 'Netflix Inc.',
+          earnings_date: marketDays[2].toISOString(),
+          estimated_eps: 2.15,
+          last_quarter_eps: 3.73,
+          last_quarter_surprise: 15.2,
+          market_cap: 180000000000,
+          sector: 'Communication Services',
+          time: 'AMC',
+          ai_sentiment: 'Bullish',
+          ai_summary: 'Password sharing crackdown boosting subscribers. Ad-tier growth accelerating globally.'
+        },
+        // Day 4
+        {
+          symbol: 'NVDA',
+          company_name: 'NVIDIA Corporation',
+          earnings_date: marketDays[3].toISOString(),
+          estimated_eps: 5.15,
+          last_quarter_eps: 4.02,
+          last_quarter_surprise: 28.1,
+          market_cap: 1800000000000,
+          sector: 'Technology',
+          time: 'AMC',
+          ai_sentiment: 'Bullish',
+          ai_summary: 'AI chip demand remains robust. Data center revenue expected to exceed guidance significantly.'
+        },
+        // Day 5
+        {
+          symbol: 'META',
+          company_name: 'Meta Platforms Inc.',
+          earnings_date: marketDays[4].toISOString(),
+          estimated_eps: 3.85,
+          last_quarter_eps: 4.39,
+          last_quarter_surprise: 12.5,
+          market_cap: 850000000000,
+          sector: 'Communication Services',
+          time: 'AMC',
+          ai_sentiment: 'Neutral',
+          ai_summary: 'Reality Labs losses concerning investors. Ad recovery solid but metaverse spending high.'
+        },
+        // Day 6
+        {
+          symbol: 'AMZN',
+          company_name: 'Amazon.com Inc.',
+          earnings_date: marketDays[5].toISOString(),
+          estimated_eps: 0.75,
+          last_quarter_eps: 0.94,
+          last_quarter_surprise: 25.3,
+          market_cap: 1500000000000,
+          sector: 'Consumer Discretionary',
+          time: 'AMC',
+          ai_sentiment: 'Bullish',
+          ai_summary: 'AWS growth stabilizing. Prime Day and holiday season driving retail momentum.'
+        },
+        // Day 7
+        {
+          symbol: 'JPM',
+          company_name: 'JPMorgan Chase & Co.',
+          earnings_date: marketDays[6].toISOString(),
+          estimated_eps: 4.15,
+          last_quarter_eps: 4.32,
+          last_quarter_surprise: 4.1,
+          market_cap: 450000000000,
+          sector: 'Financial Services',
+          time: 'BMO',
+          ai_sentiment: 'Neutral',
+          ai_summary: 'Net interest income under pressure. Credit quality remains stable but provisions may increase.'
+        }
       ];
       setEarningsEvents(mockEarnings);
     } catch (err) {
-      console.error('Error fetching earnings calendar:', err);
+      console.error('Error fetching mock earnings data:', err);
       setError('Failed to load earnings calendar');
     }
   };
@@ -139,10 +326,54 @@ export default function ActivityTabs() {
     }
   };
 
+  const fetchUnusualOptions = async () => {
+    try {
+      const data = await api.getUnusualOptionsActivity(50, 2.0, 10000, '1d');
+      setUnusualOptionsData(data);
+    } catch (err) {
+      console.error('Error fetching unusual options:', err);
+      setError('Failed to load unusual options data');
+      // Set mock data as fallback
+      setUnusualOptionsData({
+        success: true,
+        data: {
+          timestamp: new Date().toISOString(),
+          time_range: '1d',
+          filter_criteria: {
+            min_volume_ratio: 2.0,
+            min_premium: 10000,
+            symbols_analyzed: 24
+          },
+          ai_summary: {
+            summary: "Elevated options activity detected in tech sector with unusual call volume in NVDA and TSLA. Large premium flows suggest institutional positioning ahead of earnings.",
+            key_trends: [
+              "Tech sector showing 3x normal call volume",
+              "NVDA unusual activity: 15.2x volume/OI ratio",
+              "Large premium flows: $2.3M in TSLA calls"
+            ],
+            market_sentiment: "BULLISH",
+            confidence: 0.85,
+            last_updated: new Date().toISOString()
+          },
+          unusual_options: [],
+          large_trades: [],
+          sector_activity: {},
+          market_metrics: {
+            total_unusual_contracts: 47,
+            total_large_trades: 12,
+            total_premium_flow: 5420000,
+            call_put_ratio: 2.3
+          }
+        },
+        disclaimer: "Demo data - unusual options analysis for educational purposes only."
+      });
+    }
+  };
+
   const refreshData = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       switch (activeTab) {
         case 'trending':
@@ -154,6 +385,9 @@ export default function ActivityTabs() {
         case 'news':
           await fetchNews();
           break;
+        case 'unusual-options':
+          await fetchUnusualOptions();
+          break;
       }
     } finally {
       setIsLoading(false);
@@ -164,30 +398,48 @@ export default function ActivityTabs() {
     refreshData();
   }, [activeTab]);
 
-  const formatPrice = (price: number) => `$${price.toFixed(2)}`;
-  const formatPercent = (percent: number) => `${percent >= 0 ? '+' : ''}${percent.toFixed(2)}%`;
-  const formatVolume = (volume: number) => {
-    if (volume >= 1000000) return `${(volume / 1000000).toFixed(1)}M`;
-    if (volume >= 1000) return `${(volume / 1000).toFixed(1)}K`;
-    return volume.toString();
+  // Auto-refresh for unusual options every 3 minutes
+  useEffect(() => {
+    if (activeTab === 'unusual-options') {
+      const interval = setInterval(() => {
+        fetchUnusualOptions();
+      }, 3 * 60 * 1000); // 3 minutes
+
+      return () => clearInterval(interval);
+    }
+  }, [activeTab]);
+
+  // Use design system utilities instead of custom formatters
+  const formatPrice = (price: number | undefined | null) => {
+    if (price == null || isNaN(price)) return '$--';
+    return numberUtils.formatCurrency(price);
   };
 
-  const formatMarketCap = (marketCap: number) => {
-    if (marketCap >= 1000000000000) return `$${(marketCap / 1000000000000).toFixed(1)}T`;
-    if (marketCap >= 1000000000) return `$${(marketCap / 1000000000).toFixed(1)}B`;
-    return `$${(marketCap / 1000000).toFixed(1)}M`;
+  const formatPercent = (percent: number | undefined | null) => {
+    if (percent == null || isNaN(percent)) return '--';
+    return priceChangeUtils.formatPercentChange(percent);
   };
 
-  const getSentimentColor = (score: number) => {
-    if (score >= 0.6) return 'text-[var(--accent-cyan)]';
-    if (score >= 0.4) return 'text-[var(--accent-yellow)]';
-    return 'text-[var(--accent-red)]';
+  const formatVolume = (volume: number | undefined | null) => {
+    if (volume == null || isNaN(volume)) return '--';
+    return numberUtils.formatLargeNumber(volume);
   };
 
-  const getChangeColor = (change: number) => {
-    if (change > 0) return 'text-[var(--accent-cyan)]';
-    if (change < 0) return 'text-[var(--accent-red)]';
-    return 'text-[var(--text-secondary)]';
+  const formatMarketCap = (marketCap: number | undefined | null) => {
+    if (marketCap == null || isNaN(marketCap)) return '$--';
+    return numberUtils.formatCurrency(marketCap, 1);
+  };
+
+  const getSentimentColor = (score: number | undefined | null) => {
+    if (score == null || isNaN(score)) return utilStyles.textSecondary;
+    if (score >= 0.6) return utilStyles.textGain;
+    if (score >= 0.4) return utilStyles.textNeutral;
+    return utilStyles.textLoss;
+  };
+
+  const getChangeColor = (change: number | undefined | null) => {
+    if (change == null || isNaN(change)) return utilStyles.textSecondary;
+    return priceChangeUtils.getChangeModuleClass(change, utilStyles);
   };
 
   const getMockTrendingStocks = (): TrendingStock[] => {
@@ -226,92 +478,265 @@ export default function ActivityTabs() {
   };
 
   const renderTrendingStocks = () => (
-    <div className="space-y-3">
+    <div className={utilStyles.wFull}>
       {trendingStocks.length === 0 ? (
-        <div className="text-center py-8">
+        <div className={cn(styles.loading, utilStyles.ptXl, utilStyles.pbXl)}>
           <TrendingUp className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-4" />
-          <p className="font-mono text-[var(--text-secondary)]">No trending stocks data available</p>
+          <p className={cn(utilStyles.textSecondary, utilStyles.textCenter)}>No trending stocks data available</p>
         </div>
       ) : (
-        trendingStocks.map((stock, index) => (
-          <div key={stock.symbol} className="bg-[var(--bg-secondary)] p-4 rounded border border-[var(--border-color)] hover:border-[var(--accent-cyan)] transition-colors">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="text-[var(--accent-cyan)] font-mono text-sm font-bold">
-                  #{index + 1}
-                </div>
-                <div>
-                  <div className="font-mono font-bold text-[var(--text-primary)]">
-                    {stock.symbol}
-                  </div>
-                  <div className="text-xs text-[var(--text-secondary)]">
-                    {stock.company_name}
-                  </div>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="font-mono font-bold text-[var(--text-primary)]">
-                  {formatPrice(stock.current_price)}
-                </div>
-                <div className={`text-sm font-mono ${getChangeColor(stock.price_change)}`}>
-                  {formatPercent(stock.price_change_percent)}
-                </div>
-              </div>
-              <div className="text-right text-xs text-[var(--text-muted)]">
-                <div>Vol: {formatVolume(stock.volume)}</div>
-                <div className={getSentimentColor(stock.sentiment_score)}>
-                  Sentiment: {(stock.sentiment_score * 100).toFixed(0)}%
-                </div>
-              </div>
-            </div>
-          </div>
-        ))
+        <div className="table-container">
+          <table className={styles.table}>
+            <thead className={styles.tableHeader}>
+              <tr>
+                <th className={styles.tableHeaderCell}>#</th>
+                <th className={styles.tableHeaderCell}>Symbol</th>
+                <th className={styles.tableHeaderCell}>Company</th>
+                <th className={cn(styles.tableHeaderCell, styles.tableCellNumeric)}>Price</th>
+                <th className={cn(styles.tableHeaderCell, styles.tableCellNumeric)}>Change</th>
+                <th className={cn(styles.tableHeaderCell, styles.tableCellNumeric)}>Volume</th>
+                <th className={cn(styles.tableHeaderCell, styles.tableCellCenter)}>Sentiment</th>
+                <th className={cn(styles.tableHeaderCell, styles.tableCellCenter)}>Rec.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {trendingStocks.map((stock, index) => (
+                <tr key={stock.symbol} className={styles.tableRow}>
+                  <td className={styles.tableCell}>
+                    <span className={cn(utilStyles.textGain, utilStyles.fontSemibold, utilStyles.textSm)}>
+                      #{index + 1}
+                    </span>
+                  </td>
+                  <td className={styles.tableCell}>
+                    <span className={cn(utilStyles.fontSemibold, utilStyles.textPrimary)}>
+                      {stock.symbol}
+                    </span>
+                  </td>
+                  <td className={styles.tableCell}>
+                    <span className={cn(utilStyles.textSecondary, utilStyles.textSm)}>
+                      {stock.company_name}
+                    </span>
+                  </td>
+                  <td className={cn(styles.tableCell, styles.tableCellNumeric)}>
+                    <span className={cn(utilStyles.fontSemibold, utilStyles.textPrimary)}>
+                      {formatPrice(stock.current_price)}
+                    </span>
+                  </td>
+                  <td className={cn(styles.tableCell, styles.tableCellNumeric)}>
+                    <span className={cn(getChangeColor(stock.price_change), utilStyles.fontSemibold)}>
+                      {formatPercent(stock.price_change_percent)}
+                    </span>
+                  </td>
+                  <td className={cn(styles.tableCell, styles.tableCellNumeric)}>
+                    <span className={utilStyles.textSecondary}>
+                      {formatVolume(stock.volume)}
+                    </span>
+                  </td>
+                  <td className={cn(styles.tableCell, styles.tableCellCenter)}>
+                    <span className={getSentimentColor(stock.sentiment_score)}>
+                      {stock.sentiment_score != null && !isNaN(stock.sentiment_score)
+                        ? `${(stock.sentiment_score * 100).toFixed(0)}%`
+                        : '--'}
+                    </span>
+                  </td>
+                  <td className={cn(styles.tableCell, styles.tableCellCenter)}>
+                    <span className={cn(
+                      styles.badge,
+                      stock.recommendation === 'BUY' || stock.recommendation === 'STRONG_BUY'
+                        ? styles.badgeGain
+                        : stock.recommendation === 'SELL'
+                        ? styles.badgeLoss
+                        : styles.badgeNeutral,
+                      utilStyles.textXs
+                    )}>
+                      {stock.recommendation}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
 
-  const renderEarningsCalendar = () => (
-    <div className="space-y-3">
-      {earningsEvents.length === 0 ? (
+  // Add navigation handler for earnings stocks
+  const handleEarningsStockClick = async (symbol: string, companyName: string, hasAnalysis?: boolean) => {
+    // If no analysis exists, trigger it in the background
+    if (!hasAnalysis) {
+      try {
+        await fetch(`http://localhost:8000/api/v1/earnings/trigger-analysis/${symbol}`, {
+          method: 'POST'
+        });
+      } catch (error) {
+        console.warn(`Failed to trigger analysis for ${symbol}:`, error);
+        // Continue anyway - the stock analyzer will handle the analysis
+      }
+    }
+
+    // Call the parent callback to navigate to stock analyzer
+    if (onNavigateToAnalyzer) {
+      onNavigateToAnalyzer(symbol, companyName);
+    }
+  };
+
+  const renderEarningsCalendar = () => {
+    // Group earnings by date
+    const earningsByDate = earningsEvents.reduce((acc, event) => {
+      const dateKey = new Date(event.earnings_date).toDateString();
+      if (!acc[dateKey]) {
+        acc[dateKey] = [];
+      }
+      acc[dateKey].push(event);
+      return acc;
+    }, {} as Record<string, EarningsEvent[]>);
+
+    const sortedDates = Object.keys(earningsByDate).sort((a, b) =>
+      new Date(a).getTime() - new Date(b).getTime()
+    );
+
+    if (earningsEvents.length === 0) {
+      return (
         <div className="text-center py-8">
           <Calendar className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-4" />
           <p className="font-mono text-[var(--text-secondary)]">No earnings events scheduled</p>
         </div>
-      ) : (
-        earningsEvents.map((event) => (
-          <div key={event.symbol} className="bg-[var(--bg-secondary)] p-4 rounded border border-[var(--border-color)] hover:border-[var(--accent-yellow)] transition-colors">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-mono font-bold text-[var(--text-primary)]">
-                  {event.symbol}
-                </div>
-                <div className="text-xs text-[var(--text-secondary)]">
-                  {event.company_name}
-                </div>
-                <div className="text-xs text-[var(--text-muted)] mt-1">
-                  {formatMarketCap(event.market_cap)}
+      );
+    }
+
+    return (
+      <div className="space-y-8">
+        {sortedDates.map((dateKey) => {
+          const events = earningsByDate[dateKey];
+          const date = new Date(dateKey);
+          const isToday = date.toDateString() === new Date().toDateString();
+
+          return (
+            <div key={dateKey}>
+              {/* Day Header with Line */}
+              <div className="flex items-center gap-4 mb-6">
+                <h3 className={cn(
+                  'text-lg font-semibold whitespace-nowrap',
+                  isToday ? utilStyles.textGain : utilStyles.textPrimary
+                )}>
+                  {date.toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                  {isToday && <span className="ml-2 text-sm font-normal">(Today)</span>}
+                </h3>
+                <div className="flex-1 h-[1.5px] bg-[var(--border-color)]"></div>
+                <div className="text-sm text-[var(--text-muted)] whitespace-nowrap">
+                  {events.length} earnings report{events.length !== 1 ? 's' : ''}
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-sm font-mono text-[var(--accent-yellow)]">
-                  {new Date(event.earnings_date).toLocaleDateString()}
-                </div>
-                <div className="text-xs text-[var(--text-muted)]">
-                  Est EPS: ${event.estimated_eps.toFixed(2)}
-                </div>
-                {event.actual_eps && (
-                  <div className={`text-xs font-mono ${event.surprise_percent && event.surprise_percent > 0 ? 'text-[var(--accent-cyan)]' : 'text-[var(--accent-red)]'}`}>
-                    Actual: ${event.actual_eps.toFixed(2)}
-                    {event.surprise_percent && ` (${formatPercent(event.surprise_percent)})`}
-                  </div>
-                )}
+
+              {/* Table without card wrapper */}
+              <div className="table-container mb-8">
+                <table className={styles.table}>
+                  <thead className={styles.tableHeader}>
+                    <tr>
+                      <th className={styles.tableHeaderCell}>Company</th>
+                      <th className={styles.tableHeaderCell}>Time</th>
+                      <th className={styles.tableHeaderCell}>Est EPS</th>
+                      <th className={styles.tableHeaderCell}>Last EPS</th>
+                      <th className={styles.tableHeaderCell}>Last Surprise</th>
+                      <th className={styles.tableHeaderCell}>Sentiment</th>
+                      <th className={styles.tableHeaderCell}>AI Summary</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {events.map((event) => (
+                      <tr
+                        key={event.symbol}
+                        className={cn(styles.tableRow, 'cursor-pointer hover:bg-[var(--bg-tertiary)] transition-colors')}
+                        onClick={() => handleEarningsStockClick(event.symbol, event.company_name, event.has_analysis)}
+                        title={`Click to analyze ${event.symbol}${event.has_analysis ? ' (Analysis available)' : ' (Will trigger analysis)'}`}
+                      >
+                        <td className={styles.tableCell}>
+                          <div>
+                            <div className="font-mono font-bold text-[var(--text-primary)] flex items-center gap-2">
+                              {event.symbol}
+                              {event.has_analysis ? (
+                                <span className="text-xs text-green-500">✓ Ready</span>
+                              ) : (
+                                <span className="text-xs text-[var(--text-muted)]">→ Analyze</span>
+                              )}
+                            </div>
+                            <div className="text-sm text-[var(--text-secondary)]">
+                              {event.company_name}
+                            </div>
+                            <div className="text-xs text-[var(--text-muted)]">
+                              {event.sector}
+                            </div>
+                          </div>
+                        </td>
+                        <td className={styles.tableCell}>
+                          <div className="text-center">
+                            <div className={cn(
+                              'px-2 py-1 rounded text-xs font-mono',
+                              event.time === 'BMO' ? 'bg-blue-100 text-blue-800' :
+                              event.time === 'AMC' ? 'bg-purple-100 text-purple-800' :
+                              'bg-gray-100 text-gray-800'
+                            )}>
+                              {event.time}
+                            </div>
+                          </div>
+                        </td>
+                        <td className={styles.tableCell}>
+                          <div className="text-right font-mono">
+                            ${event.estimated_eps.toFixed(2)}
+                          </div>
+                        </td>
+                        <td className={styles.tableCell}>
+                          <div className="text-right font-mono">
+                            {event.last_quarter_eps ? `$${event.last_quarter_eps.toFixed(2)}` : '--'}
+                          </div>
+                        </td>
+                        <td className={styles.tableCell}>
+                          <div className="text-right">
+                            {event.last_quarter_surprise ? (
+                              <span className={cn(
+                                'font-mono',
+                                event.last_quarter_surprise > 0 ? utilStyles.textGain : utilStyles.textLoss
+                              )}>
+                                {event.last_quarter_surprise > 0 ? '+' : ''}{event.last_quarter_surprise.toFixed(1)}%
+                              </span>
+                            ) : '--'}
+                          </div>
+                        </td>
+                        <td className={styles.tableCell}>
+                          <div className="text-center">
+                            {event.ai_sentiment && (
+                              <span className={cn(
+                                'px-2 py-1 rounded text-xs font-medium',
+                                event.ai_sentiment === 'Bullish' ? 'bg-green-100 text-green-800' :
+                                event.ai_sentiment === 'Bearish' ? 'bg-red-100 text-red-800' :
+                                'bg-yellow-100 text-yellow-800'
+                              )}>
+                                {event.ai_sentiment}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className={styles.tableCell}>
+                          <div className="text-sm text-[var(--text-secondary)] max-w-xs">
+                            {event.ai_summary || '--'}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-          </div>
-        ))
-      )}
-    </div>
-  );
+          );
+        })}
+      </div>
+    );
+  };
 
   const renderNews = () => (
     <div className="space-y-4">
@@ -362,7 +787,9 @@ export default function ActivityTabs() {
                   <span>{news.source}</span>
                   <span>{new Date(news.published_at).toLocaleString()}</span>
                   <span className={getSentimentColor(news.sentiment_score)}>
-                    Sentiment: {(news.sentiment_score * 100).toFixed(0)}%
+                    Sentiment: {news.sentiment_score != null && !isNaN(news.sentiment_score)
+                      ? `${(news.sentiment_score * 100).toFixed(0)}%`
+                      : '--'}
                   </span>
                 </div>
                 {news.related_symbols.length > 0 && (
@@ -391,72 +818,181 @@ export default function ActivityTabs() {
     </div>
   );
 
+  const renderUnusualOptions = () => (
+    <div className="space-y-4">
+      {/* AI Summary Section */}
+      {unusualOptionsData?.data.ai_summary && (
+        <div className="clean-panel border-2 border-[var(--color-gain)]">
+          <div className="flex items-center gap-2 mb-3">
+            <Zap className="w-5 h-5 text-[var(--color-gain)]" />
+            <h3 className="clean-header text-lg text-[var(--color-gain)]">
+              AI Market Summary
+            </h3>
+            <span className={`px-2 py-1 rounded text-xs font-mono ${
+              unusualOptionsData.data.ai_summary.market_sentiment === 'BULLISH'
+                ? 'bg-gain text-[var(--color-gain)]'
+                : unusualOptionsData.data.ai_summary.market_sentiment === 'BEARISH'
+                ? 'bg-loss text-[var(--color-loss)]'
+                : 'bg-neutral text-[var(--color-neutral)]'
+            }`}>
+              {unusualOptionsData.data.ai_summary.market_sentiment}
+            </span>
+          </div>
+
+          <p className="text-[var(--text-primary)] mb-3 leading-relaxed">
+            {unusualOptionsData.data.ai_summary.summary}
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {unusualOptionsData.data.ai_summary.key_trends.map((trend, index) => (
+              <div key={index} className="clean-panel p-3">
+                <span className="text-sm text-[var(--text-secondary)]">
+                  • {trend}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between mt-3 text-xs text-[var(--text-muted)]">
+            <span>Confidence: {(unusualOptionsData.data.ai_summary.confidence * 100).toFixed(0)}%</span>
+            <span>Updated: {new Date(unusualOptionsData.data.ai_summary.last_updated).toLocaleTimeString()}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Market Metrics */}
+      {unusualOptionsData?.data.market_metrics && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="clean-panel">
+            <div className="text-2xl font-bold text-[var(--color-gain)]">
+              {unusualOptionsData.data.market_metrics.total_unusual_contracts}
+            </div>
+            <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider">
+              Unusual Contracts
+            </div>
+          </div>
+
+          <div className="clean-panel">
+            <div className="text-2xl font-bold text-[var(--color-gain)]">
+              {unusualOptionsData.data.market_metrics.total_large_trades}
+            </div>
+            <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider">
+              Large Trades
+            </div>
+          </div>
+
+          <div className="clean-panel">
+            <div className="text-2xl font-bold text-[var(--color-loss)]">
+              ${(unusualOptionsData.data.market_metrics.total_premium_flow / 1000000).toFixed(1)}M
+            </div>
+            <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider">
+              Premium Flow
+            </div>
+          </div>
+
+          <div className="clean-panel">
+            <div className="text-2xl font-bold text-[var(--text-primary)]">
+              {unusualOptionsData.data.market_metrics.call_put_ratio}
+            </div>
+            <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider">
+              Call/Put Ratio
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Placeholder for actual data - will be populated when backend is working */}
+      <div className="clean-panel text-center">
+        <Zap className="w-12 h-12 text-[var(--color-gain)] mx-auto mb-4" />
+        <h3 className="clean-header text-lg text-[var(--color-gain)] mb-2">Real-time Unusual Options Activity</h3>
+        <p className="text-[var(--text-secondary)] mb-4">
+          Monitoring {unusualOptionsData?.data.filter_criteria.symbols_analyzed || 24} symbols for unusual activity
+        </p>
+        <div className="text-sm text-[var(--text-muted)] space-y-1">
+          <p>• Volume/OI ratio threshold: {unusualOptionsData?.data.filter_criteria.min_volume_ratio || 2.0}x</p>
+          <p>• Minimum premium: ${(unusualOptionsData?.data.filter_criteria.min_premium || 10000).toLocaleString()}</p>
+          <p>• Auto-refresh: Every 3 minutes</p>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="space-y-6">
+    <div className={cn(utilStyles.flex, utilStyles.flexCol, utilStyles.gapLg)}>
       {/* Header with Tabs */}
-      <div className="cyber-panel">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="w-6 h-6 text-[var(--accent-cyan)]" />
-            <h2 className="text-xl font-mono text-[var(--accent-cyan)] uppercase tracking-wider">
+      <div className={styles.card}>
+        <div className={cn(styles.cardHeader, utilStyles.mbMd)}>
+          <div className={cn(utilStyles.flex, utilStyles.itemsCenter, utilStyles.gapSm)}>
+            <TrendingUp className="w-6 h-6 text-[var(--text-primary)]" />
+            <h2 className={cn(styles.cardTitle, utilStyles.textXl, utilStyles.textPrimary)}>
               Market Activity
             </h2>
           </div>
           <button
             onClick={refreshData}
             disabled={isLoading}
-            className="neon-button-secondary p-2"
+            className={cn(styles.buttonSecondary, styles.buttonSmall)}
             title="Refresh Data"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
           </button>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex gap-1 mb-4">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded font-mono text-sm transition-all ${
-                  isActive
-                    ? 'bg-[var(--accent-cyan)] text-[var(--bg-primary)] shadow-lg'
-                    : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                {tab.name}
-              </button>
-            );
-          })}
+        <div className={layoutStyles.tabContainer}>
+          <div className={layoutStyles.tabList}>
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    layoutStyles.tab,
+                    isActive && layoutStyles.tabActive
+                  )}
+                >
+                  <Icon className="w-4 h-4" />
+                  {tab.name}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Error Display */}
         {error && (
-          <div className="mb-4 p-3 bg-[var(--bg-tertiary)] border border-[var(--accent-red)] rounded">
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-[var(--accent-red)] text-sm">{error}</span>
+          <div className={cn(
+            utilStyles.mbMd,
+            utilStyles.pMd,
+            styles.bgLoss,
+            utilStyles.border,
+            utilStyles.roundedSm
+          )}>
+            <div className={cn(utilStyles.flex, utilStyles.itemsCenter, utilStyles.gapSm)}>
+              <span className={cn(utilStyles.textLoss, utilStyles.textSm)}>{error}</span>
             </div>
           </div>
         )}
       </div>
 
       {/* Tab Content */}
-      <div className="cyber-panel">
+      <div className={styles.card}>
         {isLoading ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border border-[var(--accent-cyan)] border-t-transparent mx-auto mb-4"></div>
-            <p className="font-mono text-[var(--text-secondary)]">Loading {tabs.find(t => t.id === activeTab)?.name.toLowerCase()}...</p>
+          <div className={styles.loading}>
+            <div className={styles.spinner}></div>
+            <p className={utilStyles.textSecondary}>
+              Loading {tabs.find(t => t.id === activeTab)?.name.toLowerCase()}...
+            </p>
           </div>
         ) : (
-          <>
+          <div className={layoutStyles.tabContent}>
             {activeTab === 'trending' && renderTrendingStocks()}
             {activeTab === 'earnings' && renderEarningsCalendar()}
             {activeTab === 'news' && renderNews()}
-          </>
+            {activeTab === 'unusual-options' && renderUnusualOptions()}
+          </div>
         )}
       </div>
     </div>

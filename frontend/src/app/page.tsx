@@ -9,12 +9,15 @@ import HistoryTab from '@/components/HistoryTab';
 import StockAnalyzer from '@/components/StockAnalyzer';
 import ActivityTabs from '@/components/ActivityTabs';
 import PortfolioTracker from '@/components/PortfolioTracker';
+import PerformanceDashboard from '@/components/PerformanceDashboard';
+
+import ThemeToggle from '@/components/ThemeToggle';
 
 import { api, AIOptionPlay } from '@/lib/api';
-import { Terminal, Wifi, WifiOff, History, TrendingUp, Search, BarChart3, List, Menu, X, AlertTriangle } from 'lucide-react';
+import { History, TrendingUp, Search, BarChart3, List, Menu, X, AlertTriangle, Zap } from 'lucide-react';
 import { DirectionalBias } from '@/components/AIPlayGenerator';
 
-type ActiveTool = 'ai-generator' | 'stock-analyzer' | 'portfolio' | 'unusual-options' | 'activity';
+type ActiveTool = 'ai-generator' | 'stock-analyzer' | 'portfolio' | 'unusual-options' | 'activity' | 'performance';
 
 export default function Home() {
   // Navigation state
@@ -28,53 +31,37 @@ export default function Home() {
   const [currentDirectionalBias, setCurrentDirectionalBias] = useState<DirectionalBias>('AI_DECIDES');
 
   // System state
-  const [backendStatus, setBackendStatus] = useState<boolean | null>(null);
-  const [isCheckingHealth, setIsCheckingHealth] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(false);
 
   // Legacy history state (will be integrated into tools)
   const [showHistory, setShowHistory] = useState(false);
 
-  const checkBackendHealth = React.useCallback(async () => {
-    if (isCheckingHealth) return; // Prevent multiple simultaneous checks
+  // Navigation state for earnings -> analyzer flow
+  const [pendingAnalysis, setPendingAnalysis] = useState<{symbol: string, companyName: string} | null>(null);
 
-    setIsCheckingHealth(true);
-    try {
-      const isHealthy = await api.healthCheck();
-      setBackendStatus(isHealthy);
-
-      // Check if backend is in demo mode
-      if (isHealthy) {
-        try {
-          const response = await fetch('http://localhost:8000/');
-          const data = await response.json();
-          // Check if demo mode indicators are present in logs or response
-          setIsDemoMode(true); // For now, assume demo mode since API keys are set to "demo"
-        } catch (err) {
-          console.log('Could not check demo mode status');
-        }
-      }
-    } catch (error) {
-      console.log('Backend health check failed - this is normal if backend is not running');
-      setBackendStatus(false);
-    } finally {
-      setIsCheckingHealth(false);
-    }
-  }, [isCheckingHealth]);
-
-  // Check backend health on component mount (only once)
-  React.useEffect(() => {
-    checkBackendHealth();
-  }, [checkBackendHealth]);
-
-  const getThemeClass = (bias: DirectionalBias) => {
-    switch (bias) {
-      case 'BULLISH': return 'theme-bullish';
-      case 'BEARISH': return 'theme-bearish';
-      case 'AI_DECIDES': return 'theme-ai-decides';
-      default: return 'theme-ai-decides';
-    }
+  // Navigation handler for earnings -> analyzer
+  const handleNavigateToAnalyzer = (symbol: string, companyName: string) => {
+    setPendingAnalysis({ symbol, companyName });
+    setActiveTool('stock-analyzer');
   };
+
+  // Check demo mode on component mount (only once)
+  React.useEffect(() => {
+    const checkDemoMode = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/');
+        const text = await response.text();
+        setIsDemoMode(text.includes('DEMO MODE') || text.includes('demo'));
+      } catch (error) {
+        // Backend not available - assume not demo mode
+        setIsDemoMode(false);
+      }
+    };
+
+    checkDemoMode();
+  }, []); // Empty dependency array to run only once on mount
+
+  // Clean design - no theme classes needed
 
   const handlePlaysGenerated = (plays: AIOptionPlay[]) => {
     setAiPlays(plays);
@@ -130,9 +117,10 @@ export default function Home() {
   // Navigation helpers
   const tools = [
     { id: 'activity' as ActiveTool, name: 'Activity', icon: TrendingUp, description: 'Market trends & news' },
-    { id: 'ai-generator' as ActiveTool, name: 'AI Options', icon: Terminal, description: 'Generate option plays' },
+    { id: 'ai-generator' as ActiveTool, name: 'AI Options', icon: Zap, description: 'Generate option plays' },
     { id: 'stock-analyzer' as ActiveTool, name: 'Stock Analyzer', icon: Search, description: 'Analyze individual stocks' },
     { id: 'portfolio' as ActiveTool, name: 'Portfolio', icon: BarChart3, description: 'Track your positions' },
+    { id: 'performance' as ActiveTool, name: 'Performance', icon: History, description: 'Track watchlist performance' },
     { id: 'unusual-options' as ActiveTool, name: 'Unusual Options', icon: List, description: 'Daily unusual activity' },
   ];
 
@@ -154,45 +142,21 @@ export default function Home() {
 
   // Render main content based on active tool
   const renderMainContent = () => {
-    // Backend Offline Warning
-    if (backendStatus === false) {
-      return (
-        <div className="mb-6 cyber-panel border-[var(--accent-red)]">
-          <div className="flex items-center">
-            <WifiOff className="h-5 w-5 status-error mr-3" />
-            <div>
-              <h3 className="font-mono text-[var(--accent-red)] font-bold uppercase">
-                [ERROR] Backend Connection Failed
-              </h3>
-              <p className="text-sm text-[var(--text-muted)] mt-1 font-mono">
-                &gt; FastAPI backend offline at http://localhost:8000
-              </p>
-              <button
-                onClick={checkBackendHealth}
-                className="mt-2 text-xs font-mono text-[var(--accent-red)] hover:text-[var(--text-primary)] underline"
-              >
-                [RETRY CONNECTION]
-              </button>
-            </div>
-          </div>
-        </div>
-      );
-    }
 
     // Demo Mode Warning
     const demoModeWarning = isDemoMode && (
-      <div className="mb-6 cyber-panel border-[var(--accent-yellow)]">
+      <div className="mb-6 clean-panel border-[var(--color-neutral)]">
         <div className="flex items-center">
-          <AlertTriangle className="h-5 w-5 text-[var(--accent-yellow)] mr-3" />
+          <AlertTriangle className="h-5 w-5 status-neutral mr-3" />
           <div>
-            <h3 className="font-mono text-[var(--accent-yellow)] font-bold uppercase">
-              [DEMO MODE] Using Simulated Data
+            <h3 className="status-neutral font-semibold">
+              Demo Mode - Using Simulated Data
             </h3>
-            <p className="text-sm text-[var(--text-muted)] mt-1 font-mono">
-              &gt; API keys not configured - showing demo data for testing purposes
+            <p className="text-sm text-[var(--text-muted)] mt-1">
+              API keys not configured - showing demo data for testing purposes
             </p>
-            <p className="text-xs text-[var(--text-muted)] mt-1 font-mono">
-              &gt; Configure Alpha Vantage and News API keys in backend/.env for real market data
+            <p className="text-xs text-[var(--text-muted)] mt-1">
+              Configure Alpha Vantage and News API keys in backend/.env for real market data
             </p>
           </div>
         </div>
@@ -214,7 +178,7 @@ export default function Home() {
         return (
           <>
             {demoModeWarning}
-            <ActivityTabs />
+            <ActivityTabs onNavigateToAnalyzer={handleNavigateToAnalyzer} />
           </>
         );
 
@@ -289,7 +253,11 @@ export default function Home() {
         return (
           <>
             {demoModeWarning}
-            <StockAnalyzer />
+            <StockAnalyzer
+              initialSymbol={pendingAnalysis?.symbol}
+              initialCompanyName={pendingAnalysis?.companyName}
+              onAnalysisStart={() => setPendingAnalysis(null)}
+            />
           </>
         );
 
@@ -298,6 +266,14 @@ export default function Home() {
           <>
             {demoModeWarning}
             <PortfolioTracker />
+          </>
+        );
+
+      case 'performance':
+        return (
+          <>
+            {demoModeWarning}
+            <PerformanceDashboard />
           </>
         );
 
@@ -322,57 +298,44 @@ export default function Home() {
   };
 
   return (
-    <div className={`min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] ${getThemeClass(currentDirectionalBias)}`}>
-      {/* Header with 90s aesthetic */}
-      <header className="cyber-panel mb-0 rounded-none border-x-0 border-t-0 border-b">
+    <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
+      {/* Clean Header */}
+      <header className="sticky top-0 z-40 bg-[var(--bg-secondary)] border-b-[1.5px] border-[var(--border-color)]">
         <div className="max-w-full px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between py-4">
             <div className="flex items-center gap-4">
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="lg:hidden p-2 text-[var(--accent-cyan)] hover:bg-[var(--bg-secondary)] rounded"
+                className="lg:hidden p-2 text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg"
               >
                 {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
-              <Terminal className="w-8 h-8 text-[var(--accent-cyan)]" />
+              <TrendingUp className="w-8 h-8 text-[var(--color-gain)]" />
               <div>
-                <h1 className="glitch text-2xl md:text-3xl" data-text="BULLSBEARS">
-                  BULLSBEARS
+                <h1 className="clean-header text-2xl md:text-3xl font-bold">
+                  BullsBears
                 </h1>
-                <div className="font-mono text-xs text-[var(--text-muted)]">
-                  v2.1.1
+                <div className="text-xs text-[var(--text-muted)]">
+                  AI Stock & Options Analysis
                 </div>
               </div>
             </div>
 
-            {/* System Status & Settings */}
+            {/* Header Actions */}
             <div className="flex items-center gap-4">
-              <button
-                onClick={checkBackendHealth}
-                disabled={isCheckingHealth}
-                className="flex items-center gap-2 px-3 py-2 rounded font-mono text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-              >
-                {backendStatus === null ? (
-                  <div className="w-2 h-2 bg-[var(--text-muted)] rounded-full animate-pulse"></div>
-                ) : backendStatus ? (
-                  <Wifi className="w-4 h-4 text-[var(--accent-cyan)]" />
-                ) : (
-                  <WifiOff className="w-4 h-4 text-[var(--accent-red)]" />
-                )}
-                {isCheckingHealth ? 'CHECKING...' : 'BACKEND'}
-              </button>
+              {/* Theme toggle moved to sidebar */}
             </div>
           </div>
         </div>
       </header>
 
-      <div className="flex h-[calc(100vh-120px)]">
+      <div className="flex min-h-[calc(100vh-80px)]">
         {/* Left Sidebar */}
         <div className={`${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } lg:translate-x-0 fixed lg:relative z-30 w-64 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] transition-transform duration-300 ease-in-out h-full overflow-y-auto`}>
+        } lg:translate-x-0 fixed lg:sticky top-[80px] lg:top-[80px] z-30 w-64 bg-[var(--bg-tertiary)] border-r-[1.5px] border-[var(--border-color)] transition-transform duration-300 ease-in-out h-[calc(100vh-80px)]`}>
           <div className="p-4">
-            <h2 className="text-sm font-mono text-[var(--accent-cyan)] uppercase tracking-wider mb-4">
+            <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-4">
               Trading Tools
             </h2>
             <nav className="space-y-2">
@@ -383,9 +346,9 @@ export default function Home() {
                   <button
                     key={tool.id}
                     onClick={() => handleToolChange(tool.id)}
-                    className={`w-full flex items-center gap-3 px-3 py-3 rounded font-mono text-sm transition-all ${
+                    className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-all ${
                       isActive
-                        ? 'bg-[var(--accent-cyan)] text-[var(--bg-primary)] shadow-lg'
+                        ? 'bg-[var(--text-primary)] text-[var(--bg-primary)] shadow-sm'
                         : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
                     }`}
                   >
@@ -398,20 +361,25 @@ export default function Home() {
                 );
               })}
             </nav>
+
+            {/* Theme Toggle at Bottom */}
+            <div className="absolute bottom-4 left-4">
+              <ThemeToggle />
+            </div>
           </div>
         </div>
 
         {/* Mobile Sidebar Overlay */}
         {sidebarOpen && (
           <div
-            className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-20"
+            className="lg:hidden fixed top-[80px] left-0 right-0 bottom-0 bg-black bg-opacity-50 z-20"
             onClick={() => setSidebarOpen(false)}
           />
         )}
 
         {/* Main Content */}
-        <div className="flex-1 overflow-y-auto">
-          <main className="p-4 sm:p-6 lg:p-8">{renderMainContent()}</main>
+        <div className="flex-1 w-full lg:w-auto">
+          <main className="p-4 sm:p-6 lg:p-8 w-full">{renderMainContent()}</main>
         </div>
       </div>
 

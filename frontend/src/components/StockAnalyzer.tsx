@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Brain, TrendingUp, Shield, AlertTriangle, Target, DollarSign, Clock, Zap, BookmarkPlus, Share2 } from 'lucide-react';
+import StockAnalyzerChart from './StockAnalyzerChart';
 
 interface StockAnalysisResult {
   symbol: string;
@@ -49,8 +50,18 @@ interface StockAnalysisResult {
   };
 }
 
-export default function StockAnalyzer() {
-  const [symbol, setSymbol] = useState('');
+interface StockAnalyzerProps {
+  initialSymbol?: string;
+  initialCompanyName?: string;
+  onAnalysisStart?: () => void;
+}
+
+export default function StockAnalyzer({
+  initialSymbol,
+  initialCompanyName,
+  onAnalysisStart
+}: StockAnalyzerProps = {}) {
+  const [symbol, setSymbol] = useState(initialSymbol || '');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<StockAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +76,7 @@ export default function StockAnalyzer() {
     setError(null);
     
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/analyze/${symbol.toUpperCase()}`, {
+      const response = await fetch(`http://localhost:8000/api/v1/analyze/${symbol.toUpperCase()}?use_precompute=true`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -73,32 +84,177 @@ export default function StockAnalyzer() {
       });
 
       if (!response.ok) {
-        throw new Error(`Analysis failed: ${response.statusText}`);
+        // Handle different error types with user-friendly messages
+        if (response.status === 500) {
+          const errorData = await response.json().catch(() => ({}));
+          if (errorData.detail?.includes('No analysis data available')) {
+            throw new Error(`📊 Analysis temporarily unavailable for ${symbol.toUpperCase()}. Our system is currently rate-limited by data providers. Please try again in a few minutes or try a different stock.`);
+          } else {
+            throw new Error(`🔄 Analysis system is currently processing data for ${symbol.toUpperCase()}. This may take a moment due to API rate limits. Please try again shortly.`);
+          }
+        } else if (response.status === 429) {
+          throw new Error(`⏱️ Rate limit reached. Please wait a moment before analyzing another stock.`);
+        } else {
+          throw new Error(`❌ Analysis failed: ${response.statusText}. Please try again.`);
+        }
       }
 
       const data = await response.json();
-      
+
       if (data.success) {
-        setAnalysisResult(data.data);
+        // Transform API response to match component interface
+        const transformedData: StockAnalysisResult = {
+          symbol: data.data.symbol,
+          company_name: data.data.symbol, // API doesn't return company name yet
+          current_price: data.data.current_price || 0,
+          analysis_timestamp: data.data.timestamp,
+
+          // Map API recommendation to ai_recommendation
+          ai_recommendation: data.data.recommendation || 'HOLD',
+          ai_commentary: data.data.analysis_summary || 'Analysis completed successfully',
+          confidence_score: data.data.confidence_score || 50,
+
+          // Technical indicators with defaults
+          technical_indicators: {
+            rsi: data.data.technical_analysis?.rsi || 50,
+            macd: data.data.technical_analysis?.macd || 0,
+            bollinger_position: data.data.technical_analysis?.bb_signal || 'NEUTRAL',
+            moving_averages: {
+              sma_20: data.data.technical_analysis?.sma_20 || 0,
+              sma_50: data.data.technical_analysis?.sma_50 || 0,
+              ema_12: data.data.technical_analysis?.ema_12 || 0,
+              ema_26: data.data.technical_analysis?.ema_26 || 0,
+            },
+            support_resistance: {
+              support: data.data.current_price * 0.95 || 0,
+              resistance: data.data.current_price * 1.05 || 0,
+            },
+          },
+
+          // Risk metrics with defaults
+          risk_metrics: {
+            volatility: 0.2, // Default 20% volatility
+            beta: 1.0,
+            position_size_recommendation: 1000,
+            max_position_value: 5000,
+            stop_loss_suggestion: data.data.current_price * 0.95 || 0,
+          },
+
+          // Sentiment analysis with defaults
+          sentiment_analysis: {
+            news_sentiment: data.data.news_analysis?.news_score || 50,
+            social_sentiment: data.data.social_analysis?.social_score || 50,
+            overall_sentiment: 'NEUTRAL',
+            sentiment_sources: 0,
+          },
+        };
+
+        setAnalysisResult(transformedData);
       } else {
         throw new Error(data.error || 'Analysis failed');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Analysis failed');
+      console.error('Analysis error:', err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError(`🔄 Unable to analyze ${symbol.toUpperCase()} right now. Our data providers may be rate-limited. Please try again in a few minutes.`);
+      }
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const handleSaveAnalysis = async () => {
+  // Auto-analyze when initialSymbol is provided (from earnings navigation)
+  useEffect(() => {
+    if (initialSymbol && !analysisResult) {
+      // Call the callback to clear pending analysis
+      if (onAnalysisStart) {
+        onAnalysisStart();
+      }
+      // Trigger analysis
+      handleAnalyze();
+    }
+  }, [initialSymbol]); // Only run when initialSymbol changes
+
+  const [isAddingToWatchlist, setIsAddingToWatchlist] = useState(false);
+  const [watchlistSuccess, setWatchlistSuccess] = useState<string | null>(null);
+
+  const handleAddToWatchlist = async () => {
     if (!analysisResult) return;
-    
+
+    setIsAddingToWatchlist(true);
+    setWatchlistSuccess(null);
+
     try {
-      // TODO: Implement save to history
-      console.log('Saving analysis to history:', analysisResult);
-      // Show success notification
+      // Calculate target price based on AI recommendation
+      let targetPrice = analysisResult.current_price;
+      const currentPrice = analysisResult.current_price;
+
+      // Set target based on recommendation and resistance levels
+      if (analysisResult.ai_recommendation === 'BUY' || analysisResult.ai_recommendation === 'STRONG_BUY') {
+        // Target is resistance level or 10% above current price, whichever is higher
+        const resistanceTarget = analysisResult.technical_indicators.support_resistance.resistance;
+        const percentTarget = currentPrice * 1.10;
+        targetPrice = Math.max(resistanceTarget, percentTarget);
+      } else if (analysisResult.ai_recommendation === 'SELL' || analysisResult.ai_recommendation === 'STRONG_SELL') {
+        // Target is support level or 10% below current price, whichever is lower
+        const supportTarget = analysisResult.technical_indicators.support_resistance.support;
+        const percentTarget = currentPrice * 0.90;
+        targetPrice = Math.min(supportTarget, percentTarget);
+      } else {
+        // HOLD - set modest 5% target in direction of sentiment
+        if (analysisResult.sentiment_analysis.overall_sentiment === 'BULLISH') {
+          targetPrice = currentPrice * 1.05;
+        } else {
+          targetPrice = currentPrice * 0.95;
+        }
+      }
+
+      const watchlistData = {
+        symbol: analysisResult.symbol,
+        company_name: analysisResult.company_name,
+        entry_type: 'STOCK',
+        entry_price: currentPrice,
+        target_price: targetPrice,
+        stop_loss_price: analysisResult.risk_metrics.stop_loss_suggestion,
+        ai_confidence_score: analysisResult.confidence_score,
+        ai_recommendation: analysisResult.ai_recommendation,
+        ai_reasoning: analysisResult.ai_commentary,
+        ai_key_factors: [
+          `RSI: ${analysisResult.technical_indicators.rsi.toFixed(1)}`,
+          `MACD: ${analysisResult.technical_indicators.macd.toFixed(3)}`,
+          `Sentiment: ${analysisResult.sentiment_analysis.overall_sentiment}`,
+          `Volatility: ${(analysisResult.risk_metrics.volatility * 100).toFixed(1)}%`
+        ],
+        position_size_dollars: analysisResult.risk_metrics.position_size_recommendation
+      };
+
+      const response = await fetch('http://localhost:8000/api/v1/watchlist/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(watchlistData),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to add to watchlist: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        setWatchlistSuccess(`✅ ${analysisResult.symbol} added to watchlist! Target: $${targetPrice.toFixed(2)}`);
+        // Clear success message after 5 seconds
+        setTimeout(() => setWatchlistSuccess(null), 5000);
+      } else {
+        throw new Error(result.message || 'Failed to add to watchlist');
+      }
     } catch (err) {
-      console.error('Failed to save analysis:', err);
+      setError(err instanceof Error ? err.message : 'Failed to add to watchlist');
+    } finally {
+      setIsAddingToWatchlist(false);
     }
   };
 
@@ -114,7 +270,8 @@ export default function StockAnalyzer() {
     }
   };
 
-  const getRecommendationColor = (recommendation: string) => {
+  const getRecommendationColor = (recommendation: string | undefined) => {
+    if (!recommendation) return 'text-[var(--text-muted)] border-[var(--text-muted)]';
     switch (recommendation.toUpperCase()) {
       case 'BUY':
       case 'STRONG_BUY':
@@ -153,10 +310,10 @@ export default function StockAnalyzer() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="cyber-panel">
+      <div className="clean-panel">
         <div className="flex items-center gap-2 mb-4">
-          <Search className="w-6 h-6 text-[var(--accent-cyan)]" />
-          <h2 className="text-xl font-mono text-[var(--accent-cyan)] uppercase tracking-wider">
+          <Search className="w-6 h-6 text-[var(--text-primary)]" />
+          <h2 className="text-xl font-semibold text-[var(--text-primary)]">
             Stock Analyzer
           </h2>
         </div>
@@ -170,14 +327,14 @@ export default function StockAnalyzer() {
               onChange={(e) => setSymbol(e.target.value.toUpperCase())}
               onKeyPress={(e) => e.key === 'Enter' && handleAnalyze()}
               placeholder="Enter stock symbol (e.g., AAPL, TSLA, NVDA)"
-              className="terminal-input w-full"
+              className="clean-input w-full"
               disabled={isAnalyzing}
             />
           </div>
           <button
             onClick={handleAnalyze}
             disabled={isAnalyzing || !symbol.trim()}
-            className="neon-button px-6 py-2 flex items-center gap-2"
+            className="clean-button px-6 py-2 flex items-center gap-2"
           >
             {isAnalyzing ? (
               <>
@@ -200,6 +357,31 @@ export default function StockAnalyzer() {
               <AlertTriangle className="w-4 h-4 text-[var(--accent-red)]" />
               <span className="font-mono text-[var(--accent-red)] text-sm">{error}</span>
             </div>
+            <div className="mt-2 text-xs text-[var(--text-secondary)]">
+              💡 <strong>Tip:</strong> Try popular stocks like AAPL, MSFT, GOOGL, AMZN, TSLA, NVDA, META for better data availability.
+            </div>
+          </div>
+        )}
+
+        {/* System Status Info */}
+        {!error && !analysisResult && !isAnalyzing && (
+          <div className="mt-4 p-3 bg-[var(--bg-tertiary)] border border-[var(--accent-cyan)] rounded">
+            <div className="flex items-center gap-2">
+              <Brain className="w-4 h-4 text-[var(--accent-cyan)]" />
+              <span className="font-mono text-[var(--accent-cyan)] text-sm">
+                🚀 <strong>Smart Analysis System:</strong> We use pre-computed analysis for faster results and fallback to real-time data when needed.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Success Display */}
+        {watchlistSuccess && (
+          <div className="mt-4 p-3 bg-[var(--bg-tertiary)] border border-[var(--accent-cyan)] rounded">
+            <div className="flex items-center gap-2">
+              <BookmarkPlus className="w-4 h-4 text-[var(--accent-cyan)]" />
+              <span className="font-mono text-[var(--accent-cyan)] text-sm">{watchlistSuccess}</span>
+            </div>
           </div>
         )}
       </div>
@@ -208,7 +390,7 @@ export default function StockAnalyzer() {
       {analysisResult && (
         <div className="space-y-4">
           {/* Stock Info Header */}
-          <div className="cyber-panel">
+          <div className="clean-panel">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-2xl font-mono text-[var(--text-primary)] font-bold">
@@ -223,11 +405,22 @@ export default function StockAnalyzer() {
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={handleSaveAnalysis}
-                  className="neon-button-secondary p-2"
-                  title="Save to History"
+                  onClick={handleAddToWatchlist}
+                  disabled={isAddingToWatchlist}
+                  className="neon-button px-4 py-2 flex items-center gap-2"
+                  title="Add to Watchlist for Performance Tracking"
                 >
-                  <BookmarkPlus className="w-4 h-4" />
+                  {isAddingToWatchlist ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border border-[var(--accent-cyan)] border-t-transparent"></div>
+                      <span className="text-sm font-mono">ADDING...</span>
+                    </>
+                  ) : (
+                    <>
+                      <BookmarkPlus className="w-4 h-4" />
+                      <span className="text-sm font-mono">ADD TO WATCHLIST</span>
+                    </>
+                  )}
                 </button>
                 <button
                   onClick={handleShareAnalysis}
@@ -243,6 +436,9 @@ export default function StockAnalyzer() {
               Analysis generated: {new Date(analysisResult.analysis_timestamp).toLocaleString()}
             </div>
           </div>
+
+          {/* Interactive Chart */}
+          <StockAnalyzerChart ticker={analysisResult.symbol} />
 
           {/* Priority 1: AI Commentary */}
           <div className="cyber-panel">

@@ -1,0 +1,327 @@
+/* BullsBears Design System - Layout Modules */
+
+/* Main Layout Components */
+.mainLayout {
+  display: flex;
+  min-height: 100vh;
+  background: var(--bg-primary);
+}
+
+.sidebar {
+  width: 280px;
+  background: var(--bg-secondary);
+  border-right: 1.5px solid var(--border-color);
+  padding: var(--spacing-xl);
+  position: fixed;
+  height: 100vh;
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.sidebarHeader {
+  margin-bottom: var(--spacing-2xl);
+}
+
+.sidebarTitle {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.sidebarNav {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sidebarNavItem {
+  margin-bottom: var(--spacing-sm);
+}
+
+.sidebarNavLink {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-md);
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+  gap: var(--spacing-sm);
+}
+
+.sidebarNavLink:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.sidebarNavLinkActive {
+  background: var(--text-primary);
+  color: var(--bg-primary);
+}
+
+.sidebarNavLinkActive:hover {
+  background: var(--text-secondary);
+}
+
+.mainContent {
+  flex: 1;
+  margin-left: 280px;
+  padding: var(--spacing-xl);
+  min-height: 100vh;
+}
+
+.contentHeader {
+  margin-bottom: var(--spacing-2xl);
+  padding-bottom: var(--spacing-lg);
+  border-bottom: 1.5px solid var(--border-color);
+}
+
+.contentTitle {
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.contentSubtitle {
+  font-size: var(--font-size-base);
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* Dashboard Grid Layout */
+.dashboardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-2xl);
+}
+
+.dashboardCard {
+  background: var(--bg-secondary);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-xl);
+  transition: all 0.2s ease;
+}
+
+.dashboardCard:hover {
+  border-color: var(--text-secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.dashboardCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-lg);
+}
+
+.dashboardCardTitle {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.dashboardCardIcon {
+  width: 24px;
+  height: 24px;
+  color: var(--text-muted);
+}
+
+/* Tab Layout */
+.tabContainer {
+  margin-bottom: var(--spacing-2xl);
+}
+
+.tabList {
+  display: flex;
+  border-bottom: 1.5px solid var(--border-color);
+  margin-bottom: var(--spacing-xl);
+  gap: var(--spacing-sm);
+}
+
+.tab {
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 2px solid transparent;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.tabActive {
+  color: var(--bg-primary);
+  background: var(--text-primary);
+  border-bottom-color: var(--text-primary);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.tabActive:hover {
+  color: var(--bg-primary);
+  background: var(--text-primary);
+}
+
+.tabContent {
+  min-height: 400px;
+}
+
+/* Modal Layout */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--spacing-lg);
+}
+
+.modal {
+  background: var(--bg-primary);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.modalHeader {
+  padding: var(--spacing-xl);
+  border-bottom: 1.5px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modalTitle {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.modalCloseButton {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+}
+
+.modalCloseButton:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.modalContent {
+  padding: var(--spacing-xl);
+}
+
+.modalFooter {
+  padding: var(--spacing-xl);
+  border-top: 1.5px solid var(--border-color);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+}
+
+/* Responsive Layout */
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+  
+  .sidebarOpen {
+    transform: translateX(0);
+  }
+  
+  .mainContent {
+    margin-left: 0;
+    padding: var(--spacing-md);
+  }
+  
+  .dashboardGrid {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-md);
+  }
+  
+  .tabList {
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+  }
+  
+  .tab {
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-xs);
+  }
+  
+  .modal {
+    margin: var(--spacing-md);
+    max-height: calc(100vh - 2rem);
+  }
+  
+  .modalHeader,
+  .modalContent,
+  .modalFooter {
+    padding: var(--spacing-lg);
+  }
+}
+
+@media (max-width: 480px) {
+  .mainContent {
+    padding: var(--spacing-sm);
+  }
+  
+  .dashboardCard {
+    padding: var(--spacing-lg);
+  }
+  
+  .contentTitle {
+    font-size: var(--font-size-xl);
+  }
+  
+  .dashboardCardTitle {
+    font-size: var(--font-size-base);
+  }
+}
+
+/* Print Styles */
+@media print {
+  .sidebar {
+    display: none;
+  }
+  
+  .mainContent {
+    margin-left: 0;
+    padding: 0;
+  }
+  
+  .dashboardCard {
+    border: 1px solid #000;
+    box-shadow: none;
+    break-inside: avoid;
+  }
+}

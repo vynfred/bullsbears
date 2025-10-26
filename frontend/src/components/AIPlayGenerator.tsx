@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { Zap, Settings, DollarSign, Clock, TrendingUp, AlertTriangle, Target, Shield, Timer } from 'lucide-react';
 import { api, AIOptionPlay, GeneratePlaysParams, RateLimitStatus } from '@/lib/api';
+import styles from '@/styles/components.module.css';
 
 export type DirectionalBias = 'BULLISH' | 'BEARISH' | 'AI_DECIDES';
 
@@ -41,6 +43,16 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
   const handleDirectionalBiasChange = (bias: DirectionalBias) => {
     setDirectionalBias(bias);
     onDirectionalBiasChange?.(bias);
+  };
+
+  const formatNumberWithCommas = (num: number): string => {
+    return num.toLocaleString();
+  };
+
+  const handlePositionSizeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/,/g, ''); // Remove commas for parsing
+    const numValue = parseInt(value) || 1000;
+    setParams({...params, position_size: numValue});
   };
 
   const handleGenerate = async () => {
@@ -120,17 +132,14 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
               <DollarSign className="h-3 w-3 inline mr-1" />
               Position Size
             </label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--text-muted)] font-mono text-xs">$</span>
+            <div className={styles.selectorContainer}>
+              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--text-muted)] font-mono text-sm">$</span>
               <input
-                type="number"
-                value={params.position_size}
-                onChange={(e) => setParams({...params, position_size: parseInt(e.target.value) || 1000})}
-                min={100}
-                max={50000}
-                step={100}
-                className="terminal-input w-full pl-6 pr-3 py-2 text-sm"
-                placeholder="1000"
+                type="text"
+                value={formatNumberWithCommas(params.position_size)}
+                onChange={handlePositionSizeChange}
+                className={`${styles.selectorInput} pl-6`}
+                placeholder="1,000"
               />
             </div>
           </div>
@@ -141,11 +150,11 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
               <TrendingUp className="h-3 w-3 inline mr-1" />
               Min Confidence
             </label>
-            <div className="relative">
+            <div className={styles.selectorContainer}>
               <select
                 value={params.min_confidence}
                 onChange={(e) => setParams({...params, min_confidence: parseInt(e.target.value)})}
-                className="terminal-input w-full px-3 py-2 text-sm appearance-none"
+                className={styles.selectorSelect}
               >
                 <option value={60}>60%</option>
                 <option value={65}>65%</option>
@@ -155,7 +164,7 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
                 <option value={85}>85%</option>
                 <option value={90}>90%</option>
               </select>
-              <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[var(--text-muted)] font-mono">%</span>
+              <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[var(--text-muted)] font-mono text-sm">%</span>
             </div>
           </div>
 
@@ -165,39 +174,80 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
               <TrendingUp className="h-3 w-3 inline mr-1" />
               Directional Bias
             </label>
-            <div className="flex bg-[var(--bg-secondary)] rounded border border-[var(--border-color)] p-1">
+            <div className={styles.directionalBiasContainer}>
               {/* Bullish */}
               <button
                 onClick={() => handleDirectionalBiasChange('BULLISH')}
-                className={`flex-1 px-2 py-1 rounded text-xs font-mono uppercase transition-all duration-200 ${
-                  directionalBias === 'BULLISH'
-                    ? 'bg-green-600 text-white shadow-lg shadow-green-600/30'
-                    : 'text-[var(--text-muted)] hover:text-green-400'
+                className={`${styles.directionalBiasButton} ${styles.bullish} ${
+                  directionalBias === 'BULLISH' ? styles.active : ''
                 }`}
+                title="Bullish - Tells the AI model to favor upward price movements"
               >
-                🐂 Bull
+                <Image
+                  src="/bull-icon.png"
+                  alt="Bull"
+                  width={20}
+                  height={20}
+                  className={`transition-all duration-200 ${
+                    directionalBias === 'BULLISH'
+                      ? 'brightness-0' // Black when selected
+                      : 'brightness-0 dark:invert' // Black in light mode, white in dark mode
+                  }`}
+                />
+                {/* Tooltip */}
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                  Bullish - Tells the AI model to favor upward price movements
+                </div>
               </button>
+
               {/* AI Decides */}
               <button
                 onClick={() => handleDirectionalBiasChange('AI_DECIDES')}
-                className={`flex-1 px-2 py-1 rounded text-xs font-mono uppercase transition-all duration-200 ${
-                  directionalBias === 'AI_DECIDES'
-                    ? 'bg-[var(--accent-cyan)] text-black shadow-lg shadow-cyan-600/30'
-                    : 'text-[var(--text-muted)] hover:text-[var(--accent-cyan)]'
+                className={`${styles.directionalBiasButton} ${styles.ai} ${
+                  directionalBias === 'AI_DECIDES' ? styles.active : ''
                 }`}
+                title="AI Decides - Let the AI model analyze and choose the optimal direction"
               >
-                👽 AI
+                <Image
+                  src="/robot-icon.png"
+                  alt="AI Robot"
+                  width={20}
+                  height={20}
+                  className={`transition-all duration-200 ${
+                    directionalBias === 'AI_DECIDES'
+                      ? 'brightness-0' // Black when selected
+                      : 'brightness-0 dark:invert' // Black in light mode, white in dark mode
+                  }`}
+                />
+                {/* Tooltip */}
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                  AI Decides - Let the AI model analyze and choose the optimal direction
+                </div>
               </button>
+
               {/* Bearish */}
               <button
                 onClick={() => handleDirectionalBiasChange('BEARISH')}
-                className={`flex-1 px-2 py-1 rounded text-xs font-mono uppercase transition-all duration-200 ${
-                  directionalBias === 'BEARISH'
-                    ? 'bg-red-600 text-white shadow-lg shadow-red-600/30'
-                    : 'text-[var(--text-muted)] hover:text-red-400'
+                className={`${styles.directionalBiasButton} ${styles.bearish} ${
+                  directionalBias === 'BEARISH' ? styles.active : ''
                 }`}
+                title="Bearish - Tells the AI model to favor downward price movements"
               >
-                🐻 Bear
+                <Image
+                  src="/bear-icon.png"
+                  alt="Bear"
+                  width={20}
+                  height={20}
+                  className={`transition-all duration-200 ${
+                    directionalBias === 'BEARISH'
+                      ? 'brightness-0' // Black when selected
+                      : 'brightness-0 dark:invert' // Black in light mode, white in dark mode
+                  }`}
+                />
+                {/* Tooltip */}
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                  Bearish - Tells the AI model to favor downward price movements
+                </div>
               </button>
             </div>
           </div>
@@ -208,19 +258,21 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
               <Clock className="h-3 w-3 inline mr-1" />
               Expiration Date
             </label>
-            <select
-              value={params.timeframe_days}
-              onChange={(e) => setParams({...params, timeframe_days: parseInt(e.target.value)})}
-              className="terminal-input w-full px-3 py-2 text-sm"
-            >
-              <option value={1}>1 Day (±2 days)</option>
-              <option value={2}>2 Days (±2 days)</option>
-              <option value={3}>3 Days (±2 days)</option>
-              <option value={7}>1 Week (±2 days)</option>
-              <option value={14}>2 Weeks (±2 days)</option>
-              <option value={21}>3 Weeks (±2 days)</option>
-              <option value={30}>1 Month (±2 days)</option>
-            </select>
+            <div className={styles.selectorContainer}>
+              <select
+                value={params.timeframe_days}
+                onChange={(e) => setParams({...params, timeframe_days: parseInt(e.target.value)})}
+                className={styles.selectorSelect}
+              >
+                <option value={1}>1 Day (±2 days)</option>
+                <option value={2}>2 Days (±2 days)</option>
+                <option value={3}>3 Days (±2 days)</option>
+                <option value={7}>1 Week (±2 days)</option>
+                <option value={14}>2 Weeks (±2 days)</option>
+                <option value={21}>3 Weeks (±2 days)</option>
+                <option value={30}>1 Month (±2 days)</option>
+              </select>
+            </div>
           </div>
 
           {/* Risk Tolerance */}
@@ -229,15 +281,17 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
               <Shield className="h-3 w-3 inline mr-1" />
               Risk Level
             </label>
-            <select
-              value={params.risk_tolerance}
-              onChange={(e) => setParams({...params, risk_tolerance: e.target.value as 'LOW' | 'MODERATE' | 'HIGH'})}
-              className="terminal-input w-full px-3 py-2 text-sm"
-            >
-              <option value="LOW">Conservative</option>
-              <option value="MODERATE">Moderate</option>
-              <option value="HIGH">Aggressive</option>
-            </select>
+            <div className={styles.selectorContainer}>
+              <select
+                value={params.risk_tolerance}
+                onChange={(e) => setParams({...params, risk_tolerance: e.target.value as 'LOW' | 'MODERATE' | 'HIGH'})}
+                className={styles.selectorSelect}
+              >
+                <option value="LOW">Conservative</option>
+                <option value="MODERATE">Moderate</option>
+                <option value="HIGH">Aggressive</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -266,17 +320,19 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
                 <Target className="h-3 w-3 inline mr-1" />
                 Maximum Plays
               </label>
-              <select
-                value={params.max_plays}
-                onChange={(e) => setParams({...params, max_plays: parseInt(e.target.value)})}
-                className="terminal-input w-full px-3 py-2 text-sm"
-              >
-                <option value={1}>1 Play</option>
-                <option value={2}>2 Plays</option>
-                <option value={3}>3 Plays</option>
-                <option value={4}>4 Plays</option>
-                <option value={5}>5 Plays</option>
-              </select>
+              <div className={styles.selectorContainer}>
+                <select
+                  value={params.max_plays}
+                  onChange={(e) => setParams({...params, max_plays: parseInt(e.target.value)})}
+                  className={styles.selectorSelect}
+                >
+                  <option value={1}>1 Play</option>
+                  <option value={2}>2 Plays</option>
+                  <option value={3}>3 Plays</option>
+                  <option value={4}>4 Plays</option>
+                  <option value={5}>5 Plays</option>
+                </select>
+              </div>
               <p className="text-xs font-mono text-[var(--text-muted)] mt-1">
                 &gt; Limit analysis output
               </p>

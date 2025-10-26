@@ -1,22 +1,17 @@
 import type { Metadata } from "next";
-import { JetBrains_Mono, Orbitron } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700"],
 });
 
-const orbitron = Orbitron({
-  variable: "--font-orbitron",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800", "900"],
-});
-
 export const metadata: Metadata = {
-  title: "BullsBears - AI Directional Trading",
-  description: "Cyberpunk-themed AI-powered directional options trading analysis system",
+  title: "BullsBears - AI Stock & Options Analysis",
+  description: "Clean, simple AI-powered stock and options trading analysis platform",
 };
 
 export default function RootLayout({
@@ -25,10 +20,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-
-      <body className={`${jetbrainsMono.variable} ${orbitron.variable} antialiased`}>
-        {children}
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${inter.variable} antialiased`}>
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );
