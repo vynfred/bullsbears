@@ -14,10 +14,11 @@ from datetime import datetime, timedelta
 from .core.config import settings
 from .core.database import init_db, close_db
 from .core.redis_client import redis_client
-from .api.v1 import analysis, recommendations
+from .api.v1 import analysis, recommendations, watchlist
 from .api import history
 from .services.ai_option_generator import AIOptionGenerator
 from .websocket import live_data
+from .tasks.scheduler import start_scheduler, stop_scheduler
 
 # Configure structured logging
 structlog.configure(
@@ -56,11 +57,10 @@ async def lifespan(app: FastAPI):
         try:
             await redis_client.connect()
             logger.info("Redis connected successfully")
+            # Add startup timestamp to Redis
+            await redis_client.set("app:startup_time", int(time.time()))
         except Exception as e:
             logger.warning("Redis connection failed, continuing without caching", error=str(e))
-        
-        # Add startup timestamp to Redis
-        await redis_client.set("app:startup_time", int(time.time()))
 
         # Log API configuration status
         import os
@@ -92,8 +92,15 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("All critical APIs configured - Full functionality available")
 
+        # Start background task scheduler
+        try:
+            await start_scheduler()
+            logger.info("Background task scheduler started")
+        except Exception as e:
+            logger.warning("Failed to start task scheduler", error=str(e))
+
         logger.info("Application startup completed successfully")
-        
+
     except Exception as e:
         logger.error("Failed to start application", error=str(e))
         raise
@@ -102,8 +109,15 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down Options Trading Analyzer API")
-    
+
     try:
+        # Stop background task scheduler
+        try:
+            await stop_scheduler()
+            logger.info("Background task scheduler stopped")
+        except Exception as e:
+            logger.warning("Error stopping task scheduler", error=str(e))
+
         # Close database connections
         await close_db()
         logger.info("Database connections closed")
@@ -150,8 +164,17 @@ if not settings.debug:
 # Include API routers
 app.include_router(analysis.router)
 app.include_router(recommendations.router)
+app.include_router(watchlist.router, prefix="/api/v1/watchlist", tags=["watchlist"])
 app.include_router(history.router, prefix="/api/v1", tags=["history"])
 app.include_router(live_data.router, tags=["websocket"])
+
+# Import and include earnings router
+from .api.v1 import earnings
+app.include_router(earnings.router)
+
+# Import and include preferences router
+from .api.v1 import preferences
+app.include_router(preferences.router, prefix="/api/v1", tags=["preferences"])
 
 
 @app.middleware("http")
@@ -263,6 +286,23 @@ async def detailed_health_check():
         }
         health_status["status"] = "degraded"
 
+    # Check precompute system status
+    try:
+        from .services.precompute_service import PrecomputeService
+        precompute_service = PrecomputeService()
+        cache_stats = await precompute_service.get_cache_stats()
+
+        health_status["dependencies"]["precompute_system"] = {
+            "status": "healthy" if settings.precompute_enabled else "disabled",
+            "enabled": settings.precompute_enabled,
+            "cache_hit_rate_today": cache_stats.get("cache_performance", {}).get("hit_rate_today", 0)
+        }
+    except Exception as e:
+        health_status["dependencies"]["precompute_system"] = {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+
     return health_status
 
 
@@ -339,12 +379,18 @@ async def root():
 # AI Option Generation Endpoint
 @app.post("/api/v1/generate-plays")
 async def generate_option_plays(
+    symbol: str = None,
     max_plays: int = 5,
     min_confidence: float = 70.0,
     timeframe_days: int = 7,
     position_size: float = 1000.0,
     risk_tolerance: str = "MODERATE",
-    directional_bias: str = "AI_DECIDES"
+    directional_bias: str = "AI_DECIDES",
+    # Advanced settings
+    insight_style: str = "professional_trader",
+    iv_threshold: float = 50.0,
+    earnings_alert: bool = True,
+    shares_owned: dict = None
 ):
     """
     Generate AI-powered option plays with comprehensive analysis.
@@ -386,16 +432,37 @@ async def generate_option_plays(
         if directional_bias not in ["BULLISH", "BEARISH", "AI_DECIDES"]:
             directional_bias = "AI_DECIDES"
 
-        # Generate option plays
+        # Generate option plays with enhanced error handling
+        logger.info(f"Generating {max_plays} option plays with {min_confidence}% confidence threshold")
+
         generator = AIOptionGenerator()
         plays = await generator.generate_option_plays(
+            symbol=symbol,
             max_plays=max_plays,
             min_confidence=min_confidence,
             timeframe_days=timeframe_days,
             position_size_dollars=position_size,
             risk_tolerance=risk_tolerance,
-            directional_bias=directional_bias
+            directional_bias=directional_bias,
+            # Pass advanced settings
+            insight_style=insight_style,
+            iv_threshold=iv_threshold,
+            earnings_alert=earnings_alert,
+            shares_owned=shares_owned or {}
         )
+
+        if not plays:
+            logger.warning("No option plays generated - likely due to API rate limits or insufficient data")
+            return {
+                "success": False,
+                "error": "No candidates found, likely due to API rate limits. Please try again in a few minutes.",
+                "plays": [],
+                "count": 0,
+                "rate_limit_exceeded": False,
+                "current_usage": current_count,
+                "daily_limit": 5,
+                "suggestion": "Try lowering the confidence threshold or check back in 5-10 minutes"
+            }
 
         # Convert to serializable format
         plays_data = []
@@ -450,7 +517,11 @@ async def generate_option_plays(
                 "timeframe_days": timeframe_days,
                 "position_size": position_size,
                 "risk_tolerance": risk_tolerance,
-                "directional_bias": directional_bias
+                "directional_bias": directional_bias,
+                "insight_style": insight_style,
+                "iv_threshold": iv_threshold,
+                "earnings_alert": earnings_alert,
+                "shares_owned": shares_owned or {}
             },
             "generated_at": datetime.now().isoformat(),
             "rate_limit_info": {

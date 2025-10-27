@@ -20,6 +20,12 @@ class UserPreferences(Base):
     max_position_size = Column(Float, default=1000.0)  # Maximum position size in dollars
     preferred_expiration_days = Column(Integer, default=30)  # Preferred days to expiration
     min_confidence_threshold = Column(Float, default=70.0)  # Minimum confidence for recommendations
+
+    # Advanced options settings
+    shares_owned = Column(JSON, default=dict)  # Dict of {symbol: shares} for covered strategies
+    iv_threshold = Column(Float, default=50.0)  # Max implied volatility threshold (20-80%)
+    earnings_alert = Column(Boolean, default=True)  # Include/avoid trades near earnings
+    insight_style = Column(String(30), default="professional_trader")  # cautious_trader, professional_trader, degenerate_gambler
     
     # Notification preferences
     email_notifications = Column(Boolean, default=False)
@@ -73,6 +79,10 @@ class UserPreferences(Base):
             "max_position_size": self.max_position_size,
             "preferred_expiration_days": self.preferred_expiration_days,
             "min_confidence_threshold": self.min_confidence_threshold,
+            "shares_owned": self.shares_owned or {},
+            "iv_threshold": self.iv_threshold,
+            "earnings_alert": self.earnings_alert,
+            "risk_profile": self.risk_profile,
             "email_notifications": self.email_notifications,
             "push_notifications": self.push_notifications,
             "high_confidence_alerts": self.high_confidence_alerts,

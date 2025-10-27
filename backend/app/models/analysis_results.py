@@ -65,7 +65,17 @@ class AnalysisResult(Base):
     data_quality_score = Column(Float, default=100.0)  # Quality of underlying data
     analysis_version = Column(String(10), default="1.0")
     is_real_time = Column(Boolean, default=True)
-    
+
+    # Dual AI Scoring (for ML training data collection)
+    grok_score = Column(Float)  # Grok AI confidence score (0-100)
+    deepseek_score = Column(Float)  # DeepSeek AI sentiment score (0-100)
+    agreement_level = Column(String(20))  # STRONG_AGREEMENT, PARTIAL_AGREEMENT, DISAGREEMENT
+    confidence_adjustment = Column(Float)  # Confidence boost/penalty from consensus (-20 to +20)
+    hybrid_validation_triggered = Column(Boolean, default=False)  # Whether hybrid validation was used
+    consensus_reasoning = Column(Text)  # Combined reasoning from both AIs
+    social_news_bridge = Column(Float)  # Correlation between social and news sentiment
+    dual_ai_version = Column(String(10), default="1.0")  # Version of dual AI system used
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True))  # When this analysis expires

@@ -44,12 +44,12 @@ async def get_daily_recommendations(
             AnalysisResult.timestamp >= cutoff_time
         )
         
-        # Filter by confidence level
-        if min_confidence_value == 3:  # HIGH only
-            query = query.filter(AnalysisResult.confidence_level == "HIGH")
-        elif min_confidence_value == 2:  # MEDIUM or HIGH
-            query = query.filter(AnalysisResult.confidence_level.in_(["MEDIUM", "HIGH"]))
-        # LOW includes all levels
+        # Filter by confidence level (using confidence_score)
+        if min_confidence_value == 3:  # HIGH only (score >= 70)
+            query = query.filter(AnalysisResult.confidence_score >= 70)
+        elif min_confidence_value == 2:  # MEDIUM or HIGH (score >= 50)
+            query = query.filter(AnalysisResult.confidence_score >= 50)
+        # LOW includes all levels (no additional filter)
         
         # Filter by recommendation type
         if recommendation_type.upper() == "BUY":
@@ -73,16 +73,16 @@ async def get_daily_recommendations(
                 "company_name": result.stock.name,
                 "sector": result.stock.sector,
                 "recommendation": result.recommendation,
-                "confidence_level": result.confidence_level,
-                "overall_score": round(result.overall_score, 2),
+                "confidence_level": _get_confidence_level_from_score(result.confidence_score),
+                "overall_score": round(result.confidence_score, 2),
                 "component_scores": {
                     "technical": round(result.technical_score, 2),
-                    "news": round(result.news_score, 2),
-                    "social": round(result.social_score, 2)
+                    "news": round(result.news_sentiment_score, 2),
+                    "social": round(result.social_sentiment_score, 2)
                 },
                 "risk_assessment": {
                     "risk_level": result.risk_level,
-                    "max_position_size_percent": result.max_position_size,
+                    "max_position_size_percent": result.max_position_percentage,
                     "stop_loss_price": result.stop_loss_price,
                     "take_profit_price": result.take_profit_price
                 },
@@ -168,7 +168,7 @@ async def get_trending_stocks(
                     "analysis_count": stock_data.analysis_count,
                     "average_score": round(stock_data.avg_score, 2),
                     "latest_recommendation": latest_analysis.recommendation,
-                    "latest_confidence": latest_analysis.confidence_level,
+                    "latest_confidence": _get_confidence_level_from_score(latest_analysis.confidence_score),
                     "latest_analysis": stock_data.latest_analysis.isoformat(),
                     "trend_indicator": _calculate_trend_indicator(stock_data.analysis_count, stock_data.avg_score)
                 })
@@ -249,11 +249,11 @@ async def get_watchlist_recommendations(
                         "data": {
                             "symbol": symbol,
                             "recommendation": latest_analysis.recommendation,
-                            "confidence_level": latest_analysis.confidence_level,
-                            "confidence_score": latest_analysis.overall_score,
+                            "confidence_level": _get_confidence_level_from_score(latest_analysis.confidence_score),
+                            "confidence_score": latest_analysis.confidence_score,
                             "risk_level": latest_analysis.risk_level,
                             "analysis_timestamp": latest_analysis.timestamp.isoformat(),
-                            "summary": latest_analysis.analysis_summary
+                            "summary": "Analysis completed successfully"
                         }
                     })
                     
@@ -290,13 +290,14 @@ async def get_watchlist_recommendations(
 
 def _calculate_priority(analysis_result: AnalysisResult) -> float:
     """Calculate priority score for ranking recommendations."""
-    # Base priority on overall score
-    priority = analysis_result.overall_score
+    # Base priority on confidence score
+    priority = analysis_result.confidence_score
     
     # Boost for high confidence
-    if analysis_result.confidence_level == "HIGH":
+    confidence_level = _get_confidence_level_from_score(analysis_result.confidence_score)
+    if confidence_level == "HIGH":
         priority += 10
-    elif analysis_result.confidence_level == "MEDIUM":
+    elif confidence_level == "MEDIUM":
         priority += 5
     
     # Boost for strong recommendations
@@ -310,6 +311,16 @@ def _calculate_priority(analysis_result: AnalysisResult) -> float:
         priority -= 5
     
     return priority
+
+
+def _get_confidence_level_from_score(score: float) -> str:
+    """Convert confidence score to confidence level."""
+    if score >= 70:
+        return "HIGH"
+    elif score >= 50:
+        return "MEDIUM"
+    else:
+        return "LOW"
 
 
 def _calculate_trend_indicator(analysis_count: int, avg_score: float) -> str:

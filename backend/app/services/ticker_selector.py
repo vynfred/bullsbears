@@ -7,8 +7,6 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Tuple
-import yfinance as yf
-import pandas as pd
 from dataclasses import dataclass
 
 from ..core.config import settings
@@ -59,14 +57,18 @@ class TickerSelector:
         """
         logger.info(f"Starting ticker selection for {max_plays} plays with {min_confidence}% min confidence")
 
-        # Get dynamic ticker universe from top options service
-        try:
-            ticker_universe = await top_options_service.get_top_options_symbols()
-            logger.info(f"Using dynamic ticker universe: {ticker_universe}")
-        except Exception as e:
-            logger.error(f"Failed to get dynamic ticker universe: {e}")
-            # Fallback to static list
-            ticker_universe = ["SPY", "QQQ", "NVDA", "TSLA", "AAPL"]
+        # Use a smaller, focused ticker universe to avoid rate limits
+        # Start with just SPY for testing, then expand
+        ticker_universe = ["SPY"]  # Start with just SPY to test functionality
+        logger.info(f"Using focused ticker universe for testing: {ticker_universe}")
+
+        # TODO: Re-enable dynamic ticker selection once rate limiting is resolved
+        # try:
+        #     ticker_universe = await top_options_service.get_top_options_symbols()
+        #     logger.info(f"Using dynamic ticker universe: {ticker_universe}")
+        # except Exception as e:
+        #     logger.error(f"Failed to get dynamic ticker universe: {e}")
+        #     ticker_universe = ["SPY", "QQQ", "NVDA", "TSLA", "AAPL"]
 
         candidates = []
 
@@ -132,46 +134,61 @@ class TickerSelector:
         try:
             logger.debug(f"Analyzing ticker: {symbol}")
 
-            # Get basic stock info with timeout protection
-            ticker = yf.Ticker(symbol)
+            # Use Alpha Vantage/Finnhub instead of yfinance
+            from .stock_data import StockDataService
 
-            try:
-                info = ticker.info
-            except Exception as e:
-                logger.warning(f"Failed to get info for {symbol}: {e}")
-                return None
+            async with StockDataService() as stock_service:
+                quote_data = await stock_service.get_real_time_quote(symbol)
 
-            # Skip if essential data is missing
-            if not info or 'regularMarketPrice' not in info:
-                logger.debug(f"Missing price data for {symbol}")
-                return None
+                if not quote_data:
+                    logger.debug(f"No quote data available for {symbol}")
+                    return None
 
-            current_price = info.get('regularMarketPrice', 0)
-            if current_price <= 0:
-                logger.debug(f"Invalid price for {symbol}: {current_price}")
-                return None
+                current_price = quote_data.get('price', 0)
+                if current_price <= 0:
+                    logger.debug(f"Invalid price for {symbol}: {current_price}")
+                    return None
 
             # Get historical data for technical analysis with error handling
             try:
-                hist = ticker.history(period="3mo")
-                if hist.empty:
+                historical_data = await stock_service.get_historical_data(symbol, "3mo")
+                if not historical_data:
                     logger.debug(f"No historical data for {symbol}")
                     return None
+
+                # Convert to simple format for calculations
+                volumes = [float(d.get('volume', 0)) for d in historical_data]
+                closes = [float(d.get('close', 0)) for d in historical_data]
+
+                if not volumes or not closes:
+                    logger.debug(f"Invalid historical data for {symbol}")
+                    return None
+
+                # Calculate basic metrics
+                avg_volume = sum(volumes[-20:]) / min(20, len(volumes))  # Last 20 days average
+
+                # Calculate volatility from price changes
+                price_changes = []
+                for i in range(1, len(closes)):
+                    if closes[i-1] > 0:
+                        price_changes.append((closes[i] - closes[i-1]) / closes[i-1])
+
+                volatility = 0.0
+                if price_changes:
+                    import statistics
+                    volatility = statistics.stdev(price_changes) * (252 ** 0.5)  # Annualized
+
+                # Skip low volume stocks
+                if avg_volume < 100000:  # Minimum 100k average volume
+                    return None
+
             except Exception as e:
                 logger.warning(f"Failed to get historical data for {symbol}: {e}")
                 return None
             
-            # Calculate basic metrics
-            avg_volume = hist['Volume'].tail(20).mean()
-            volatility = hist['Close'].pct_change().std() * (252 ** 0.5)  # Annualized volatility
-            
-            # Skip low volume stocks
-            if avg_volume < 100000:  # Minimum 100k average volume
-                return None
-            
             # Get technical analysis with error handling
             try:
-                technical_data = await self.technical_analyzer.analyze(symbol)
+                technical_data = await self.technical_analyzer.analyze(symbol, historical_data)
                 technical_score = self._calculate_technical_score(technical_data)
             except Exception as e:
                 logger.warning(f"Technical analysis failed for {symbol}: {e}")
@@ -180,8 +197,8 @@ class TickerSelector:
 
             # Get news sentiment with error handling
             try:
-                news_data = await self.news_analyzer.analyze_sentiment(symbol, info.get('longName', symbol))
-                news_sentiment = news_data.get('compound_score', 0)
+                news_data = await self.news_analyzer.analyze(symbol, symbol)  # Use symbol as company name
+                news_sentiment = news_data.get('sentiment_analysis', {}).get('sentiment_score', 0)
             except Exception as e:
                 logger.warning(f"News analysis failed for {symbol}: {e}")
                 news_data = {}
@@ -200,9 +217,9 @@ class TickerSelector:
             
             return TickerCandidate(
                 symbol=symbol,
-                company_name=info.get('longName', symbol),
-                sector=info.get('sector', 'Unknown'),
-                market_cap=info.get('marketCap', 0),
+                company_name=symbol,  # Use symbol as company name for now
+                sector='Unknown',     # Sector info not available without yfinance
+                market_cap=0,         # Market cap not available without yfinance
                 avg_volume=avg_volume,
                 current_price=current_price,
                 technical_score=technical_score,

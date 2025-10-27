@@ -24,8 +24,9 @@ class NewsAnalyzer:
     
     def __init__(self):
         self.weight = 25.0  # 25% of total confidence score
-        self.newsapi_key = settings.news_api_key
+        self.newsapi_key = settings.newsapi_key
         self.alpha_vantage_key = settings.alpha_vantage_api_key
+        self.finnhub_key = settings.finnhub_api_key
         self.session: Optional[aiohttp.ClientSession] = None
     
     async def __aenter__(self):
@@ -107,8 +108,17 @@ class NewsAnalyzer:
         """Gather news from multiple sources."""
         articles = []
         sources = []
-        
-        # Try NewsAPI first
+
+        # Try Finnhub first (most reliable)
+        try:
+            finnhub_articles = await self._fetch_finnhub_news(symbol)
+            if finnhub_articles:
+                articles.extend(finnhub_articles)
+                sources.append("Finnhub")
+        except Exception as e:
+            logger.error(f"Finnhub failed for {symbol}: {e}")
+
+        # Try NewsAPI as backup
         try:
             newsapi_articles = await self._fetch_newsapi_data(symbol, company_name)
             if newsapi_articles:
@@ -116,8 +126,8 @@ class NewsAnalyzer:
                 sources.append("NewsAPI")
         except Exception as e:
             logger.error(f"NewsAPI failed for {symbol}: {e}")
-        
-        # Try Alpha Vantage news
+
+        # Try Alpha Vantage news as final backup
         try:
             av_articles = await self._fetch_alpha_vantage_news(symbol)
             if av_articles:
@@ -180,7 +190,48 @@ class NewsAnalyzer:
                 })
             
             return articles
-    
+
+    async def _fetch_finnhub_news(self, symbol: str) -> List[Dict[str, Any]]:
+        """Fetch news from Finnhub."""
+        if not self.finnhub_key:
+            logger.warning("Finnhub key not configured")
+            return []
+
+        url = "https://finnhub.io/api/v1/company-news"
+        params = {
+            "symbol": symbol,
+            "from": (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d"),
+            "to": datetime.now().strftime("%Y-%m-%d"),
+            "token": self.finnhub_key
+        }
+
+        if not self.session:
+            self.session = aiohttp.ClientSession()
+
+        async with self.session.get(url, params=params) as response:
+            if response.status != 200:
+                raise Exception(f"Finnhub HTTP {response.status}")
+
+            data = await response.json()
+
+            if not isinstance(data, list):
+                logger.warning(f"Unexpected Finnhub response format: {type(data)}")
+                return []
+
+            articles = []
+            for item in data[:20]:  # Limit to 20 most recent articles
+                articles.append({
+                    "title": item.get("headline", ""),
+                    "description": item.get("summary", ""),
+                    "content": item.get("summary", ""),
+                    "url": item.get("url", ""),
+                    "published_at": datetime.fromtimestamp(item.get("datetime", 0)).isoformat() if item.get("datetime") else "",
+                    "source": item.get("source", "Unknown"),
+                    "data_source": "Finnhub"
+                })
+
+            return articles
+
     async def _fetch_alpha_vantage_news(self, symbol: str) -> List[Dict[str, Any]]:
         """Fetch news from Alpha Vantage."""
         if not self.alpha_vantage_key:

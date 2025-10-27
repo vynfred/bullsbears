@@ -1,0 +1,32 @@
+{
+  "timestamp": "2025-10-27T10:04:48.519885",
+  "redis_available": false,
+  "individual_ai_services": {
+    "grok": {
+      "success": true,
+      "response_time": 47.833027839660645,
+      "result": "GrokAnalysis(recommendation='HOLD', confidence=10.0, reasoning='The 0.8% confidence score aligns with the lack of compelling data or catalysts to support a strong directional move for NVDA. Neutral sentiment across news and social media, combined with normal volume patterns and limited options flow data, suggests no immediate opportunity or risk.', risk_warning='Lack of technical data and limited social media sources may obscure underlying trends or sudden shifts in sentiment.', summary='Current data for NVDA shows no strong bullish or bearish signals, justifying a HOLD position. The 68% probability of closing above $900 lacks impact context, and no catalysts are identified. Proceed with caution due to incomplete data.', key_factors=['Neutral sentiment across all sources', 'No upcoming catalysts or unusual volume', 'Limited data availability for robust analysis'], contrarian_view='A sudden, untracked catalyst or shift in market sentiment could drive unexpected price movement, especially given the absence of technical data.')"
+    },
+    "deepseek": {
+      "success": true,
+      "response_time": 6.004788875579834,
+      "result": "DeepSeekSentimentAnalysis(sentiment_score=0.0, confidence=0.0, narrative='No social data exists to analyze sentiment or psychological patterns for NVDA. The absence of mentions and themes indicates complete market silence rather than meaningful sentiment. Without raw data, psychological insights cannot be derived from social chatter.', key_themes=['data_void', 'no_engagement', 'zero_mentions'], crowd_psychology='apathy', sarcasm_detected=False, social_news_bridge=0.0)"
+    }
+  },
+  "consensus_engine": {
+    "success": false,
+    "error": "'ConsensusResult' object has no attribute 'recommendation'"
+  },
+  "option_generator": {
+    "success": false,
+    "error": "No option plays generated"
+  },
+  "summary": {
+    "total_tests": 4,
+    "passed_tests": 2,
+    "success_rate": 50.0,
+    "performance_targets_met": {
+      "consensus_under_500ms": false
+    }
+  }
+}

@@ -58,8 +58,8 @@ async def init_db():
     """Initialize database tables."""
     try:
         # Import all models to ensure they're registered
-        from ..models import stock, options_data, user_preferences, analysis_results
-        
+        from ..models import stock, options_data, user_preferences, analysis_results, watchlist
+
         # Create all tables
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created successfully")

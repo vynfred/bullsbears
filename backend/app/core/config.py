@@ -37,23 +37,35 @@ class Settings(BaseSettings):
     redis_port: int = 6379
     redis_db: int = 0
     
-    # API Keys - Stock/Options Data
-    alpha_vantage_api_key: str
-    yahoo_finance_enabled: bool = True
-    fmp_api_key: Optional[str] = None
-    alpaca_api_key: Optional[str] = None
-    alpaca_secret_key: Optional[str] = None
-    benzinga_api_key: Optional[str] = None
-    benzinga_enabled: bool = True
-    benzinga_rate_limit: int = 5
-    polygon_news_api_key: Optional[str] = None
-    finnhub_api_key: Optional[str] = None
+    # API Keys - Core Data Sources
+    alpha_vantage_api_key: str = Field(..., env="ALPHA_VANTAGE_API_KEY")
+    finnhub_api_key: Optional[str] = Field(None, env="FINNHUB_API_KEY")
+    polygon_api_key: Optional[str] = Field(None, env="POLYGON_API_KEY")
+    newsapi_key: Optional[str] = Field(None, env="NEWS_API_KEY")
+
+    # API Keys - AI Services (Dual AI System)
+    grok_api_key: str = Field(..., env="GROK_API_KEY")
+    deepseek_api_key: str = Field(..., env="DEEPSEEK_API_KEY")
+
+    # API Keys - Social Media
+    reddit_client_id: Optional[str] = Field(None, env="REDDIT_CLIENT_ID")
+    reddit_client_secret: Optional[str] = Field(None, env="REDDIT_CLIENT_SECRET")
+
+    # Rate Limiting Configuration
+    api_rate_limit_per_minute: int = 15  # Max API calls per minute (reduced)
+    api_batch_delay_seconds: float = 2.0  # Delay between API batches (increased)
+    api_retry_max_attempts: int = 3  # Max retry attempts for failed API calls
+    api_retry_base_delay: float = 2.0  # Base delay for exponential backoff (increased)
+    # Removed Yahoo Finance - not used for news data
     fred_api_key: Optional[str] = None
     nasdaq_api_key: Optional[str] = None
     nasdaq_enabled: bool = True
+    fmp_api_key: Optional[str] = None
+    alpaca_api_key: Optional[str] = None
+    alpaca_secret_key: Optional[str] = None
+    polygon_news_api_key: Optional[str] = None
     
     # API Keys - News Sources
-    news_api_key: str
     alpha_vantage_news_enabled: bool = True
     
     # API Keys - Social Media
@@ -65,8 +77,7 @@ class Settings(BaseSettings):
     reddit_client_secret: Optional[str] = Field(None, env="REDDIT_CLIENT_SECRET")
     reddit_user_agent: str = Field("BullsBears/2.1", env="REDDIT_USER_AGENT")
 
-    # AI APIs
-    grok_api_key: Optional[str] = Field(None, env="grok_api")
+    # AI APIs - Configuration handled above in dual AI section
     
     # CORS
     allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001"
@@ -82,6 +93,27 @@ class Settings(BaseSettings):
     cache_indicators: int = 300
     cache_user_preferences: int = 3600
     cache_historical_data: int = 86400
+    cache_news: int = 600  # 10 minutes
+    cache_social_media: int = 300  # 5 minutes
+    cache_complete_analysis: int = 600  # 10 minutes for complete analysis
+
+    # Pre-computed Analysis Caching (in seconds)
+    cache_precomputed_analysis: int = 1800  # 30 minutes for precomputed analysis
+    cache_precomputed_technical: int = 3600  # 1 hour for technical data
+    cache_precomputed_sentiment: int = 1800  # 30 minutes for sentiment data
+    cache_precomputed_news: int = 86400  # 1 day for news data (testing phase)
+    cache_stale_data_warning: int = 7200  # 2 hours before showing stale warning
+
+    # Precompute System Configuration
+    precompute_enabled: bool = False  # Feature flag for precompute system
+    precompute_top_stocks_count: int = 10  # Number of top stocks to precompute
+    precompute_market_hours_interval: int = 3600  # 1 hour during market hours
+    precompute_after_hours_interval: int = 7200  # 2 hours after market hours
+    precompute_weekend_interval: int = 14400  # 4 hours on weekends
+
+    # Rate Limiting for Real-time Fallbacks
+    realtime_requests_per_day: int = 5  # Free tier limit for real-time requests
+    realtime_api_calls_per_request: int = 2  # Max API calls per real-time request
     
     # Market Hours (Eastern Time)
     market_open_hour: int = 9
@@ -123,6 +155,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"  # Ignore extra fields from .env
 
 
 @lru_cache()

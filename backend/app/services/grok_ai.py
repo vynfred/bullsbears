@@ -62,6 +62,7 @@ class GrokAIService:
                                 polymarket_data: List[Dict[str, Any]],
                                 catalyst_data: Dict[str, Any],
                                 unusual_volume_data: Dict[str, Any],
+                                options_flow_data: Dict[str, Any],
                                 confidence_score: float) -> Optional[GrokAnalysis]:
         """
         Get Grok AI analysis of the complete option play data.
@@ -88,12 +89,12 @@ class GrokAIService:
                 async with self:
                     return await self._perform_analysis(
                         symbol, technical_data, news_data, social_data, polymarket_data,
-                        catalyst_data, unusual_volume_data, confidence_score
+                        catalyst_data, unusual_volume_data, options_flow_data, confidence_score
                     )
             else:
                 return await self._perform_analysis(
                     symbol, technical_data, news_data, social_data, polymarket_data,
-                    catalyst_data, unusual_volume_data, confidence_score
+                    catalyst_data, unusual_volume_data, options_flow_data, confidence_score
                 )
                 
         except Exception as e:
@@ -102,13 +103,13 @@ class GrokAIService:
     
     async def _perform_analysis(self, symbol: str, technical_data: Dict, news_data: Dict,
                               social_data: Dict, polymarket_data: List[Dict], catalyst_data: Dict,
-                              unusual_volume_data: Dict, confidence_score: float) -> Optional[GrokAnalysis]:
+                              unusual_volume_data: Dict, options_flow_data: Dict, confidence_score: float) -> Optional[GrokAnalysis]:
         """Perform the actual AI analysis."""
-        
+
         # Prepare the analysis prompt
         prompt = self._build_analysis_prompt(
             symbol, technical_data, news_data, social_data, polymarket_data,
-            catalyst_data, unusual_volume_data, all_data.get('options_flow', {}), confidence_score
+            catalyst_data, unusual_volume_data, options_flow_data, confidence_score
         )
         
         try:
@@ -124,7 +125,7 @@ class GrokAIService:
                         "content": prompt
                     }
                 ],
-                "model": "grok-beta",
+                "model": "grok-3",
                 "stream": False,
                 "temperature": 0.3  # Lower temperature for more consistent analysis
             }
@@ -152,32 +153,7 @@ class GrokAIService:
             polymarket_data=all_data.get('polymarket', []),
             catalyst_data=all_data.get('catalysts', {}),
             unusual_volume_data=all_data.get('volume', {}),
-            confidence_score=confidence_score
-        )
-
-    async def analyze_comprehensive_option_play(self, symbol: str, all_data: Dict, confidence_score: float) -> Optional[GrokAnalysis]:
-        """Analyze option play with comprehensive data package."""
-        return await self.analyze_option_play(
-            symbol=symbol,
-            technical_data=all_data.get('technical', {}),
-            news_data=all_data.get('news', {}),
-            social_data=all_data.get('social', {}),
-            polymarket_data=all_data.get('polymarket', []),
-            catalyst_data=all_data.get('catalysts', {}),
-            unusual_volume_data=all_data.get('volume', {}),
-            confidence_score=confidence_score
-        )
-
-    async def analyze_comprehensive_option_play(self, symbol: str, all_data: Dict, confidence_score: float) -> Optional[GrokAnalysis]:
-        """Analyze option play with comprehensive data package."""
-        return await self.analyze_option_play(
-            symbol=symbol,
-            technical_data=all_data.get('technical', {}),
-            news_data=all_data.get('news', {}),
-            social_data=all_data.get('social', {}),
-            polymarket_data=all_data.get('polymarket', []),
-            catalyst_data=all_data.get('catalysts', {}),
-            unusual_volume_data=all_data.get('volume', {}),
+            options_flow_data=all_data.get('options_flow', {}),
             confidence_score=confidence_score
         )
     
@@ -434,5 +410,6 @@ async def get_ai_analysis(symbol: str, all_data: Dict) -> Optional[GrokAnalysis]
             polymarket_data=all_data.get('polymarket', []),
             catalyst_data=all_data.get('catalysts', {}),
             unusual_volume_data=all_data.get('volume', {}),
+            options_flow_data=all_data.get('options_flow', {}),
             confidence_score=all_data.get('confidence_score', 0)
         )

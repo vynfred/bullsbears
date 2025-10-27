@@ -1,5 +1,5 @@
 """
-Stock Data Service - Primary: Alpha Vantage, Backup: Yahoo Finance
+Stock Data Service - Primary: Alpha Vantage, Backup: Finnhub
 Handles real-time quotes, historical data, and options chains with caching and rate limiting.
 """
 import asyncio
@@ -7,7 +7,6 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 import aiohttp
-import yfinance as yf
 from sqlalchemy.orm import Session
 
 from ..core.config import settings
@@ -45,12 +44,13 @@ class RateLimiter:
 
 class StockDataService:
     """
-    Stock data service with Alpha Vantage primary and yfinance backup.
+    Stock data service with Alpha Vantage primary and Finnhub backup.
     Implements caching, rate limiting, and error handling.
     """
-    
+
     def __init__(self):
         self.alpha_vantage_key = settings.alpha_vantage_api_key
+        self.finnhub_key = settings.finnhub_api_key
         self.rate_limiter = RateLimiter()
         self.session: Optional[aiohttp.ClientSession] = None
     
@@ -97,17 +97,17 @@ class StockDataService:
                 return quote_data
         except Exception as e:
             logger.error(f"Alpha Vantage quote failed for {symbol}: {e}")
-        
-        # Fallback to yfinance
+
+        # Fallback to Finnhub
         try:
-            quote_data = await self._fetch_yfinance_quote(symbol)
+            quote_data = await self._fetch_finnhub_quote(symbol)
             if quote_data:
                 # Cache for 30 seconds
                 await redis_client.cache_with_ttl(cache_key, quote_data, settings.cache_api_responses)
                 return quote_data
         except Exception as e:
-            logger.error(f"yfinance quote failed for {symbol}: {e}")
-        
+            logger.error(f"Finnhub quote failed for {symbol}: {e}")
+
         logger.error(f"All quote sources failed for {symbol}")
         return None
     
@@ -131,10 +131,13 @@ class StockDataService:
             
             if "Error Message" in data:
                 raise Exception(data["Error Message"])
-            
+
             if "Note" in data:
                 raise Exception("API rate limit exceeded")
-            
+
+            if "Information" in data and "rate limit" in data["Information"].lower():
+                raise Exception(f"API rate limit exceeded: {data['Information']}")
+
             quote = data.get("Global Quote", {})
             if not quote:
                 raise Exception("No quote data returned")
@@ -153,30 +156,46 @@ class StockDataService:
                 "source": "alpha_vantage"
             }
     
-    async def _fetch_yfinance_quote(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """Fetch real-time quote from yfinance (backup)."""
-        def _get_yf_data():
-            ticker = yf.Ticker(symbol)
-            info = ticker.info
-            hist = ticker.history(period="1d")
-            
-            if hist.empty:
-                raise Exception("No historical data available")
-            
-            latest = hist.iloc[-1]
-            
+    async def _fetch_finnhub_quote(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Fetch real-time quote from Finnhub."""
+        if not self.finnhub_key:
+            logger.warning("Finnhub key not configured")
+            return None
+
+        url = "https://finnhub.io/api/v1/quote"
+        params = {
+            "symbol": symbol,
+            "token": self.finnhub_key
+        }
+
+        session = await self._get_session()
+        async with session.get(url, params=params) as response:
+            if response.status != 200:
+                raise Exception(f"Finnhub HTTP {response.status}")
+
+            data = await response.json()
+
+            if not data or data.get("c") is None:
+                logger.warning(f"No quote data from Finnhub for {symbol}")
+                return None
+
+            current_price = float(data.get("c", 0))
+            previous_close = float(data.get("pc", 0))
+            change = current_price - previous_close
+            change_percent = (change / previous_close * 100) if previous_close > 0 else 0
+
             return {
                 "symbol": symbol,
-                "price": float(latest["Close"]),
-                "change": float(latest["Close"] - latest["Open"]),
-                "change_percent": f"{((latest['Close'] - latest['Open']) / latest['Open'] * 100):.2f}",
-                "volume": int(latest["Volume"]),
-                "open": float(latest["Open"]),
-                "high": float(latest["High"]),
-                "low": float(latest["Low"]),
-                "previous_close": float(latest["Open"]),  # Approximation
+                "price": current_price,
+                "change": change,
+                "change_percent": f"{change_percent:.2f}",
+                "volume": 0,  # Finnhub doesn't provide volume in quote endpoint
+                "open": float(data.get("o", 0)),
+                "high": float(data.get("h", 0)),
+                "low": float(data.get("l", 0)),
+                "previous_close": previous_close,
                 "timestamp": datetime.now(),
-                "source": "yfinance"
+                "source": "finnhub"
             }
         
         # Run in thread pool to avoid blocking
@@ -211,14 +230,14 @@ class StockDataService:
         except Exception as e:
             logger.error(f"Alpha Vantage historical failed for {symbol}: {e}")
 
-        # Fallback to yfinance
+        # Fallback to Finnhub
         try:
-            historical_data = await self._fetch_yfinance_historical(symbol, period)
+            historical_data = await self._fetch_finnhub_historical(symbol, period)
             if historical_data:
                 await redis_client.cache_with_ttl(cache_key, historical_data, settings.cache_historical_data)
                 return historical_data
         except Exception as e:
-            logger.error(f"yfinance historical failed for {symbol}: {e}")
+            logger.error(f"Finnhub historical failed for {symbol}: {e}")
 
         return None
 
@@ -255,6 +274,9 @@ class StockDataService:
             if "Error Message" in data:
                 raise Exception(data["Error Message"])
 
+            if "Information" in data and "rate limit" in data["Information"].lower():
+                raise Exception(f"API rate limit exceeded: {data['Information']}")
+
             # Parse time series data
             time_series_key = None
             for key in data.keys():
@@ -290,24 +312,68 @@ class StockDataService:
             limit = period_limits.get(period, 365)
             return historical_data[:limit]
 
-    async def _fetch_yfinance_historical(self, symbol: str, period: str) -> Optional[List[Dict[str, Any]]]:
-        """Fetch historical data from yfinance."""
-        def _get_yf_historical():
-            ticker = yf.Ticker(symbol)
-            hist = ticker.history(period=period)
+    async def _fetch_finnhub_historical(self, symbol: str, period: str) -> Optional[List[Dict[str, Any]]]:
+        """Fetch historical data from Finnhub."""
+        if not self.finnhub_key:
+            logger.warning("Finnhub key not configured")
+            return None
 
-            if hist.empty:
-                raise Exception("No historical data available")
+        # Map period to days
+        period_days = {
+            "1d": 1,
+            "5d": 5,
+            "1mo": 30,
+            "3mo": 90,
+            "6mo": 180,
+            "1y": 365,
+            "2y": 730,
+            "5y": 1825,
+            "10y": 3650,
+            "ytd": 365,
+            "max": 3650
+        }
+
+        days = period_days.get(period, 365)
+        to_date = int(datetime.now().timestamp())
+        from_date = int((datetime.now() - timedelta(days=days)).timestamp())
+
+        url = "https://finnhub.io/api/v1/stock/candle"
+        params = {
+            "symbol": symbol,
+            "resolution": "D",  # Daily resolution
+            "from": from_date,
+            "to": to_date,
+            "token": self.finnhub_key
+        }
+
+        session = await self._get_session()
+        async with session.get(url, params=params) as response:
+            if response.status != 200:
+                raise Exception(f"Finnhub HTTP {response.status}")
+
+            data = await response.json()
+
+            if data.get("s") != "ok" or not data.get("c"):
+                logger.warning(f"No historical data from Finnhub for {symbol}")
+                return None
 
             historical_data = []
-            for date, row in hist.iterrows():
+            timestamps = data.get("t", [])
+            opens = data.get("o", [])
+            highs = data.get("h", [])
+            lows = data.get("l", [])
+            closes = data.get("c", [])
+            volumes = data.get("v", [])
+
+            for i in range(len(timestamps)):
+                date = datetime.fromtimestamp(timestamps[i]).strftime("%Y-%m-%d")
                 historical_data.append({
-                    "date": date.strftime("%Y-%m-%d"),
-                    "open": float(row["Open"]),
-                    "high": float(row["High"]),
-                    "low": float(row["Low"]),
-                    "close": float(row["Close"]),
-                    "volume": int(row["Volume"])
+                    "date": date,
+                    "open": float(opens[i]),
+                    "high": float(highs[i]),
+                    "low": float(lows[i]),
+                    "close": float(closes[i]),
+                    "volume": int(volumes[i]) if i < len(volumes) else 0
                 })
 
             # Sort by date (newest first)
@@ -319,7 +385,7 @@ class StockDataService:
 
     async def get_options_chain(self, symbol: str, expiration_date: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
-        Get options chain data with caching.
+        Get options chain data with caching using Polygon.io.
 
         Args:
             symbol: Stock symbol
@@ -336,78 +402,136 @@ class StockDataService:
             logger.info(f"Cache hit for options {symbol}")
             return cached_data
 
-        # Currently only yfinance supports options (Alpha Vantage requires premium)
+        # Try Polygon.io for options data
         try:
-            options_data = await self._fetch_yfinance_options(symbol, expiration_date)
+            options_data = await self._fetch_polygon_options(symbol, expiration_date)
             if options_data:
-                await redis_client.cache_with_ttl(cache_key, options_data, settings.cache_indicators)
+                # Cache for 5 minutes
+                await redis_client.cache_with_ttl(cache_key, options_data, 300)
                 return options_data
         except Exception as e:
-            logger.error(f"yfinance options failed for {symbol}: {e}")
+            logger.error(f"Polygon options failed for {symbol}: {e}")
 
+        logger.error(f"Options data not available for {symbol}")
         return None
 
-    async def _fetch_yfinance_options(self, symbol: str, expiration_date: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Fetch options chain from yfinance."""
-        def _get_yf_options():
-            ticker = yf.Ticker(symbol)
+    async def _fetch_polygon_options(self, symbol: str, expiration_date: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Fetch options chain from Polygon.io."""
+        if not settings.polygon_api_key:
+            logger.warning("Polygon API key not configured")
+            return None
 
-            # Get available expiration dates
-            expirations = ticker.options
-            if not expirations:
-                raise Exception("No options data available")
+        session = await self._get_session()
+        
+        # Get available expiration dates first
+        exp_url = f"https://api.polygon.io/v3/reference/options/contracts"
+        exp_params = {
+            "underlying_ticker": symbol,
+            "contract_type": "option",
+            "limit": 1000,
+            "apikey": settings.polygon_api_key
+        }
 
-            if expiration_date and expiration_date not in expirations:
-                raise Exception(f"Expiration date {expiration_date} not available")
+        try:
+            async with session.get(exp_url, params=exp_params) as response:
+                if response.status != 200:
+                    raise Exception(f"Polygon HTTP {response.status}")
 
-            target_expiration = expiration_date or expirations[0]
+                data = await response.json()
+                contracts = data.get("results", [])
+                
+                if not contracts:
+                    logger.warning(f"No options contracts found for {symbol}")
+                    return None
 
-            # Get options chain for the expiration
-            opt_chain = ticker.option_chain(target_expiration)
+                # Extract unique expiration dates
+                expirations = sorted(list(set(contract.get("expiration_date") for contract in contracts)))
+                
+                # Use first available expiration if none specified
+                target_expiration = expiration_date or expirations[0] if expirations else None
+                
+                if not target_expiration:
+                    return None
 
-            calls_data = []
-            puts_data = []
+                # Filter contracts for target expiration
+                target_contracts = [c for c in contracts if c.get("expiration_date") == target_expiration]
+                
+                # Get current quotes for these contracts
+                calls = []
+                puts = []
+                
+                for contract in target_contracts[:50]:  # Limit to prevent rate limiting
+                    ticker = contract.get("ticker")
+                    if not ticker:
+                        continue
+                        
+                    # Get quote for this contract
+                    quote_data = await self._fetch_polygon_option_quote(ticker)
+                    
+                    contract_data = {
+                        "contract_symbol": ticker,
+                        "strike": contract.get("strike_price"),
+                        "expiration": contract.get("expiration_date"),
+                        "last_price": quote_data.get("last_price", 0) if quote_data else 0,
+                        "bid": quote_data.get("bid", 0) if quote_data else 0,
+                        "ask": quote_data.get("ask", 0) if quote_data else 0,
+                        "volume": quote_data.get("volume", 0) if quote_data else 0,
+                        "open_interest": quote_data.get("open_interest", 0) if quote_data else 0,
+                        "implied_volatility": quote_data.get("implied_volatility") if quote_data else None,
+                        "delta": quote_data.get("delta") if quote_data else None,
+                        "gamma": quote_data.get("gamma") if quote_data else None,
+                        "theta": quote_data.get("theta") if quote_data else None,
+                        "vega": quote_data.get("vega") if quote_data else None
+                    }
+                    
+                    if contract.get("contract_type") == "call":
+                        calls.append(contract_data)
+                    else:
+                        puts.append(contract_data)
+                    
+                    # Small delay to prevent rate limiting
+                    await asyncio.sleep(0.1)
 
-            # Process calls
-            for _, call in opt_chain.calls.iterrows():
-                calls_data.append({
-                    "strike": float(call["strike"]),
-                    "last_price": float(call.get("lastPrice", 0)),
-                    "bid": float(call.get("bid", 0)),
-                    "ask": float(call.get("ask", 0)),
-                    "volume": int(call.get("volume", 0)),
-                    "open_interest": int(call.get("openInterest", 0)),
-                    "implied_volatility": float(call.get("impliedVolatility", 0)),
-                    "contract_symbol": call.get("contractSymbol", ""),
-                    "option_type": "CALL"
-                })
+                return {
+                    "symbol": symbol,
+                    "expiration_date": target_expiration,
+                    "available_expirations": expirations,
+                    "calls": sorted(calls, key=lambda x: x["strike"]),
+                    "puts": sorted(puts, key=lambda x: x["strike"]),
+                    "source": "polygon"
+                }
 
-            # Process puts
-            for _, put in opt_chain.puts.iterrows():
-                puts_data.append({
-                    "strike": float(put["strike"]),
-                    "last_price": float(put.get("lastPrice", 0)),
-                    "bid": float(put.get("bid", 0)),
-                    "ask": float(put.get("ask", 0)),
-                    "volume": int(put.get("volume", 0)),
-                    "open_interest": int(put.get("openInterest", 0)),
-                    "implied_volatility": float(put.get("impliedVolatility", 0)),
-                    "contract_symbol": put.get("contractSymbol", ""),
-                    "option_type": "PUT"
-                })
+        except Exception as e:
+            logger.error(f"Error fetching Polygon options for {symbol}: {e}")
+            return None
 
-            return {
-                "symbol": symbol,
-                "expiration_date": target_expiration,
-                "available_expirations": list(expirations),
-                "calls": calls_data,
-                "puts": puts_data,
-                "timestamp": datetime.now().isoformat(),
-                "source": "yfinance"
-            }
+    async def _fetch_polygon_option_quote(self, option_ticker: str) -> Optional[Dict[str, Any]]:
+        """Fetch individual option quote from Polygon."""
+        if not settings.polygon_api_key:
+            return None
 
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, _get_yf_options)
+        url = f"https://api.polygon.io/v2/last/trade/{option_ticker}"
+        params = {"apikey": settings.polygon_api_key}
+
+        session = await self._get_session()
+        
+        try:
+            async with session.get(url, params=params) as response:
+                if response.status != 200:
+                    return None
+
+                data = await response.json()
+                result = data.get("results", {})
+                
+                return {
+                    "last_price": result.get("p", 0),
+                    "volume": result.get("s", 0),
+                    "timestamp": result.get("t")
+                }
+
+        except Exception as e:
+            logger.debug(f"Failed to get quote for {option_ticker}: {e}")
+            return None
 
     async def store_stock_data(self, db: Session, symbol: str, quote_data: Dict[str, Any]) -> Stock:
         """Store stock data in database."""

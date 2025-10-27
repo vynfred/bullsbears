@@ -131,16 +131,41 @@ class PolymarketService:
             if end_date < now or end_date > now + timedelta(days=days_ahead):
                 return None
             
-            # Get probability (assuming binary market for simplicity)
+            # Get probability (handle different data structures safely)
             outcomes = market_data.get('outcomes', [])
-            if not outcomes:
-                return None
-            
-            # Find the highest probability outcome
             max_probability = 0.0
-            for outcome in outcomes:
-                prob = float(outcome.get('price', 0))
-                max_probability = max(max_probability, prob)
+
+            if outcomes:
+                # Handle list of outcomes with error checking
+                if isinstance(outcomes, list):
+                    for outcome in outcomes:
+                        try:
+                            if isinstance(outcome, dict):
+                                prob = float(outcome.get('price', 0))
+                                max_probability = max(max_probability, prob)
+                            else:
+                                # Handle case where outcome is not a dict
+                                logger.warning(f"Unexpected outcome format for market {market_data.get('id', 'unknown')}: {type(outcome)}")
+                                continue
+                        except (ValueError, TypeError) as e:
+                            logger.warning(f"Error parsing outcome probability: {e}")
+                            continue
+                else:
+                    # Handle case where outcomes is not a list
+                    logger.warning(f"Unexpected outcomes format: {type(outcomes)}")
+                    # Try to extract probability from alternative fields
+                    max_probability = float(market_data.get('probability', 0))
+                    if max_probability == 0:
+                        max_probability = float(market_data.get('price', 0))
+            else:
+                # No outcomes, try alternative probability fields
+                try:
+                    max_probability = float(market_data.get('probability', 0))
+                    if max_probability == 0:
+                        max_probability = float(market_data.get('price', 0))
+                except (ValueError, TypeError):
+                    logger.warning(f"No valid probability data for market {market_data.get('id', 'unknown')}")
+                    return None
             
             # Skip if probability is too low
             if max_probability < min_probability:

@@ -28,6 +28,7 @@ class Stock(Base):
     prices = relationship("StockPrice", back_populates="stock", cascade="all, delete-orphan")
     options_chains = relationship("OptionsChain", back_populates="stock", cascade="all, delete-orphan")
     analysis_results = relationship("AnalysisResult", back_populates="stock", cascade="all, delete-orphan")
+    precomputed_analyses = relationship("PrecomputedAnalysis", back_populates="stock", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Stock(symbol='{self.symbol}', name='{self.name}')>"

@@ -32,7 +32,16 @@ class ChosenOption(Base):
     is_expired = Column(Boolean, default=False)
     final_price = Column(Float, nullable=True)
     actual_profit_loss = Column(Float, nullable=True)
-    
+
+    # Dual AI Scoring (for ML training data collection)
+    grok_technical_score = Column(Float)  # Grok AI technical analysis score (0-100)
+    deepseek_sentiment_score = Column(Float)  # DeepSeek sentiment analysis score (0-100)
+    ai_consensus_level = Column(String(20))  # STRONG_AGREEMENT, PARTIAL_AGREEMENT, DISAGREEMENT
+    confidence_boost_applied = Column(Float)  # Confidence boost/penalty from consensus (-20 to +20)
+    hybrid_validation_outcome = Column(Boolean)  # Whether hybrid validation was triggered
+    dual_ai_recommendation_reasoning = Column(Text)  # Combined reasoning from both AI systems
+    ai_analysis_timestamp = Column(DateTime)  # When AI analysis was performed
+
     def __repr__(self):
         return f"<ChosenOption(symbol={self.symbol}, type={self.option_type}, strike={self.strike}, expiration={self.expiration})>"
 

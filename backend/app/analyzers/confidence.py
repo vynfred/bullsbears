@@ -3,6 +3,7 @@ Confidence Scoring Engine - Combines all analyzers with weighted scoring
 Technical(35%) + News(25%) + Social(20%) + Earnings(15%) + Market(5%)
 """
 import logging
+import numpy as np
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Tuple
 from sqlalchemy.orm import Session
@@ -16,6 +17,24 @@ from ..core.config import settings
 from ..models.analysis_results import AnalysisResult, ConfidenceScore
 
 logger = logging.getLogger(__name__)
+
+
+def convert_numpy_types(obj):
+    """Convert numpy types to Python native types for JSON serialization."""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    else:
+        return obj
 
 
 class ConfidenceScorer:
@@ -159,13 +178,16 @@ class ConfidenceScorer:
                 "weights_used": self.weights,
                 "component_scores": confidence_data["component_scores"]
             }
-            
+
+            # Convert numpy types to Python native types for JSON serialization and database storage
+            result = convert_numpy_types(result)
+
             # Store in database
             await self._store_analysis_result(db, stock.id, result)
-            
+
             # Cache result
             await redis_client.cache_with_ttl(cache_key, result, settings.cache_complete_analysis)
-            
+
             return result
             
         except Exception as e:
@@ -192,7 +214,12 @@ class ConfidenceScorer:
                 else:
                     score = result.get("score", 50)
                 
-                component_scores[component] = score
+                component_scores[component] = {
+                    "raw_score": score,
+                    "weighted_score": score * (weight / 100),
+                    "details": result.get("details", {}),
+                    "factors": result.get("factors", [])
+                }
                 weighted_score = score * (weight / 100)
                 weighted_scores[component] = weighted_score
                 total_weighted_score += weighted_score
@@ -228,10 +255,10 @@ class ConfidenceScorer:
         else:
             return "HOLD"
     
-    def _get_final_confidence_level(self, score: float, component_scores: Dict[str, float]) -> str:
+    def _get_final_confidence_level(self, score: float, component_scores: Dict[str, Dict]) -> str:
         """Get confidence level based on score and component agreement."""
         # Check component agreement
-        scores = list(component_scores.values())
+        scores = [comp_data["raw_score"] for comp_data in component_scores.values()]
         if len(scores) < 2:
             return "LOW"
         
@@ -247,14 +274,14 @@ class ConfidenceScorer:
         else:
             return "LOW"
     
-    def _calculate_recommendation_strength(self, score: float, component_scores: Dict[str, float]) -> int:
+    def _calculate_recommendation_strength(self, score: float, component_scores: Dict[str, Dict]) -> int:
         """Calculate recommendation strength (0-100)."""
         # Base strength on distance from neutral (50)
         distance_from_neutral = abs(score - 50)
         base_strength = min(distance_from_neutral * 2, 100)
-        
+
         # Adjust for component agreement
-        scores = list(component_scores.values())
+        scores = [comp_data["raw_score"] for comp_data in component_scores.values()]
         if len(scores) > 1:
             import statistics
             score_std = statistics.stdev(scores)
@@ -383,19 +410,19 @@ class ConfidenceScorer:
 
         # Technical analysis summary
         if "technical" in component_scores:
-            tech_score = component_scores["technical"]
+            tech_score = component_scores["technical"]["raw_score"]
             tech_signal = technical_result.get("signals", {}).get("overall_signal", "neutral")
             summary_parts.append(f"Technical analysis shows {tech_signal} signals (score: {tech_score}/100).")
 
         # News sentiment summary
         if "news" in component_scores:
-            news_score = component_scores["news"]
+            news_score = component_scores["news"]["raw_score"]
             news_sentiment = news_result.get("sentiment_analysis", {}).get("overall_sentiment", "neutral")
             summary_parts.append(f"News sentiment is {news_sentiment} (score: {news_score}/100).")
 
         # Social media summary
         if "social" in component_scores:
-            social_score = component_scores["social"]
+            social_score = component_scores["social"]["raw_score"]
             social_sentiment = social_result.get("sentiment_analysis", {}).get("overall_sentiment", "neutral")
             summary_parts.append(f"Social media sentiment is {social_sentiment} (score: {social_score}/100).")
 
@@ -407,37 +434,39 @@ class ConfidenceScorer:
             # Create analysis result record
             analysis_result = AnalysisResult(
                 stock_id=stock_id,
+                symbol=result["symbol"],
+                analysis_type="stock",
                 timestamp=datetime.now(),
                 recommendation=result["recommendation"],
-                confidence_level=result["confidence_level"],
-                overall_score=result["confidence_score"],
+                confidence_score=result["confidence_score"],
                 technical_score=result.get("technical_analysis", {}).get("technical_score", 50),
-                news_score=result.get("news_analysis", {}).get("news_score", 50),
-                social_score=result.get("social_analysis", {}).get("social_score", 50),
-                risk_level=result["risk_assessment"]["risk_level"],
-                max_position_size=result["risk_assessment"]["max_position_size_percent"],
-                stop_loss_price=result["risk_assessment"]["stop_loss_price"],
-                take_profit_price=result["risk_assessment"]["take_profit_price"],
-                analysis_summary=result["analysis_summary"]
+                news_sentiment_score=result.get("news_analysis", {}).get("news_score", 50),
+                social_sentiment_score=result.get("social_analysis", {}).get("social_score", 50),
+                earnings_score=50,  # Default value for now
+                market_trend_score=50,  # Default value for now
+                risk_level=result["risk_assessment"]["risk_level"]
             )
 
             db.add(analysis_result)
             db.commit()
             db.refresh(analysis_result)
 
-            # Create confidence score record
-            confidence_score = ConfidenceScore(
-                analysis_id=analysis_result.id,
-                technical_weight=self.weights["technical"],
-                news_weight=self.weights["news"],
-                social_weight=self.weights["social"],
-                earnings_weight=self.weights["earnings"],
-                market_weight=self.weights["market"],
-                final_score=result["confidence_score"],
-                component_scores=result["component_scores"]
-            )
+            # Create confidence score records for each component
+            components = result.get("component_scores", {})
+            for component_name, score_data in components.items():
+                if component_name in self.weights:
+                    confidence_score = ConfidenceScore(
+                        analysis_result_id=analysis_result.id,
+                        component_name=component_name,
+                        raw_score=score_data["raw_score"],
+                        weighted_score=score_data["weighted_score"],
+                        weight=self.weights[component_name],
+                        last_updated=datetime.now(),
+                        sub_scores=score_data.get("details", {}),
+                        contributing_factors=score_data.get("factors", [])
+                    )
+                    db.add(confidence_score)
 
-            db.add(confidence_score)
             db.commit()
 
         except Exception as e:
