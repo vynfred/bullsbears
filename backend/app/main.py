@@ -176,6 +176,10 @@ app.include_router(earnings.router)
 from .api.v1 import preferences
 app.include_router(preferences.router, prefix="/api/v1", tags=["preferences"])
 
+# Import and include performance router
+from .api.v1 import performance
+app.include_router(performance.router, prefix="/api/v1", tags=["performance"])
+
 
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):

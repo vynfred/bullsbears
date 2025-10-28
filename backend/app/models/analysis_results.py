@@ -76,6 +76,20 @@ class AnalysisResult(Base):
     social_news_bridge = Column(Float)  # Correlation between social and news sentiment
     dual_ai_version = Column(String(10), default="1.0")  # Version of dual AI system used
 
+    # ML Performance Tracking (B1.1 Extension)
+    response_time_ms = Column(Integer)  # Total dual AI analysis response time in milliseconds
+    cache_hit = Column(Boolean, default=False)  # Whether Redis cache was hit for this analysis
+    ai_cost_cents = Column(Integer, default=0)  # Total API cost for this analysis in cents (Grok + DeepSeek)
+    grok_analysis_time = Column(DateTime(timezone=True))  # Timestamp when Grok analysis completed
+    deepseek_analysis_time = Column(DateTime(timezone=True))  # Timestamp when DeepSeek analysis completed
+    consensus_time = Column(DateTime(timezone=True))  # Timestamp when consensus resolution completed
+    handoff_delta = Column(Float)  # Time difference between Grok and DeepSeek analysis phases
+    ml_features = Column(JSON, default=dict)  # Market context features for ML training (VIX, RSI weights, etc.)
+    consensus_score = Column(Float)  # Final consensus confidence score after agreement adjustments
+    api_calls_count = Column(Integer, default=0)  # Total number of API calls made for this analysis
+    data_sources_used = Column(JSON, default=list)  # Array of data sources used (Alpha Vantage, NewsAPI, Reddit, etc.)
+    performance_tier = Column(String(20), default="standard")  # Performance classification: fast, standard, slow
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True))  # When this analysis expires
@@ -89,6 +103,15 @@ class AnalysisResult(Base):
         Index('idx_symbol_timestamp', 'symbol', 'timestamp'),
         Index('idx_recommendation_confidence', 'recommendation', 'confidence_score'),
         Index('idx_analysis_type_timestamp', 'analysis_type', 'timestamp'),
+        # ML Performance Indexes (B1.1 Extension)
+        Index('idx_analysis_agreement_level', 'agreement_level'),
+        Index('idx_analysis_consensus_score', 'consensus_score'),
+        Index('idx_analysis_response_time', 'response_time_ms'),
+        Index('idx_analysis_ai_cost', 'ai_cost_cents'),
+        Index('idx_analysis_performance_tier', 'performance_tier'),
+        # Composite indexes for time-series ML analysis
+        Index('idx_symbol_created_consensus', 'symbol', 'created_at', 'consensus_score'),
+        Index('idx_agreement_confidence_time', 'agreement_level', 'confidence_score', 'created_at'),
     )
     
     def __repr__(self):

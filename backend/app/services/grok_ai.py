@@ -12,6 +12,7 @@ import json
 from dataclasses import dataclass
 
 from ..core.config import settings
+from .cost_monitor import CostMonitor, APIService
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,8 @@ class GrokAIService:
         self.api_key = settings.grok_api_key
         self.base_url = "https://api.x.ai/v1"
         self.session = None
-        
+        self.cost_monitor = None
+
         if not self.api_key:
             logger.warning("Grok API key not configured")
     
@@ -47,10 +49,16 @@ class GrokAIService:
                     'Content-Type': 'application/json'
                 }
             )
+
+        # Initialize cost monitor
+        self.cost_monitor = CostMonitor()
+        await self.cost_monitor.__aenter__()
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
+        if self.cost_monitor:
+            await self.cost_monitor.__aexit__(exc_type, exc_val, exc_tb)
         if self.session:
             await self.session.close()
     
@@ -133,10 +141,27 @@ class GrokAIService:
             async with self.session.post(f"{self.base_url}/chat/completions", json=payload) as response:
                 if response.status == 200:
                     result = await response.json()
+
+                    # Track API usage and cost
+                    if self.cost_monitor:
+                        tokens_used = result.get('usage', {}).get('total_tokens', 0)
+                        await self.cost_monitor.track_api_call(
+                            service=APIService.GROK,
+                            tokens_used=tokens_used
+                        )
+
                     return self._parse_grok_response(result)
                 else:
                     error_text = await response.text()
                     logger.error(f"Grok API error {response.status}: {error_text}")
+
+                    # Track failed API call
+                    if self.cost_monitor:
+                        await self.cost_monitor.track_api_call(
+                            service=APIService.GROK,
+                            tokens_used=0  # No tokens used on failure
+                        )
+
                     return None
                     
         except Exception as e:

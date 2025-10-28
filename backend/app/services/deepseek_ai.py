@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from ..core.config import settings
 from ..core.redis_client import get_redis_client
+from .cost_monitor import CostMonitor, APIService
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ class DeepSeekAIService:
         self.base_url = "https://api.deepseek.com/v1"
         self.session = None
         self.redis_client = None
+        self.cost_monitor = None
         
         # Cache TTL settings (5 minutes for social/news as per optimization strategy)
         self.cache_ttl_social = 300  # 5 minutes
@@ -65,10 +67,16 @@ class DeepSeekAIService:
                 }
             )
         self.redis_client = await get_redis_client()
+
+        # Initialize cost monitor
+        self.cost_monitor = CostMonitor()
+        await self.cost_monitor.__aenter__()
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
+        if self.cost_monitor:
+            await self.cost_monitor.__aexit__(exc_type, exc_val, exc_tb)
         if self.session:
             await self.session.close()
     
@@ -236,12 +244,29 @@ Focus on actionable insights for options traders.
             async with self.session.post(f"{self.base_url}/chat/completions", json=payload) as response:
                 if response.status == 200:
                     data = await response.json()
+
+                    # Track API usage and cost
+                    if self.cost_monitor:
+                        tokens_used = data.get('usage', {}).get('total_tokens', 0)
+                        await self.cost_monitor.track_api_call(
+                            service=APIService.DEEPSEEK,
+                            tokens_used=tokens_used
+                        )
+
                     return {
                         'content': data['choices'][0]['message']['content'],
                         'usage': data.get('usage', {})
                     }
                 else:
                     logger.error(f"DeepSeek API error: {response.status}")
+
+                    # Track failed API call
+                    if self.cost_monitor:
+                        await self.cost_monitor.track_api_call(
+                            service=APIService.DEEPSEEK,
+                            tokens_used=0  # No tokens used on failure
+                        )
+
                     return None
                     
         except Exception as e:
