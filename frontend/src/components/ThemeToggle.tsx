@@ -3,32 +3,51 @@
 import React from 'react';
 import { Sun, Moon, Monitor } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
+import styles from '../styles/components.module.css';
 
 export default function ThemeToggle() {
   const { theme, setTheme } = useTheme();
 
   const themes = [
-    { value: 'light', icon: Sun, label: 'Light' },
-    { value: 'dark', icon: Moon, label: 'Dark' },
+    { value: 'light', icon: Sun, label: 'Light Mode' },
+    { value: 'dark', icon: Moon, label: 'Dark Mode' },
     { value: 'system', icon: Monitor, label: 'System' },
   ] as const;
 
   return (
-    <div className="flex items-center space-x-1 bg-neutral-100 dark:bg-neutral-800 rounded-lg p-1">
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--spacing-xs)',
+        background: 'var(--bg-tertiary)',
+        borderRadius: 'var(--radius-md)',
+        padding: 'var(--spacing-xs)',
+        border: '1px solid var(--border-color)'
+      }}
+    >
       {themes.map(({ value, icon: Icon, label }) => (
         <button
           key={value}
           onClick={() => setTheme(value)}
-          className={`
-            flex items-center justify-center w-8 h-8 rounded-md transition-colors
-            ${theme === value 
-              ? 'bg-white dark:bg-neutral-700 shadow-sm' 
-              : 'hover:bg-neutral-200 dark:hover:bg-neutral-700'
-            }
-          `}
+          className={theme === value ? styles.buttonSmall : styles.buttonSecondary}
+          style={{
+            width: '36px',
+            height: '36px',
+            padding: '0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: theme === value ? 'var(--color-primary)' : 'transparent',
+            color: theme === value ? 'white' : 'var(--text-secondary)',
+            border: theme === value ? '1px solid var(--color-primary)' : '1px solid transparent',
+            borderRadius: 'var(--radius-sm)',
+            transition: 'all var(--transition-normal)'
+          }}
           title={label}
+          aria-label={label}
         >
-          <Icon className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
+          <Icon size={16} />
         </button>
       ))}
     </div>

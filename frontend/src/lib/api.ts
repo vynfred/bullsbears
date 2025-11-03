@@ -332,12 +332,18 @@ export interface AIOptionPlay {
 }
 
 export interface GeneratePlaysParams {
+  symbol?: string;
   max_plays?: number;
   min_confidence?: number;
   timeframe_days?: number;
   position_size?: number;
   risk_tolerance?: 'LOW' | 'MODERATE' | 'HIGH';
   directional_bias?: 'BULLISH' | 'BEARISH' | 'AI_DECIDES';
+  // Advanced settings
+  insight_style?: string;
+  iv_threshold?: number;
+  earnings_alert?: boolean;
+  shares_owned?: Record<string, number>;
 }
 
 export interface GeneratePlaysResponse {
@@ -362,6 +368,56 @@ export interface RateLimitStatus {
   resets_in_seconds: number;
   reset_time_est: string;
   can_generate: boolean;
+}
+
+export interface UserPreferences {
+  user_id: string;
+  risk_tolerance: string;
+  max_position_size: number;
+  preferred_expiration_days: number;
+  min_confidence_threshold: number;
+  shares_owned: Record<string, number>;
+  iv_threshold: number;
+  earnings_alert: boolean;
+  insight_style: string;
+  theme: string;
+  show_greeks: boolean;
+  show_technical_indicators: boolean;
+  watchlist_symbols: string[];
+}
+
+export interface RiskProfileStrategy {
+  name: string;
+  description: string;
+  risk_level: string;
+  max_loss: string;
+  profit_potential: string;
+  delta_range?: string;
+  theta_focus: boolean;
+  vega_sensitivity: string;
+}
+
+export interface RiskProfileInfo {
+  description: {
+    name: string;
+    description: string;
+    characteristics: string;
+    max_risk_per_trade: string;
+    preferred_strategies: string;
+  };
+  strategies: {
+    bullish: RiskProfileStrategy[];
+    bearish: RiskProfileStrategy[];
+    neutral: RiskProfileStrategy[];
+  };
+  sizing_rules: {
+    max_risk_per_trade: number;
+    max_portfolio_allocation: number;
+    preferred_win_rate: number;
+    max_dte: number;
+    profit_target: number;
+    stop_loss: number;
+  };
 }
 
 // API functions
@@ -489,6 +545,107 @@ export const api = {
       return response.data;
     } catch (error) {
       console.error('Error fetching OHLC data:', error);
+      throw error;
+    }
+  },
+
+  // User Preferences API
+  async getUserPreferences(userId: string): Promise<{ success: boolean; data: UserPreferences; message: string }> {
+    try {
+      const response = await apiClient.get(`/api/v1/preferences/${userId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching user preferences:', error);
+      throw error;
+    }
+  },
+
+  // AI Options Review API - New user-driven options analysis system
+  async validateStockSymbol(symbol: string): Promise<{ success: boolean; symbol: string; company_name?: string; current_price?: number; is_valid: boolean; error_message?: string }> {
+    try {
+      const response = await apiClient.post('/api/v1/options-review/validate-symbol', { symbol });
+      return response.data;
+    } catch (error) {
+      console.error('Error validating stock symbol:', error);
+      throw error;
+    }
+  },
+
+  async getExpirationDates(symbol: string): Promise<{ success: boolean; symbol: string; expirations: any[]; error_message?: string }> {
+    try {
+      const response = await apiClient.get(`/api/v1/options-review/expirations/${symbol}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching expiration dates:', error);
+      throw error;
+    }
+  },
+
+  async analyzeOptionsStrategy(params: {
+    symbol: string;
+    expiration_date: string;
+    strategy_type: string;
+    max_position_size: number;
+    shares_owned?: number;
+    account_size?: number;
+  }): Promise<{ success: boolean; symbol: string; strategy_type: string; analysis: any; recommendations: any[]; risk_analysis: any; interactive_data: any; disclaimer: string; error_message?: string }> {
+    try {
+      const response = await apiClient.post('/api/v1/options-review/analyze', params, {
+        timeout: 180000 // 3 minutes for AI analysis
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error analyzing options strategy:', error);
+      throw error;
+    }
+  },
+
+  async updateUserPreferences(userId: string, preferences: Partial<UserPreferences>): Promise<{ success: boolean; data: UserPreferences; message: string }> {
+    try {
+      const response = await apiClient.put(`/api/v1/preferences/${userId}`, preferences);
+      return response.data;
+    } catch (error) {
+      console.error('Error updating user preferences:', error);
+      throw error;
+    }
+  },
+
+  async getRiskProfiles(): Promise<{ success: boolean; data: Record<string, RiskProfileInfo>; message: string }> {
+    try {
+      const response = await apiClient.get('/api/v1/risk-profiles');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching risk profiles:', error);
+      throw error;
+    }
+  },
+
+  async updateSharesOwned(userId: string, sharesData: Record<string, number>): Promise<{ success: boolean; data: any; message: string }> {
+    try {
+      const response = await apiClient.post(`/api/v1/preferences/${userId}/shares`, sharesData);
+      return response.data;
+    } catch (error) {
+      console.error('Error updating shares owned:', error);
+      throw error;
+    }
+  },
+
+  async getCoveredCallOpportunities(userId: string): Promise<{ success: boolean; data: any; message: string }> {
+    try {
+      const response = await apiClient.get(`/api/v1/preferences/${userId}/covered-calls`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching covered call opportunities:', error);
+      throw error;
+    }
+  },
+
+  async getDefaultPreferences(): Promise<{ success: boolean; data: Partial<UserPreferences>; message: string }> {
+    try {
+      const response = await apiClient.get('/api/v1/preferences/defaults');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching default preferences:', error);
       throw error;
     }
   }

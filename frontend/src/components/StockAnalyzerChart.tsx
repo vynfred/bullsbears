@@ -85,7 +85,7 @@ const StockAnalyzerChart: React.FC<StockAnalyzerChartProps> = ({ ticker, classNa
         height: 400,
       });
 
-      const candlestickSeries = chart.addCandlestickSeries({
+      const candlestickSeries = (chart as any).addCandlestickSeries({
         upColor: '#00FF41', // Neon green for gains
         downColor: '#FF073A', // Red for losses
         borderDownColor: '#FF073A',

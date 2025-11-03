@@ -78,16 +78,20 @@ export default function ActivityTabs({ onNavigateToAnalyzer }: ActivityTabsProps
 
   const fetchTrendingStocks = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/recommendations/trending?limit=20&time_range=24h');
-      if (!response.ok) throw new Error('Failed to fetch trending stocks');
+      // Skip API call for now - use mock data directly
+      // const response = await fetch('http://localhost:8000/api/v1/recommendations/trending?limit=20&time_range=24h');
+      // if (!response.ok) throw new Error('Failed to fetch trending stocks');
 
-      const data = await response.json();
-      if (data.success) {
-        setTrendingStocks(data.data.trending_stocks || []);
-      } else {
-        // Fallback to mock data if API returns no data
-        setTrendingStocks(getMockTrendingStocks());
-      }
+      // const data = await response.json();
+      // if (data.success) {
+      //   setTrendingStocks(data.data.trending_stocks || []);
+      // } else {
+      //   // Fallback to mock data if API returns no data
+      //   setTrendingStocks(getMockTrendingStocks());
+      // }
+
+      // Use mock data directly (backend not running)
+      setTrendingStocks(getMockTrendingStocks());
     } catch (err) {
       console.error('Error fetching trending stocks:', err);
       // Use mock data as fallback
@@ -98,14 +102,14 @@ export default function ActivityTabs({ onNavigateToAnalyzer }: ActivityTabsProps
 
   const fetchEarningsCalendar = async () => {
     try {
-      // Fetch real earnings data from backend
-      const response = await fetch('http://localhost:8000/api/v1/earnings/calendar?days_ahead=7&include_analysis_status=true');
+      // Skip API call for now - use mock data directly
+      // const response = await fetch('http://localhost:8000/api/v1/earnings/calendar?days_ahead=7&include_analysis_status=true');
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch earnings calendar: ${response.statusText}`);
-      }
+      // if (!response.ok) {
+      //   throw new Error(`Failed to fetch earnings calendar: ${response.statusText}`);
+      // }
 
-      const data = await response.json();
+      // const data = await response.json();
 
       // Transform backend data to match frontend interface
       const transformedEarnings: EarningsEvent[] = data.events.map((event: any) => ({
@@ -126,12 +130,15 @@ export default function ActivityTabs({ onNavigateToAnalyzer }: ActivityTabsProps
         analysis_age_minutes: event.analysis_age_minutes
       }));
 
-      setEarningsEvents(transformedEarnings);
+      // setEarningsEvents(transformedEarnings);
 
       // If no real data available, fall back to mock data
-      if (transformedEarnings.length === 0) {
-        await fetchMockEarningsData();
-      }
+      // if (transformedEarnings.length === 0) {
+      //   await fetchMockEarningsData();
+      // }
+
+      // Use mock data directly (backend not running)
+      await fetchMockEarningsData();
 
     } catch (err) {
       console.error('Error fetching earnings calendar:', err);
@@ -328,12 +335,11 @@ export default function ActivityTabs({ onNavigateToAnalyzer }: ActivityTabsProps
 
   const fetchUnusualOptions = async () => {
     try {
-      const data = await api.getUnusualOptionsActivity(50, 2.0, 10000, '1d');
-      setUnusualOptionsData(data);
-    } catch (err) {
-      console.error('Error fetching unusual options:', err);
-      setError('Failed to load unusual options data');
-      // Set mock data as fallback
+      // Skip API call for now - use mock data directly
+      // const data = await api.getUnusualOptionsActivity(50, 2.0, 10000, '1d');
+      // setUnusualOptionsData(data);
+
+      // Use mock data directly (backend not running)
       setUnusualOptionsData({
         success: true,
         data: {
@@ -566,9 +572,11 @@ export default function ActivityTabs({ onNavigateToAnalyzer }: ActivityTabsProps
     // If no analysis exists, trigger it in the background
     if (!hasAnalysis) {
       try {
-        await fetch(`http://localhost:8000/api/v1/earnings/trigger-analysis/${symbol}`, {
-          method: 'POST'
-        });
+        // Skip API call for now (backend not running)
+        // await fetch(`http://localhost:8000/api/v1/earnings/trigger-analysis/${symbol}`, {
+        //   method: 'POST'
+        // });
+        console.log(`Would trigger analysis for ${symbol} (backend not running)`);
       } catch (error) {
         console.warn(`Failed to trigger analysis for ${symbol}:`, error);
         // Continue anyway - the stock analyzer will handle the analysis

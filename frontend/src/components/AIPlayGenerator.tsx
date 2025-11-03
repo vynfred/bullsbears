@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Image from 'next/image';
-import { Zap, Settings, DollarSign, Clock, TrendingUp, AlertTriangle, Target, Shield, Timer } from 'lucide-react';
+import { Zap, Settings, DollarSign, Clock, TrendingUp, AlertTriangle, Target, Shield, Timer, RotateCcw } from 'lucide-react';
 import { api, AIOptionPlay, GeneratePlaysParams, RateLimitStatus } from '@/lib/api';
 import styles from '@/styles/components.module.css';
 
@@ -22,11 +22,20 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
   const [rateLimitStatus, setRateLimitStatus] = useState<RateLimitStatus | null>(null);
   const [directionalBias, setDirectionalBias] = useState<DirectionalBias>('AI_DECIDES');
   const [params, setParams] = useState<GeneratePlaysParams>({
+    symbol: '',
     max_plays: 3,
     min_confidence: 70,
     timeframe_days: 7,
     position_size: 1000,
     risk_tolerance: 'MODERATE'
+  });
+
+  // Advanced settings state
+  const [advancedSettings, setAdvancedSettings] = useState({
+    shares_owned: {} as Record<string, number>,
+    iv_threshold: 50,
+    earnings_alert: true,
+    insight_style: 'professional_trader'
   });
 
   // Fetch rate limit status (only when needed, not on mount)
@@ -62,7 +71,12 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
     try {
       const response = await api.generateOptionPlays({
         ...params,
-        directional_bias: directionalBias
+        directional_bias: directionalBias,
+        // Include advanced settings
+        insight_style: advancedSettings.insight_style,
+        iv_threshold: advancedSettings.iv_threshold,
+        earnings_alert: advancedSettings.earnings_alert,
+        shares_owned: advancedSettings.shares_owned
       });
 
       if (response.success) {
@@ -125,6 +139,97 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
         <h3 className="font-mono text-[var(--accent-cyan)] text-sm mb-4 uppercase tracking-wider">
           [TRADING PARAMETERS]
         </h3>
+
+        {/* Symbol Selection Section */}
+        <div className="mb-6 p-4 border border-[var(--border-color)] rounded bg-[var(--bg-secondary)]">
+          <label className="block text-xs font-mono text-[var(--text-secondary)] mb-3 uppercase">
+            <DollarSign className="h-3 w-3 inline mr-1" />
+            Stock/ETF Symbol
+          </label>
+
+          <div className="space-y-4">
+            {/* Manual Input */}
+            <input
+              type="text"
+              value={params.symbol || ''}
+              onChange={(e) => setParams({...params, symbol: e.target.value.toUpperCase()})}
+              placeholder="Enter symbol (e.g., AAPL) or select below"
+              className="clean-input w-full text-sm font-mono uppercase"
+            />
+
+            {/* Popular Stocks */}
+            <div>
+              <p className="text-xs font-mono text-[var(--text-muted)] mb-2">&gt; Popular Options Stocks:</p>
+              <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+                {['AAPL', 'TSLA', 'NVDA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NFLX'].map((symbol) => (
+                  <button
+                    key={symbol}
+                    onClick={() => setParams({...params, symbol})}
+                    className={`px-2 py-1 text-xs font-mono border rounded transition-colors ${
+                      params.symbol === symbol
+                        ? 'bg-[var(--accent-cyan)] border-[var(--accent-cyan)] text-[var(--bg-primary)]'
+                        : 'bg-[var(--bg-tertiary)] border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--text-secondary)]'
+                    }`}
+                  >
+                    {symbol}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Popular ETFs */}
+            <div>
+              <p className="text-xs font-mono text-[var(--text-muted)] mb-2">&gt; Popular Options ETFs:</p>
+              <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+                {['SPY', 'QQQ', 'IWM', 'EEM', 'GLD', 'TLT', 'XLF', 'EWZ'].map((symbol) => (
+                  <button
+                    key={symbol}
+                    onClick={() => setParams({...params, symbol})}
+                    className={`px-2 py-1 text-xs font-mono border rounded transition-colors ${
+                      params.symbol === symbol
+                        ? 'bg-[var(--accent-cyan)] border-[var(--accent-cyan)] text-[var(--bg-primary)]'
+                        : 'bg-[var(--bg-tertiary)] border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--text-secondary)]'
+                    }`}
+                  >
+                    {symbol}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* AI Wildcards */}
+            <div>
+              <p className="text-xs font-mono text-[var(--text-muted)] mb-2">&gt; AI Wildcards:</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  onClick={() => setParams({...params, symbol: 'AI_SURPRISE'})}
+                  className={`px-3 py-2 text-xs font-mono border rounded transition-colors ${
+                    params.symbol === 'AI_SURPRISE'
+                      ? 'bg-[var(--accent-yellow)] border-[var(--accent-yellow)] text-[var(--bg-primary)]'
+                      : 'bg-[var(--bg-tertiary)] border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--text-secondary)]'
+                  }`}
+                >
+                  🎲 AI SURPRISE ME
+                </button>
+                <button
+                  onClick={() => setParams({...params, symbol: 'TRENDING_NOW'})}
+                  className={`px-3 py-2 text-xs font-mono border rounded transition-colors ${
+                    params.symbol === 'TRENDING_NOW'
+                      ? 'bg-[var(--accent-red)] border-[var(--accent-red)] text-[var(--bg-primary)]'
+                      : 'bg-[var(--bg-tertiary)] border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--text-secondary)]'
+                  }`}
+                >
+                  🔥 TRENDING NOW
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-xs font-mono text-[var(--text-muted)] mt-3">
+            &gt; Manual entry, popular picks, or let AI choose trending stocks
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {/* Position Size */}
           <div>
@@ -133,12 +238,13 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
               Position Size
             </label>
             <div className={styles.selectorContainer}>
-              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--text-muted)] font-mono text-sm">$</span>
+              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--text-muted)] font-mono text-sm pointer-events-none z-10">$</span>
               <input
                 type="text"
-                value={formatNumberWithCommas(params.position_size)}
+                value={formatNumberWithCommas(params.position_size || 0)}
                 onChange={handlePositionSizeChange}
-                className={`${styles.selectorInput} pl-6`}
+                className={`${styles.selectorInput}`}
+                style={{ paddingLeft: '24px' }}
                 placeholder="1,000"
               />
             </div>
@@ -181,7 +287,6 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
                 className={`${styles.directionalBiasButton} ${styles.bullish} ${
                   directionalBias === 'BULLISH' ? styles.active : ''
                 }`}
-                title="Bullish - Tells the AI model to favor upward price movements"
               >
                 <Image
                   src="/bull-icon.png"
@@ -195,8 +300,8 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
                   }`}
                 />
                 {/* Tooltip */}
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
-                  Bullish - Tells the AI model to favor upward price movements
+                <div className={styles.tooltip}>
+                  Bullish - Favor upward price movements
                 </div>
               </button>
 
@@ -206,7 +311,6 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
                 className={`${styles.directionalBiasButton} ${styles.ai} ${
                   directionalBias === 'AI_DECIDES' ? styles.active : ''
                 }`}
-                title="AI Decides - Let the AI model analyze and choose the optimal direction"
               >
                 <Image
                   src="/robot-icon.png"
@@ -220,8 +324,8 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
                   }`}
                 />
                 {/* Tooltip */}
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
-                  AI Decides - Let the AI model analyze and choose the optimal direction
+                <div className={styles.tooltip}>
+                  AI Decides - Let AI analyze and choose optimal direction
                 </div>
               </button>
 
@@ -231,7 +335,6 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
                 className={`${styles.directionalBiasButton} ${styles.bearish} ${
                   directionalBias === 'BEARISH' ? styles.active : ''
                 }`}
-                title="Bearish - Tells the AI model to favor downward price movements"
               >
                 <Image
                   src="/bear-icon.png"
@@ -245,8 +348,8 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
                   }`}
                 />
                 {/* Tooltip */}
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
-                  Bearish - Tells the AI model to favor downward price movements
+                <div className={styles.tooltip}>
+                  Bearish - Favor downward price movements
                 </div>
               </button>
             </div>
@@ -279,7 +382,7 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
           <div>
             <label className="block text-xs font-mono text-[var(--text-secondary)] mb-2 uppercase">
               <Shield className="h-3 w-3 inline mr-1" />
-              Risk Level
+              Insight Style
             </label>
             <div className={styles.selectorContainer}>
               <select
@@ -314,6 +417,97 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
             [ADVANCED OPTIONS]
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Insight Style */}
+            <div className="relative group">
+              <label className="block text-xs font-mono text-[var(--text-secondary)] mb-2 uppercase">
+                <Shield className="h-3 w-3 inline mr-1" />
+                Insight Style
+                <span className="ml-1 text-[var(--text-muted)] cursor-help">ⓘ</span>
+              </label>
+              <div className={styles.selectorContainer}>
+                <select
+                  value={advancedSettings.insight_style}
+                  onChange={(e) => setAdvancedSettings({...advancedSettings, insight_style: e.target.value})}
+                  className={styles.selectorSelect}
+                >
+                  <option value="cautious_trader">Cautious Trader (Low Risk: Defined, Income-Focused)</option>
+                  <option value="professional_trader">Professional Trader (Medium Risk: Balanced, Structured)</option>
+                  <option value="degenerate_gambler">Degenerate Gambler (High Risk: Aggressive, High-Reward)</option>
+                </select>
+              </div>
+
+              {/* Tooltip */}
+              <div className="absolute left-0 top-full mt-2 w-96 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg p-3 text-xs font-mono opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg">
+                <div className="space-y-3">
+                  <div className="text-[var(--accent-cyan)] font-bold text-center border-b border-[var(--border-color)] pb-2">Insight Style Strategies</div>
+
+                  <div>
+                    <div className="text-[var(--accent-cyan)] font-bold">Cautious Trader (Low Risk):</div>
+                    <div className="text-[var(--text-secondary)] ml-2 mt-1">
+                      • <strong>Bullish:</strong> Bull Put Spread (credit; delta -0.2 to -0.4)<br/>
+                      • <strong>Bearish:</strong> Bear Call Spread (credit; delta 0.2 to 0.4)<br/>
+                      • <strong>Neutral:</strong> Short Strangle (credit; wings ±20%)
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[var(--accent-yellow)] font-bold">Professional Trader (Medium Risk):</div>
+                    <div className="text-[var(--text-secondary)] ml-2 mt-1">
+                      • <strong>Bullish:</strong> Bull Call Spread (debit; delta 0.4-0.6)<br/>
+                      • <strong>Bearish:</strong> Bear Put Spread (debit; delta -0.4 to -0.6)<br/>
+                      • <strong>Neutral:</strong> Iron Condor (credit; breakeven ±10%)
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[var(--accent-red)] font-bold">Degenerate Gambler (High Risk):</div>
+                    <div className="text-[var(--text-secondary)] ml-2 mt-1">
+                      • <strong>Bullish:</strong> Naked Call (long OTM; delta &gt;0.7)<br/>
+                      • <strong>Bearish:</strong> Naked Put (long OTM; delta &lt; -0.7)<br/>
+                      • <strong>Neutral:</strong> Long Straddle (debit; vega &gt;0.5 volatility bet)
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* IV Threshold */}
+            <div className="relative group">
+              <label className="block text-xs font-mono text-[var(--text-secondary)] mb-2 uppercase">
+                <TrendingUp className="h-3 w-3 inline mr-1" />
+                IV Threshold: {advancedSettings.iv_threshold}%
+                <span className="ml-1 text-[var(--text-muted)] cursor-help">ⓘ</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="range"
+                  min="20"
+                  max="80"
+                  value={advancedSettings.iv_threshold}
+                  onChange={(e) => setAdvancedSettings({...advancedSettings, iv_threshold: parseInt(e.target.value)})}
+                  className="w-full h-2 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer slider"
+                />
+                <div className="flex justify-between text-xs font-mono text-[var(--text-muted)] mt-1">
+                  <span>20%</span>
+                  <span>50%</span>
+                  <span>80%</span>
+                </div>
+              </div>
+
+              {/* IV Tooltip */}
+              <div className="absolute left-0 top-full mt-2 w-72 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg p-3 text-xs font-mono opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg">
+                <div className="space-y-1">
+                  <div className="text-[var(--accent-cyan)] font-bold">Implied Volatility Filter</div>
+                  <div className="text-[var(--text-secondary)]">Maximum IV% to consider for trades.</div>
+                  <div className="text-[var(--text-muted)]">
+                    • Low (20-40%): Conservative, stable stocks<br/>
+                    • Medium (40-60%): Balanced risk/reward<br/>
+                    • High (60-80%): Volatile, high-premium options
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Max Plays */}
             <div>
               <label className="block text-xs font-mono text-[var(--text-secondary)] mb-2 uppercase">
@@ -363,6 +557,160 @@ export default function AIPlayGenerator({ onPlaysGenerated, isLoading, error, on
                 ) : (
                   <p className="text-[var(--text-muted)]">LOADING STATUS...</p>
                 )}
+              </div>
+            </div>
+
+            {/* Earnings Alert Toggle */}
+            <div className="relative group">
+              <label className="block text-xs font-mono text-[var(--text-secondary)] mb-2 uppercase">
+                <AlertTriangle className="h-3 w-3 inline mr-1" />
+                Earnings Alert
+                <span className="ml-1 text-[var(--text-muted)] cursor-help">ⓘ</span>
+              </label>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => setAdvancedSettings({...advancedSettings, earnings_alert: !advancedSettings.earnings_alert})}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    advancedSettings.earnings_alert
+                      ? 'bg-[var(--accent-cyan)]'
+                      : 'bg-[var(--bg-tertiary)]'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      advancedSettings.earnings_alert ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+                <span className="text-xs font-mono text-[var(--text-secondary)]">
+                  {advancedSettings.earnings_alert ? 'AVOID EARNINGS' : 'IGNORE EARNINGS'}
+                </span>
+              </div>
+              <p className="text-xs font-mono text-[var(--text-muted)] mt-1">
+                &gt; {advancedSettings.earnings_alert ? 'Reduce position size near earnings' : 'Trade normally near earnings'}
+              </p>
+
+              {/* Earnings Tooltip */}
+              <div className="absolute left-0 top-full mt-2 w-64 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg p-3 text-xs font-mono opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg">
+                <div className="space-y-1">
+                  <div className="text-[var(--accent-yellow)] font-bold">Earnings Proximity Alert</div>
+                  <div className="text-[var(--text-secondary)]">Control trading behavior near earnings dates.</div>
+                  <div className="text-[var(--text-muted)]">
+                    • ON: Avoid/reduce positions 1-2 weeks before earnings<br/>
+                    • OFF: Trade normally regardless of earnings timing
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Reset to Defaults Button */}
+            <div className="col-span-2 flex justify-end">
+              <button
+                onClick={() => {
+                  setAdvancedSettings({
+                    insight_style: 'professional_trader',
+                    iv_threshold: 50,
+                    earnings_alert: true,
+                    shares_owned: {}
+                  });
+                }}
+                className="neon-button-secondary px-4 py-2 text-xs font-mono flex items-center gap-2"
+              >
+                <RotateCcw className="h-3 w-3" />
+                RESET TO DEFAULTS
+              </button>
+            </div>
+
+            {/* Shares Owned */}
+            <div className="col-span-2">
+              <label className="block text-xs font-mono text-[var(--text-secondary)] mb-2 uppercase">
+                <DollarSign className="h-3 w-3 inline mr-1" />
+                Shares Owned (for Covered Calls)
+              </label>
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="SYMBOL"
+                    className="clean-input flex-1 text-xs font-mono uppercase"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        const target = e.target as HTMLInputElement;
+                        const symbol = target.value.toUpperCase();
+                        const sharesInput = target.parentElement?.querySelector('input[placeholder="SHARES"]') as HTMLInputElement;
+                        const shares = parseInt(sharesInput?.value || '0');
+
+                        if (symbol && shares > 0) {
+                          setAdvancedSettings({
+                            ...advancedSettings,
+                            shares_owned: {
+                              ...advancedSettings.shares_owned,
+                              [symbol]: shares
+                            }
+                          });
+                          target.value = '';
+                          if (sharesInput) sharesInput.value = '';
+                        }
+                      }
+                    }}
+                  />
+                  <input
+                    type="number"
+                    placeholder="SHARES"
+                    min="0"
+                    step="100"
+                    className="clean-input w-24 text-xs font-mono"
+                  />
+                  <button
+                    onClick={(e) => {
+                      const container = e.currentTarget.parentElement;
+                      const symbolInput = container?.querySelector('input[placeholder="SYMBOL"]') as HTMLInputElement;
+                      const sharesInput = container?.querySelector('input[placeholder="SHARES"]') as HTMLInputElement;
+                      const symbol = symbolInput?.value.toUpperCase();
+                      const shares = parseInt(sharesInput?.value || '0');
+
+                      if (symbol && shares > 0) {
+                        setAdvancedSettings({
+                          ...advancedSettings,
+                          shares_owned: {
+                            ...advancedSettings.shares_owned,
+                            [symbol]: shares
+                          }
+                        });
+                        if (symbolInput) symbolInput.value = '';
+                        if (sharesInput) sharesInput.value = '';
+                      }
+                    }}
+                    className="neon-button-secondary px-3 py-1 text-xs font-mono"
+                  >
+                    ADD
+                  </button>
+                </div>
+
+                {/* Display current shares */}
+                {Object.keys(advancedSettings.shares_owned).length > 0 && (
+                  <div className="space-y-1">
+                    {Object.entries(advancedSettings.shares_owned).map(([symbol, shares]) => (
+                      <div key={symbol} className="flex items-center justify-between bg-[var(--bg-tertiary)] px-2 py-1 rounded text-xs font-mono">
+                        <span className="text-[var(--text-primary)]">{symbol}: {shares} shares</span>
+                        <button
+                          onClick={() => {
+                            const newShares = {...advancedSettings.shares_owned};
+                            delete newShares[symbol];
+                            setAdvancedSettings({...advancedSettings, shares_owned: newShares});
+                          }}
+                          className="text-[var(--accent-red)] hover:text-[var(--accent-red)] ml-2"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-xs font-mono text-[var(--text-muted)]">
+                  &gt; Enable covered call strategies (requires 100+ shares)
+                </p>
               </div>
             </div>
           </div>

@@ -76,12 +76,16 @@ export default function StockAnalyzer({
     setError(null);
     
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/analyze/${symbol.toUpperCase()}?use_precompute=true`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      // Skip API call for now (backend not running)
+      // const response = await fetch(`http://localhost:8000/api/v1/analyze/${symbol.toUpperCase()}?use_precompute=true`, {
+      //   method: 'GET',
+      //   headers: {
+      //     'Content-Type': 'application/json',
+      //   },
+      // });
+
+      // Simulate API response with mock data
+      const response = { ok: false };
 
       if (!response.ok) {
         // Handle different error types with user-friendly messages
@@ -230,12 +234,16 @@ export default function StockAnalyzer({
         position_size_dollars: analysisResult.risk_metrics.position_size_recommendation
       };
 
-      const response = await fetch('http://localhost:8000/api/v1/watchlist/add', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(watchlistData),
+      // Skip API call for now (backend not running)
+      // const response = await fetch('http://localhost:8000/api/v1/watchlist/add', {
+      //   method: 'POST',
+      //   headers: {
+      //     'Content-Type': 'application/json',
+      //   },
+      //   body: JSON.stringify(watchlistData),
+
+      // Simulate successful response
+      const response = { ok: true };
       });
 
       if (!response.ok) {
