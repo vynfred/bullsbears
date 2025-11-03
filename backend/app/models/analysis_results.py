@@ -1,11 +1,28 @@
 """
 Analysis results and confidence scoring models.
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, JSON, Text, Index, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, JSON, Text, Index, ForeignKey, Enum
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+import enum
 
 from ..core.database import Base
+
+
+class AlertType(enum.Enum):
+    """Alert types for moon/rug pattern recognition"""
+    MOON = "MOON"  # +20% jump potential
+    RUG = "RUG"    # -20% drop potential
+    GENERAL = "GENERAL"  # General stock analysis
+
+
+class AlertOutcome(enum.Enum):
+    """Outcome tracking for alert validation"""
+    PENDING = "PENDING"      # Alert issued, waiting for outcome
+    SUCCESS = "SUCCESS"      # Predicted move occurred
+    FAILURE = "FAILURE"      # Predicted move did not occur
+    PARTIAL = "PARTIAL"      # Move occurred but less than threshold
+    EXPIRED = "EXPIRED"      # Alert expired without clear outcome
 
 
 class AnalysisResult(Base):
@@ -21,6 +38,20 @@ class AnalysisResult(Base):
     analysis_type = Column(String(20), nullable=False)  # 'stock', 'option_call', 'option_put'
     timeframe = Column(String(10), default="1D")  # Analysis timeframe
     timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
+
+    # Moon/Rug Alert Fields (Phase 2 Extension)
+    alert_type = Column(Enum(AlertType), default=AlertType.GENERAL, nullable=False, index=True)
+    features_json = Column(JSON)  # Pre-signal features for pattern recognition
+    pattern_confidence = Column(Float)  # Pattern-specific confidence (0-100)
+    target_timeframe_days = Column(Integer, default=3)  # Expected days to move (1-3)
+    move_threshold_percent = Column(Float)  # Expected move percentage (+20% for moon, -20% for rug)
+
+    # Alert Outcome Tracking (for self-training loop)
+    alert_outcome = Column(Enum(AlertOutcome), default=AlertOutcome.PENDING, index=True)
+    actual_move_percent = Column(Float)  # Actual move that occurred
+    days_to_move = Column(Integer)  # Actual days it took for move to occur
+    outcome_timestamp = Column(DateTime(timezone=True))  # When outcome was determined
+    outcome_notes = Column(Text)  # Additional notes about the outcome
     
     # Overall recommendation
     recommendation = Column(String(20), nullable=False)  # STRONG_BUY, MODERATE_BUY, WEAK_BUY, HOLD, WEAK_SELL, MODERATE_SELL, STRONG_SELL
@@ -112,6 +143,14 @@ class AnalysisResult(Base):
         # Composite indexes for time-series ML analysis
         Index('idx_symbol_created_consensus', 'symbol', 'created_at', 'consensus_score'),
         Index('idx_agreement_confidence_time', 'agreement_level', 'confidence_score', 'created_at'),
+        # Moon/Rug Alert Indexes (Phase 2 Extension)
+        Index('idx_alert_type_timestamp', 'alert_type', 'timestamp'),
+        Index('idx_alert_outcome_timestamp', 'alert_outcome', 'outcome_timestamp'),
+        Index('idx_symbol_alert_type', 'symbol', 'alert_type'),
+        Index('idx_pattern_confidence', 'pattern_confidence'),
+        # Composite indexes for backtesting and self-training
+        Index('idx_alert_outcome_confidence', 'alert_type', 'alert_outcome', 'pattern_confidence'),
+        Index('idx_symbol_outcome_time', 'symbol', 'alert_outcome', 'outcome_timestamp'),
     )
     
     def __repr__(self):

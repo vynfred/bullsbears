@@ -180,6 +180,15 @@ app.include_router(preferences.router, prefix="/api/v1", tags=["preferences"])
 from .api.v1 import performance
 app.include_router(performance.router, prefix="/api/v1", tags=["performance"])
 
+# Import and include options review router (new AI Options Review system)
+from .api.v1 import options_review
+app.include_router(options_review.router, prefix="/api/v1", tags=["options-review"])
+
+# Import and include moon/rug alert routers (Phase 2 - Pattern Recognition)
+from .api.v1 import moon_alerts, rug_alerts
+app.include_router(moon_alerts.router, prefix="/api/v1", tags=["moon-alerts"])
+app.include_router(rug_alerts.router, prefix="/api/v1", tags=["rug-alerts"])
+
 
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):

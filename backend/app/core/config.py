@@ -114,6 +114,9 @@ class Settings(BaseSettings):
     # Rate Limiting for Real-time Fallbacks
     realtime_requests_per_day: int = 5  # Free tier limit for real-time requests
     realtime_api_calls_per_request: int = 2  # Max API calls per real-time request
+
+    # ML Model Storage (Phase 2)
+    model_dir: str = Field(default="models", env="MODEL_DIR")  # Directory for storing ML models
     
     # Market Hours (Eastern Time)
     market_open_hour: int = 9
@@ -151,6 +154,16 @@ class Settings(BaseSettings):
         if self.allowed_headers == "*":
             return ["*"]
         return [header.strip() for header in self.allowed_headers.split(",")]
+
+    @property
+    def MODEL_DIR(self) -> str:
+        """Get absolute path to model directory."""
+        import os
+        if os.path.isabs(self.model_dir):
+            return self.model_dir
+        # Relative to project root
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        return os.path.join(project_root, self.model_dir)
     
     class Config:
         env_file = ".env"

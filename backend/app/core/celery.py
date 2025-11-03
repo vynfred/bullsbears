@@ -12,7 +12,9 @@ celery_app = Celery(
     backend=settings.celery_result_backend,
     include=[
         "app.tasks.precompute",
-        "app.tasks.performance_updater"
+        "app.tasks.performance_updater",
+        "app.tasks.daily_scan",
+        "app.tasks.weekly_retrain"
     ]
 )
 
@@ -22,6 +24,8 @@ celery_app.conf.update(
     task_routes={
         "app.tasks.precompute.*": {"queue": "precompute"},
         "app.tasks.performance_updater.*": {"queue": "performance"},
+        "app.tasks.daily_scan.*": {"queue": "scanning"},
+        "app.tasks.weekly_retrain.*": {"queue": "ml_training"},
     },
     
     # Task serialization
@@ -72,6 +76,27 @@ celery_app.conf.update(
             "task": "app.tasks.precompute.cleanup_expired_cache",
             "schedule": 3600.0,  # Every hour
             "options": {"queue": "precompute"}
+        },
+
+        # Moon/Rug Daily Scanning (Phase 2)
+        "daily-moon-rug-scan": {
+            "task": "app.tasks.daily_scan.combined_daily_scan",
+            "schedule": "30 13 * * 1-5",  # 9:30 AM ET, Monday-Friday (13:30 UTC)
+            "options": {"queue": "scanning"}
+        },
+
+        # Alert outcome updates
+        "update-alert-outcomes": {
+            "task": "app.tasks.weekly_retrain.update_alert_outcomes",
+            "schedule": "0 20 * * *",  # 8:00 PM UTC daily
+            "options": {"queue": "ml_training"}
+        },
+
+        # Weekly model retraining
+        "weekly-model-retrain": {
+            "task": "app.tasks.weekly_retrain.weekly_retrain_models",
+            "schedule": "0 6 * * 0",  # 6:00 AM UTC on Sundays
+            "options": {"queue": "ml_training"}
         }
     },
     
