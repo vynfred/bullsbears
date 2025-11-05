@@ -1,12 +1,20 @@
 """
 Watchlist and performance tracking models.
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, JSON, Text, Index, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, JSON, Text, Index, ForeignKey, Enum
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from datetime import datetime
+import enum
 
 from ..core.database import Base
+
+
+class WatchlistEventType(enum.Enum):
+    """Types of watchlist monitoring events."""
+    INSIDER_ACTIVITY = "insider_activity"      # Fresh insider buying/selling (>$500k or 3+ filers in 24h)
+    INSTITUTIONAL_CHANGE = "institutional_change"  # Major 13F change (top-10 holder ±10% QoQ)
+    MACRO_CATALYST = "macro_catalyst"          # Macro catalyst (CPI, FOMC, Jobs, Earnings date confirmed)
 
 
 class WatchlistEntry(Base):
@@ -195,3 +203,77 @@ class PerformanceSummary(Base):
     
     def __repr__(self):
         return f"<PerformanceSummary(period='{self.period_type}', win_rate={self.win_rate}%, total_trades={self.total_trades})>"
+
+
+class WatchlistEvent(Base):
+    """
+    Track monitoring events for stocks on user's watchlist.
+
+    Only monitors stocks that:
+    - Hit the AI picks (bullish/bearish)
+    - Are on the user's watchlist
+    - Are within 7 rolling days after the pick
+    """
+
+    __tablename__ = "watchlist_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Core identifiers
+    watchlist_entry_id = Column(Integer, ForeignKey("watchlist_entries.id"), nullable=False, index=True)
+    symbol = Column(String(10), nullable=False, index=True)
+    user_id = Column(String(50), nullable=False, index=True)  # Anonymous user ID
+
+    # Event details
+    event_type = Column(Enum(WatchlistEventType, values_callable=lambda obj: [e.value for e in obj]), nullable=False, index=True)
+    day_offset = Column(Integer, nullable=False)  # Days since the pick (0-6 for 7-day monitoring)
+
+    # Impact scoring
+    score_delta = Column(Float, nullable=False)  # Change in bullish indication score (%)
+    baseline_score = Column(Float, nullable=False)  # Original score at pick timestamp
+    current_score = Column(Float, nullable=False)  # Current score after event
+
+    # Event metadata
+    event_title = Column(String(200), nullable=False)  # "3 execs just bought $4.2M"
+    event_description = Column(Text)  # Detailed description
+    event_data = Column(JSON)  # Raw event data for debugging
+
+    # Notification tracking
+    notification_sent = Column(Boolean, default=False)
+    notification_sent_at = Column(DateTime(timezone=True))
+    push_notification_id = Column(String(100))  # For tracking delivery
+
+    # Pick reference data
+    pick_date = Column(DateTime(timezone=True), nullable=False, index=True)  # When the AI pick was made
+    pick_type = Column(String(20), nullable=False)  # 'BULLISH' or 'BEARISH'
+    pick_confidence = Column(Float, nullable=False)  # Original AI confidence
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    watchlist_entry = relationship("WatchlistEntry", backref="monitoring_events")
+
+    # Indexes for performance
+    __table_args__ = (
+        Index('idx_symbol_user_day', 'symbol', 'user_id', 'day_offset'),
+        Index('idx_pick_date_type', 'pick_date', 'pick_type'),
+        Index('idx_event_type_score', 'event_type', 'score_delta'),
+        Index('idx_notification_status', 'notification_sent', 'created_at'),
+        Index('idx_monitoring_window', 'symbol', 'pick_date', 'day_offset'),  # For efficient monitoring queries
+    )
+
+    def __repr__(self):
+        return f"<WatchlistEvent(symbol='{self.symbol}', type='{self.event_type.value}', delta={self.score_delta}%)>"
+
+    @property
+    def is_monitoring_active(self) -> bool:
+        """Check if this stock is still in the 7-day monitoring window."""
+        return self.day_offset < 7
+
+    @property
+    def notification_message(self) -> str:
+        """Generate the one-line push notification message."""
+        direction = "↑" if self.score_delta > 0 else "↓"
+        return f"{self.symbol}: {self.event_title} — Bullish Indication score {direction} {abs(self.score_delta):.0f}%"

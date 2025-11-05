@@ -1,6 +1,6 @@
 """
-Moon Analyzer - Identifies patterns for potential +20% stock jumps
-Reuses existing stock analyzer logic with moon-specific scoring weights
+Bearish Analyzer - Identifies patterns for potential -20% stock drops
+Reuses existing stock analyzer logic with bearish-specific scoring weights
 """
 
 import asyncio
@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from ..analyzers.technical import TechnicalAnalyzer
 from ..analyzers.confidence import ConfidenceScorer
 from ..services.ai_consensus import AIConsensusEngine
-from ..services.model_loader import predict_moon_ml, get_model_loader
+from ..services.model_loader import predict_bearish_ml, get_model_loader
 from ..core.redis_client import get_redis_client
 from ..core.config import settings
 
@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class MoonAlert:
-    """Alert for potential moon (>20% jump) opportunity"""
+class BearishAlert:
+    """Alert for potential bearish (>20% drop) warning"""
     symbol: str
     company_name: str
     confidence: float
@@ -42,10 +42,10 @@ class MoonAlert:
     prediction_method: str  # "ML" or "rule-based"
 
 
-class MoonAnalyzer:
+class BearishAnalyzer:
     """
-    Analyzer for identifying "When Moon?" patterns.
-    Focuses on oversold technicals, positive sentiment, and volume surges.
+    Analyzer for identifying "When Bearish?" patterns.
+    Focuses on overbought technicals, negative sentiment, and bearish signals.
     """
     
     def __init__(self):
@@ -56,7 +56,7 @@ class MoonAnalyzer:
         self.use_ml_model = True  # Primary method: ML model
         self.ml_confidence_threshold = 0.75  # Conservative threshold for 2024 data
         
-        # Moon-specific scoring weights (total = 100%)
+        # Rug-specific scoring weights (total = 100%)
         self.weights = {
             "technical": 40.0,    # Technical indicators (RSI, MACD, volume)
             "sentiment": 30.0,    # News and social sentiment
@@ -64,11 +64,11 @@ class MoonAnalyzer:
             "social": 10.0        # CEO activity, social mentions
         }
         
-        # Moon pattern thresholds
+        # Rug pattern thresholds
         self.confidence_threshold = 70.0  # Only alert if >70% confidence
-        self.rsi_oversold_threshold = 30.0
+        self.rsi_overbought_threshold = 70.0
         self.volume_surge_threshold = 1.5  # 1.5x average volume
-        self.positive_sentiment_threshold = 0.3
+        self.negative_sentiment_threshold = -0.3
         
     async def __aenter__(self):
         """Async context manager entry"""
@@ -80,16 +80,16 @@ class MoonAnalyzer:
         if self.redis_client:
             await self.redis_client.close()
 
-    async def analyze_moon_potential(self, symbol: str, company_name: str = None) -> Optional[MoonAlert]:
+    async def analyze_bearish_potential(self, symbol: str, company_name: str = None) -> Optional[BearishAlert]:
         """
-        Analyze a symbol for moon potential using trained ML model with rule-based fallback.
+        Analyze a symbol for rug potential using trained ML model with rule-based fallback.
 
         Args:
             symbol: Stock symbol to analyze
             company_name: Company name (optional)
 
         Returns:
-            MoonAlert if confidence > threshold, None otherwise
+            BearishAlert if confidence > threshold, None otherwise
         """
         try:
             # Use existing confidence scorer for comprehensive analysis
@@ -119,7 +119,7 @@ class MoonAnalyzer:
                             technical_data, news_data
                         )
                     else:
-                        logger.info(f"🌙 {symbol}: ML confidence {ml_confidence:.1%} below threshold {self.ml_confidence_threshold:.0%}")
+                        logger.info(f"💥 {symbol}: ML confidence {ml_confidence:.1%} below threshold {self.ml_confidence_threshold:.0%}")
 
             # Fallback to rule-based analysis
             logger.info(f"🔄 {symbol}: Using rule-based fallback analysis")
@@ -128,12 +128,12 @@ class MoonAnalyzer:
             return None
                 
         except Exception as e:
-            logger.error(f"Error analyzing moon potential for {symbol}: {e}")
+            logger.error(f"Error analyzing rug potential for {symbol}: {e}")
             return None
 
     async def _predict_with_ml_model(self, technical_data: Dict, news_data: Dict, social_data: Dict) -> Optional[Tuple[float, Dict, Dict]]:
         """
-        Use trained ML model to predict moon potential.
+        Use trained ML model to predict rug potential.
 
         Returns:
             Tuple of (confidence, ml_details, features) or None if prediction fails
@@ -147,14 +147,14 @@ class MoonAnalyzer:
                 return None
 
             # Get ML prediction
-            ml_confidence, ml_details = await predict_moon_ml(features)
+            ml_confidence, ml_details = await predict_bearish_ml(features)
 
-            logger.info(f"🤖 ML prediction: {ml_confidence:.1%} confidence")
+            logger.info(f"🤖 ML rug prediction: {ml_confidence:.1%} confidence")
 
             return ml_confidence, ml_details, features
 
         except Exception as e:
-            logger.error(f"ML prediction failed: {e}")
+            logger.error(f"ML rug prediction failed: {e}")
             return None
 
     def _extract_ml_features(self, technical_data: Dict, news_data: Dict, social_data: Dict) -> Optional[Dict[str, float]]:
@@ -266,22 +266,22 @@ class MoonAnalyzer:
             return None
 
     async def _create_ml_alert(self, symbol: str, company_name: str, ml_confidence: float,
-                              ml_details: Dict, features: Dict, technical_data: Dict, news_data: Dict) -> MoonAlert:
-        """Create moon alert based on ML prediction."""
+                              ml_details: Dict, features: Dict, technical_data: Dict, news_data: Dict) -> BearishAlert:
+        """Create rug alert based on ML prediction."""
         try:
             # Generate ML-based reasons
             reasons = self._generate_ml_reasons(ml_details, features)
-            risk_factors = self._identify_moon_risks(technical_data, news_data)
+            risk_factors = self._identify_rug_risks(technical_data, news_data)
 
             # Extract top contributing features
             top_features = ml_details.get('top_contributing_features', [])
 
-            alert = MoonAlert(
+            alert = BearishAlert(
                 symbol=symbol,
                 company_name=company_name or symbol,
                 confidence=ml_confidence * 100,  # Convert to percentage
                 reasons=reasons,
-                technical_score=self._calculate_technical_moon_score(technical_data),
+                technical_score=self._calculate_technical_rug_score(technical_data),
                 sentiment_score=features.get('news_sentiment', 0.0) * 100,
                 social_score=features.get('social_sentiment', 0.0) * 100,
                 earnings_score=0.0,  # Not used in ML model
@@ -295,20 +295,20 @@ class MoonAnalyzer:
                 prediction_method="ML"
             )
 
-            logger.info(f"🌙 ML Moon alert: {symbol} - {ml_confidence:.1%} confidence")
+            logger.info(f"💥 ML Rug alert: {symbol} - {ml_confidence:.1%} confidence")
             return alert
 
         except Exception as e:
-            logger.error(f"Failed to create ML alert: {e}")
+            logger.error(f"Failed to create ML rug alert: {e}")
             return None
 
     def _generate_ml_reasons(self, ml_details: Dict, features: Dict) -> List[str]:
-        """Generate human-readable reasons based on ML prediction."""
+        """Generate human-readable reasons based on ML rug prediction."""
         reasons = []
 
         # Add model confidence
         confidence = ml_details.get('raw_confidence', 0)
-        reasons.append(f"ML model predicts {confidence:.1%} probability of +20% move in 1-3 days")
+        reasons.append(f"ML model predicts {confidence:.1%} probability of -20% drop in 1-3 days")
 
         # Add top contributing features
         top_features = ml_details.get('top_contributing_features', [])
@@ -318,15 +318,15 @@ class MoonAnalyzer:
 
             if importance > 0:
                 if 'rsi' in feature_name.lower():
-                    reasons.append(f"RSI indicates oversold conditions (bullish signal)")
+                    reasons.append(f"RSI indicates overbought conditions (bearish signal)")
                 elif 'volume' in feature_name.lower():
-                    reasons.append(f"Volume patterns suggest accumulation")
+                    reasons.append(f"Volume patterns suggest distribution")
                 elif 'macd' in feature_name.lower():
-                    reasons.append(f"MACD momentum turning positive")
+                    reasons.append(f"MACD momentum turning negative")
                 elif 'bb' in feature_name.lower():
-                    reasons.append(f"Bollinger Band position favorable for breakout")
+                    reasons.append(f"Bollinger Band position suggests breakdown risk")
                 else:
-                    reasons.append(f"Technical indicator {feature_name} shows bullish pattern")
+                    reasons.append(f"Technical indicator {feature_name} shows bearish pattern")
 
         # Add model performance context
         model_accuracy = ml_details.get('model_accuracy', 0)
@@ -336,31 +336,31 @@ class MoonAnalyzer:
         return reasons
 
     async def _analyze_with_rules(self, symbol: str, company_name: str, technical_data: Dict,
-                                 news_data: Dict, social_data: Dict) -> Optional[MoonAlert]:
+                                 news_data: Dict, social_data: Dict) -> Optional[BearishAlert]:
         """Fallback rule-based analysis when ML model is unavailable."""
         try:
             # Calculate rule-based scores
-            moon_scores = await self._calculate_moon_scores(symbol, technical_data, news_data, social_data)
+            rug_scores = await self._calculate_rug_scores(symbol, technical_data, news_data, social_data)
 
-            # Calculate final confidence using moon weights
-            final_confidence = self._calculate_moon_confidence(moon_scores)
+            # Calculate final confidence using rug weights
+            final_confidence = self._calculate_rug_confidence(rug_scores)
 
             # Only create alert if confidence exceeds threshold (lower threshold for fallback)
             fallback_threshold = 70.0  # Lower than ML threshold
 
             if final_confidence >= fallback_threshold:
-                reasons = self._generate_moon_reasons(moon_scores, technical_data)
-                risk_factors = self._identify_moon_risks(technical_data, news_data)
+                reasons = self._generate_rug_reasons(rug_scores, technical_data)
+                risk_factors = self._identify_rug_risks(technical_data, news_data)
 
-                alert = MoonAlert(
+                alert = BearishAlert(
                     symbol=symbol,
                     company_name=company_name or symbol,
                     confidence=final_confidence,
                     reasons=reasons,
-                    technical_score=moon_scores['technical'],
-                    sentiment_score=moon_scores['sentiment'],
-                    social_score=moon_scores['social'],
-                    earnings_score=moon_scores['earnings'],
+                    technical_score=rug_scores['technical'],
+                    sentiment_score=rug_scores['sentiment'],
+                    social_score=rug_scores['social'],
+                    earnings_score=rug_scores['earnings'],
                     timestamp=datetime.now(),
                     target_timeframe="1-3 days",
                     risk_factors=risk_factors,
@@ -371,157 +371,161 @@ class MoonAnalyzer:
                     prediction_method="rule-based"
                 )
 
-                logger.info(f"🔄 Rule-based Moon alert: {symbol} - {final_confidence:.1f}% confidence")
+                logger.info(f"🔄 Rule-based Rug alert: {symbol} - {final_confidence:.1f}% confidence")
                 return alert
             else:
-                logger.debug(f"Rule-based confidence for {symbol} below threshold: {final_confidence:.1f}%")
+                logger.debug(f"Rule-based rug confidence for {symbol} below threshold: {final_confidence:.1f}%")
                 return None
 
         except Exception as e:
-            logger.error(f"Rule-based analysis failed for {symbol}: {e}")
+            logger.error(f"Rule-based rug analysis failed for {symbol}: {e}")
             return None
 
-    async def _calculate_moon_scores(self, symbol: str, technical_data: Dict, 
-                                   news_data: Dict, social_data: Dict) -> Dict[str, float]:
-        """Calculate moon-specific component scores"""
+    async def _calculate_rug_scores(self, symbol: str, technical_data: Dict, 
+                                  news_data: Dict, social_data: Dict) -> Dict[str, float]:
+        """Calculate rug-specific component scores"""
         scores = {}
         
-        # Technical score (focus on oversold + volume surge)
-        scores['technical'] = self._calculate_technical_moon_score(technical_data)
+        # Technical score (focus on overbought + bearish signals)
+        scores['technical'] = self._calculate_technical_rug_score(technical_data)
         
-        # Sentiment score (positive news sentiment)
-        scores['sentiment'] = self._calculate_sentiment_moon_score(news_data)
+        # Sentiment score (negative news sentiment)
+        scores['sentiment'] = self._calculate_sentiment_rug_score(news_data)
         
-        # Social score (bullish social sentiment, CEO activity)
-        scores['social'] = self._calculate_social_moon_score(social_data)
+        # Social score (bearish social sentiment, quiet CEO activity)
+        scores['social'] = self._calculate_social_rug_score(social_data)
         
-        # Earnings score (upcoming positive catalysts)
-        scores['earnings'] = await self._calculate_earnings_moon_score(symbol)
+        # Earnings score (negative catalysts, earnings misses)
+        scores['earnings'] = await self._calculate_earnings_rug_score(symbol)
         
         return scores
 
-    def _calculate_technical_moon_score(self, technical_data: Dict) -> float:
-        """Calculate technical score for moon potential"""
+    def _calculate_technical_rug_score(self, technical_data: Dict) -> float:
+        """Calculate technical score for rug potential"""
         score = 50.0  # Start neutral
         
         try:
-            # RSI oversold condition (bullish for moon)
+            # RSI overbought condition (bearish for rug)
             rsi = technical_data.get('rsi', {}).get('value', 50)
-            if rsi < 30:
-                score += 20  # Strong oversold signal
-            elif rsi < 40:
-                score += 10  # Moderate oversold
-            elif rsi > 70:
-                score -= 15  # Overbought is bearish for moon
+            if rsi > 70:
+                score += 20  # Strong overbought signal
+            elif rsi > 60:
+                score += 10  # Moderate overbought
+            elif rsi < 30:
+                score -= 15  # Oversold is bullish, reduces rug potential
                 
-            # MACD bullish signal
+            # MACD bearish signal
             macd_signal = technical_data.get('macd', {}).get('signal', 'neutral')
-            if macd_signal == 'bullish':
+            if macd_signal == 'bearish':
                 score += 15
-            elif macd_signal == 'bearish':
+            elif macd_signal == 'bullish':
                 score -= 10
                 
-            # Volume surge (key for moon patterns)
+            # Volume surge (can indicate selling pressure)
             volume_data = technical_data.get('volume', {})
             volume_ratio = volume_data.get('volume_ratio', 1.0)
             if volume_ratio > 2.0:
-                score += 20  # Strong volume surge
+                score += 15  # High volume could be selling
             elif volume_ratio > 1.5:
-                score += 10  # Moderate volume increase
+                score += 8   # Moderate volume increase
                 
             # Bollinger Bands position
             bb_position = technical_data.get('bollinger_bands', {}).get('position', 'middle')
-            if bb_position == 'below_lower':
-                score += 15  # Oversold condition
-            elif bb_position == 'lower_half':
+            if bb_position == 'above_upper':
+                score += 15  # Overbought condition
+            elif bb_position == 'upper_half':
                 score += 5
                 
             # Moving average trend
             ma_trend = technical_data.get('moving_averages', {}).get('trend', 'neutral')
-            if ma_trend == 'bullish':
+            if ma_trend == 'bearish':
                 score += 10
-            elif ma_trend == 'bearish':
+            elif ma_trend == 'bullish':
                 score -= 5
                 
         except Exception as e:
-            logger.error(f"Error calculating technical moon score: {e}")
+            logger.error(f"Error calculating technical rug score: {e}")
             
         return np.clip(score, 0.0, 100.0)
 
-    def _calculate_sentiment_moon_score(self, news_data: Dict) -> float:
-        """Calculate sentiment score for moon potential"""
+    def _calculate_sentiment_rug_score(self, news_data: Dict) -> float:
+        """Calculate sentiment score for rug potential"""
         score = 50.0  # Start neutral
         
         try:
-            # News sentiment (positive is bullish for moon)
+            # News sentiment (negative is bearish for rug)
             news_score = news_data.get('news_score', 50)
-            if news_score > 70:
-                score += 20  # Very positive news
-            elif news_score > 60:
-                score += 10  # Moderately positive
-            elif news_score < 30:
-                score -= 15  # Negative news
+            if news_score < 30:
+                score += 20  # Very negative news
+            elif news_score < 40:
+                score += 10  # Moderately negative
+            elif news_score > 70:
+                score -= 15  # Positive news reduces rug potential
                 
-            # News volume/activity
+            # News volume/activity (negative news gets more attention)
             news_count = news_data.get('article_count', 0)
-            if news_count > 10:
-                score += 5  # High news activity
+            if news_count > 10 and news_score < 40:
+                score += 5  # High negative news activity
                 
         except Exception as e:
-            logger.error(f"Error calculating sentiment moon score: {e}")
+            logger.error(f"Error calculating sentiment rug score: {e}")
             
         return np.clip(score, 0.0, 100.0)
 
-    def _calculate_social_moon_score(self, social_data: Dict) -> float:
-        """Calculate social score for moon potential"""
+    def _calculate_social_rug_score(self, social_data: Dict) -> float:
+        """Calculate social score for rug potential"""
         score = 50.0  # Start neutral
         
         try:
-            # Social sentiment (positive is bullish for moon)
+            # Social sentiment (negative is bearish for rug)
             social_score = social_data.get('social_score', 50)
-            if social_score > 70:
-                score += 15  # Very positive social sentiment
-            elif social_score > 60:
-                score += 8   # Moderately positive
-            elif social_score < 30:
-                score -= 10  # Negative social sentiment
+            if social_score < 30:
+                score += 15  # Very negative social sentiment
+            elif social_score < 40:
+                score += 8   # Moderately negative
+            elif social_score > 70:
+                score -= 10  # Positive social sentiment reduces rug potential
                 
-            # Social activity level
+            # Social activity level (high activity with negative sentiment)
             mention_count = social_data.get('mention_count', 0)
-            if mention_count > 100:
-                score += 10  # High social activity
-            elif mention_count > 50:
-                score += 5   # Moderate activity
+            if mention_count > 100 and social_score < 40:
+                score += 10  # High negative social activity
+            elif mention_count > 50 and social_score < 40:
+                score += 5   # Moderate negative activity
                 
         except Exception as e:
-            logger.error(f"Error calculating social moon score: {e}")
+            logger.error(f"Error calculating social rug score: {e}")
             
         return np.clip(score, 0.0, 100.0)
 
-    async def _calculate_earnings_moon_score(self, symbol: str) -> float:
-        """Calculate earnings score for moon potential"""
+    async def _calculate_earnings_rug_score(self, symbol: str) -> float:
+        """Calculate earnings score for rug potential"""
         score = 50.0  # Start neutral
         
         try:
             # This would integrate with earnings calendar API
             # For now, simulate earnings impact
             
-            # Check if earnings are upcoming (would boost moon potential)
+            # Check if earnings are upcoming with negative expectations
             # This is a placeholder - real implementation would check Finnhub API
             import random
             has_upcoming_earnings = random.choice([True, False])
+            earnings_sentiment = random.choice(['positive', 'negative', 'neutral'])
             
-            if has_upcoming_earnings:
-                # Positive earnings expectations boost moon potential
+            if has_upcoming_earnings and earnings_sentiment == 'negative':
+                # Negative earnings expectations boost rug potential
                 score += 15
+            elif has_upcoming_earnings and earnings_sentiment == 'positive':
+                # Positive earnings expectations reduce rug potential
+                score -= 10
                 
         except Exception as e:
-            logger.error(f"Error calculating earnings moon score: {e}")
+            logger.error(f"Error calculating earnings rug score: {e}")
             
         return np.clip(score, 0.0, 100.0)
 
-    def _calculate_moon_confidence(self, scores: Dict[str, float]) -> float:
-        """Calculate final moon confidence using weighted scores"""
+    def _calculate_rug_confidence(self, scores: Dict[str, float]) -> float:
+        """Calculate final rug confidence using weighted scores"""
         try:
             weighted_score = (
                 scores['technical'] * (self.weights['technical'] / 100) +
@@ -533,71 +537,71 @@ class MoonAnalyzer:
             return np.clip(weighted_score, 0.0, 100.0)
             
         except Exception as e:
-            logger.error(f"Error calculating moon confidence: {e}")
+            logger.error(f"Error calculating rug confidence: {e}")
             return 50.0
 
-    def _generate_moon_reasons(self, scores: Dict[str, float], technical_data: Dict) -> List[str]:
-        """Generate human-readable reasons for moon alert"""
+    def _generate_rug_reasons(self, scores: Dict[str, float], technical_data: Dict) -> List[str]:
+        """Generate human-readable reasons for rug alert"""
         reasons = []
         
         try:
             # Technical reasons
             if scores['technical'] > 70:
                 rsi = technical_data.get('rsi', {}).get('value', 50)
-                if rsi < 30:
-                    reasons.append(f"Oversold RSI ({rsi:.1f}) suggests potential bounce")
+                if rsi > 70:
+                    reasons.append(f"Overbought RSI ({rsi:.1f}) suggests potential correction")
                     
                 volume_ratio = technical_data.get('volume', {}).get('volume_ratio', 1.0)
                 if volume_ratio > 1.5:
-                    reasons.append(f"Volume surge ({volume_ratio:.1f}x average) indicates interest")
+                    reasons.append(f"Volume surge ({volume_ratio:.1f}x average) may indicate selling pressure")
                     
             # Sentiment reasons
             if scores['sentiment'] > 70:
-                reasons.append("Positive news sentiment supports upward momentum")
+                reasons.append("Negative news sentiment creates downward pressure")
                 
             # Social reasons
             if scores['social'] > 70:
-                reasons.append("Strong bullish social sentiment detected")
+                reasons.append("Bearish social sentiment detected")
                 
             # Earnings reasons
             if scores['earnings'] > 70:
-                reasons.append("Upcoming earnings catalyst may drive price action")
+                reasons.append("Negative earnings expectations may trigger selloff")
                 
             if not reasons:
-                reasons.append("Multiple technical and sentiment factors align for potential move")
+                reasons.append("Multiple technical and sentiment factors align for potential decline")
                 
         except Exception as e:
-            logger.error(f"Error generating moon reasons: {e}")
-            reasons = ["Pattern analysis suggests potential upward movement"]
+            logger.error(f"Error generating rug reasons: {e}")
+            reasons = ["Pattern analysis suggests potential downward movement"]
             
         return reasons
 
-    def _identify_moon_risks(self, technical_data: Dict, news_data: Dict) -> List[str]:
-        """Identify risk factors that could prevent moon"""
+    def _identify_rug_risks(self, technical_data: Dict, news_data: Dict) -> List[str]:
+        """Identify risk factors that could prevent rug"""
         risks = []
         
         try:
             # Technical risks
             rsi = technical_data.get('rsi', {}).get('value', 50)
-            if rsi > 70:
-                risks.append("Overbought RSI may limit upside potential")
+            if rsi < 30:
+                risks.append("Oversold RSI may provide support and limit downside")
                 
             # Market risks
-            risks.append("Market volatility could impact individual stock performance")
+            risks.append("Market support levels could prevent significant decline")
             risks.append("Pattern-based predictions have inherent uncertainty")
             
             # General disclaimer
             risks.append("Past patterns do not guarantee future results")
             
         except Exception as e:
-            logger.error(f"Error identifying moon risks: {e}")
+            logger.error(f"Error identifying rug risks: {e}")
             risks = ["General market and pattern recognition risks apply"]
             
         return risks
 
 
 # Utility function for easy usage
-async def analyze_moon_potential(symbol: str, company_name: str = None) -> Optional[MoonAlert]:
-    """Convenience function to analyze moon potential"""
-    async with MoonAnalyzer() as analyzer:
-        return await analyzer.analyze_moon_potential(symbol, company_name)
+async def analyze_bearish_potential(symbol: str, company_name: str = None) -> Optional[BearishAlert]:
+    """Convenience function to analyze bearish potential"""
+    async with BearishAnalyzer() as analyzer:
+        return await analyzer.analyze_bearish_potential(symbol, company_name)

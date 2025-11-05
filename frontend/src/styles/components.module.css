@@ -50,20 +50,20 @@
   transform: scale(1.1);
 }
 
-/* Modern Card Components */
+/* Modern Card Components - Enhanced Depth */
 .card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
   transition: all var(--transition-normal);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-md); /* Enhanced default shadow for depth */
 }
 
 .card:hover {
   border-color: var(--border-hover);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg); /* Stronger hover shadow */
+  transform: translateY(-4px); /* More pronounced lift */
 }
 
 .cardHeader {
@@ -108,8 +108,8 @@
 .button {
   background: var(--color-primary);
   border: 1px solid var(--color-primary);
-  color: white;
-  font-weight: 500;
+  color: #074173; /* Dark blue text for maximum contrast on mint background */
+  font-weight: 700; /* Bold for better readability */
   padding: var(--spacing-md) var(--spacing-xl);
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -122,13 +122,14 @@
   gap: var(--spacing-sm);
   text-decoration: none;
   line-height: 1;
+  box-shadow: var(--shadow-md); /* Enhanced shadow for buttons */
 }
 
 .button:hover:not(:disabled) {
   background: var(--color-primary-hover);
   border-color: var(--color-primary-hover);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg); /* Enhanced hover shadow */
+  transform: translateY(-2px); /* More pronounced lift */
 }
 
 .button:active:not(:disabled) {
@@ -143,10 +144,10 @@
 }
 
 .buttonSecondary {
-  background: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  font-weight: 500;
+  background: var(--bg-secondary);
+  border: 2px solid var(--color-primary);
+  color: #074173; /* Dark blue text for contrast */
+  font-weight: 600;
   padding: var(--spacing-md) var(--spacing-xl);
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -159,12 +160,15 @@
   gap: var(--spacing-sm);
   text-decoration: none;
   line-height: 1;
+  box-shadow: var(--shadow-sm);
 }
 
 .buttonSecondary:hover:not(:disabled) {
-  background: var(--bg-tertiary);
-  border-color: var(--border-hover);
-  box-shadow: var(--shadow-sm);
+  background: var(--color-primary);
+  color: #074173;
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 
 .buttonSecondary:disabled {
@@ -184,7 +188,7 @@
   min-height: 52px;
 }
 
-/* Input Components */
+/* Input Components - Enhanced with Shadow */
 .input {
   background: var(--bg-secondary);
   border: 1.5px solid var(--border-color);
@@ -194,13 +198,14 @@
   transition: all 0.2s ease;
   font-size: var(--font-size-sm);
   width: 100%;
+  box-shadow: var(--shadow-sm); /* Add subtle depth to inputs */
 }
 
 .input:focus {
   outline: none;
-  border-color: var(--text-primary);
+  border-color: var(--color-primary);
   background: var(--bg-tertiary);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md); /* Enhanced focus shadow */
 }
 
 .input::placeholder {
@@ -221,14 +226,15 @@
   display: block;
 }
 
-/* Table Components */
+/* Table Components - Enhanced with Shadow */
 .table {
   width: 100%;
   border-collapse: collapse;
   background: var(--bg-secondary);
   border: 1.5px solid var(--border-color);
-  border-radius: var(--radius-none);
+  border-radius: var(--radius-lg);
   overflow: hidden;
+  box-shadow: var(--shadow-md); /* Add depth to tables */
 }
 
 .tableHeader {
@@ -403,7 +409,7 @@
   gap: var(--spacing-lg);
 }
 
-/* Uniform Selector Styling */
+/* Uniform Selector Styling - Enhanced with Shadow */
 .selectorContainer {
   border: 1.5px solid var(--border-color);
   border-radius: var(--radius-sm);
@@ -412,6 +418,7 @@
   display: flex;
   align-items: center;
   position: relative;
+  box-shadow: var(--shadow-sm); /* Add depth to selectors */
 }
 
 .selectorInput {
@@ -445,6 +452,7 @@
   height: 48px;
   display: flex;
   overflow: visible;
+  box-shadow: var(--shadow-sm); /* Add depth to directional bias container */
 }
 
 .directionalBiasButton {
@@ -477,8 +485,8 @@
 }
 
 .directionalBiasButton.bullish.active {
-  background: #16a34a;
-  box-shadow: 0 4px 14px 0 rgba(22, 163, 74, 0.3);
+  background: var(--color-gain);
+  box-shadow: 0 4px 14px 0 rgba(119, 228, 200, 0.4);
 }
 
 .directionalBiasButton.ai {
@@ -486,8 +494,8 @@
 }
 
 .directionalBiasButton.ai.active {
-  background: #0ea5e9;
-  box-shadow: 0 4px 14px 0 rgba(14, 165, 233, 0.3);
+  background: var(--color-primary);
+  box-shadow: 0 4px 14px 0 rgba(119, 228, 200, 0.4);
 }
 
 .directionalBiasButton.bearish {
@@ -495,8 +503,8 @@
 }
 
 .directionalBiasButton.bearish.active {
-  background: #dc2626;
-  box-shadow: 0 4px 14px 0 rgba(220, 38, 38, 0.3);
+  background: var(--color-loss);
+  box-shadow: 0 4px 14px 0 rgba(255, 128, 128, 0.4);
 }
 
 /* Tooltip for directional bias buttons */

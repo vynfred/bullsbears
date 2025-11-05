@@ -25,7 +25,7 @@
 - [ ] **Push Notification System**: 8:30 AM alerts with WebSocket integration
 - [ ] **Screening Process Interface**: Anonymous gut check workflow before Pulse
 - [ ] **History Pulse System**: Win/loss tracking with 6-tier classification
-- [ ] **Mobile-First PWA**: Touch-friendly interface with swipe gestures
+- [ ] **Mobile-First PWA**: Touch-friendly interface with swipe gestures (left=BEARISH, right=BULLISH)
 
 #### 2. Backend Automation System ⚠️ CRITICAL BACKEND
 **Goal**: Automated scanning, outcome tracking, and data pipeline
@@ -54,14 +54,14 @@
 ### Sorting Options for Pulse
 - **Overall Confidence**: AI confidence + gut vote boost (default)
 - **AI Confidence**: Pure AI/ML model confidence
-- **Gut Vote**: UP > DOWN > PASS ranking
+- **Gut Vote**: BULLISH > BEARISH > PASS ranking
 - **Actual Performance**: % change since identification
 
 ## 📱 TECHNICAL REQUIREMENTS
 
 ### Mobile-First UX Requirements
 - **PWA-Ready**: Service worker, manifest, offline capability
-- **Touch Optimization**: 44px minimum touch targets, swipe gestures
+- **Touch Optimization**: 44px minimum touch targets, swipe gestures (left=BEARISH, right=BULLISH)
 - **Real-time Updates**: WebSocket connections for live price tracking
 - **Push Notifications**: Browser notifications for 8:30 AM alerts
 

@@ -17,11 +17,11 @@ export function CleanStockCard({ alert, onAnalysisDetails, onTrackProgress }: Cl
   const isPositive = changePercent >= 0;
   
   // Determine border color based on type
-  const borderColor = alert.type === 'moon' ? 'border-l-green-500' : 'border-l-red-500';
+  const borderColor = alert.type === 'bullish' ? 'border-l-green-500' : 'border-l-red-500';
   
   // Calculate days remaining in window
   const windowEnd = new Date(alert.timestamp);
-  windowEnd.setDate(windowEnd.getDate() + (alert.timeWindow || 3));
+  windowEnd.setDate(windowEnd.getDate() + 3); // Default 3-day window
   const daysRemaining = Math.max(0, Math.ceil((windowEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
 
   return (
@@ -45,7 +45,7 @@ export function CleanStockCard({ alert, onAnalysisDetails, onTrackProgress }: Cl
       <div className="flex items-center gap-2 text-gray-300 mb-4">
         <span>${alert.entryPrice.toFixed(2)}</span>
         <span>→</span>
-        <span>${alert.targetPrice?.toFixed(2) || (alert.entryPrice * 1.2).toFixed(2)}</span>
+        <span>${(alert.entryPrice * 1.2).toFixed(2)}</span>
         <span className="text-gray-500">•</span>
         <span className="text-gray-400">{daysRemaining}d window</span>
       </div>
@@ -59,13 +59,13 @@ export function CleanStockCard({ alert, onAnalysisDetails, onTrackProgress }: Cl
         </div>
         <div className="flex justify-between text-sm font-semibold">
           <span className="text-yellow-400">
-            +{alert.targetRanges?.low || '18'}%
+            +18%
           </span>
           <span className="text-green-400">
-            +{alert.targetRanges?.target || '23'}%
+            +23%
           </span>
           <span className="text-cyan-400">
-            +{alert.targetRanges?.high || '31'}%
+            +31%
           </span>
         </div>
       </div>
@@ -78,14 +78,9 @@ export function CleanStockCard({ alert, onAnalysisDetails, onTrackProgress }: Cl
             <span className="text-cyan-400 font-semibold">{alert.confidence}%</span>
           </div>
           <div className="text-sm">
-            <span className="text-gray-400">Gut: </span>
-            <span className={`font-semibold flex items-center gap-1 ${
-              alert.gutVote === 'UP' ? 'text-green-400' : 
-              alert.gutVote === 'DOWN' ? 'text-red-400' : 'text-gray-400'
-            }`}>
-              {alert.gutVote === 'UP' && <TrendingUp className="w-3 h-3" />}
-              {alert.gutVote === 'DOWN' && <TrendingDown className="w-3 h-3" />}
-              {alert.gutVote || 'PASS'} {alert.gutVoteCount || 5}
+            <span className="text-gray-400">AI Confidence: </span>
+            <span className="font-semibold text-cyan-400">
+              {alert.confidence}%
             </span>
           </div>
         </div>

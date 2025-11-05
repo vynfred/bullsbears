@@ -154,13 +154,9 @@ const PicksCarousel: React.FC<PicksCarouselProps> = ({ entries, onCardClick }) =
                 <span className="text-white font-medium">{entry.daysToHit}</span>
               </div>
               <div>
-                <span className="text-gray-400">Gut: </span>
-                <span className={`font-medium ${
-                  entry.gutVote === 'UP' ? 'text-green-400' :
-                  entry.gutVote === 'DOWN' ? 'text-red-400' :
-                  'text-gray-400'
-                }`}>
-                  {entry.gutVote}
+                <span className="text-gray-400">AI: </span>
+                <span className="font-medium text-cyan-400">
+                  {entry.aiConfidence}%
                 </span>
               </div>
             </div>

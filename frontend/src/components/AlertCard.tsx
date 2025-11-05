@@ -94,8 +94,8 @@ export default function AlertCard({ alert, rank, onGutVote, showFinalConfidence 
               {alert.gutVote ? (
                 <div className="flex items-center text-xs">
                   <div className={`px-2 py-1 rounded text-white text-xs font-medium ${
-                    alert.gutVote === 'UP' ? 'bg-green-500' : 
-                    alert.gutVote === 'DOWN' ? 'bg-red-500' : 'bg-gray-500'
+                    alert.gutVote === 'BULLISH' ? 'bg-green-500' :
+                    alert.gutVote === 'BEARISH' ? 'bg-red-500' : 'bg-gray-500'
                   }`}>
                     {alert.gutVote === 'PASS' ? 'PASSED' : alert.gutVote}
                   </div>

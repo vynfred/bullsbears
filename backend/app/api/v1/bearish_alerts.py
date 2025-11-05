@@ -1,5 +1,5 @@
 """
-Rug Alerts API - Endpoints for "When Rug?" pattern alerts
+Bearish Alerts API - Endpoints for "When Bearish?" pattern alerts
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,13 +11,13 @@ from pydantic import BaseModel
 
 from ...core.database import get_db
 from ...models.analysis_results import AnalysisResult, AlertType, AlertOutcome
-from ...analyzers.rug_analyzer import RugAnalyzer, analyze_rug_potential
+from ...analyzers.bearish_analyzer import BearishAnalyzer, analyze_bearish_potential
 
-router = APIRouter(prefix="/rug_alerts", tags=["rug_alerts"])
+router = APIRouter(prefix="/bearish_alerts", tags=["bearish_alerts"])
 
 
-class RugAlertResponse(BaseModel):
-    """Response model for rug alerts"""
+class BearishAlertResponse(BaseModel):
+    """Response model for bearish alerts"""
     id: int
     symbol: str
     company_name: Optional[str]
@@ -59,7 +59,7 @@ class RugAnalysisResponse(BaseModel):
     message: str
 
 
-@router.get("/", response_model=List[RugAlertResponse])
+@router.get("/", response_model=List[BearishAlertResponse])
 async def get_rug_alerts(
     limit: int = Query(50, le=200, description="Maximum number of alerts to return"),
     offset: int = Query(0, ge=0, description="Number of alerts to skip"),
@@ -105,7 +105,7 @@ async def get_rug_alerts(
         for alert in alerts:
             features = alert.features_json or {}
             
-            response_alert = RugAlertResponse(
+            response_alert = BearishAlertResponse(
                 id=alert.id,
                 symbol=alert.symbol,
                 company_name=alert.symbol,  # Could be enhanced with actual company names
@@ -130,7 +130,7 @@ async def get_rug_alerts(
         raise HTTPException(status_code=500, detail=f"Error retrieving rug alerts: {str(e)}")
 
 
-@router.get("/latest", response_model=List[RugAlertResponse])
+@router.get("/latest", response_model=List[BearishAlertResponse])
 async def get_latest_rug_alerts(
     limit: int = Query(10, le=50, description="Number of latest alerts to return"),
     db: Session = Depends(get_db)
@@ -148,7 +148,7 @@ async def get_latest_rug_alerts(
         for alert in alerts:
             features = alert.features_json or {}
             
-            response_alert = RugAlertResponse(
+            response_alert = BearishAlertResponse(
                 id=alert.id,
                 symbol=alert.symbol,
                 company_name=alert.symbol,
@@ -285,7 +285,7 @@ async def get_rug_alert_stats(
         raise HTTPException(status_code=500, detail=f"Error retrieving rug alert stats: {str(e)}")
 
 
-@router.get("/{alert_id}", response_model=RugAlertResponse)
+@router.get("/{alert_id}", response_model=BearishAlertResponse)
 async def get_rug_alert_by_id(
     alert_id: int,
     db: Session = Depends(get_db)
@@ -306,7 +306,7 @@ async def get_rug_alert_by_id(
         
         features = alert.features_json or {}
         
-        return RugAlertResponse(
+        return BearishAlertResponse(
             id=alert.id,
             symbol=alert.symbol,
             company_name=alert.symbol,

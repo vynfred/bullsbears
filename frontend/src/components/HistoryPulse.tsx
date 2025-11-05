@@ -3,7 +3,7 @@ import { HistoryEntry, demoHistoryEntries } from '../lib/demoData';
 import ScatterPlot from './ScatterPlot';
 import PicksCarousel from './PicksCarousel';
 
-type PulseFilter = 'all' | 'moon' | 'rug' | 'gut';
+type PulseFilter = 'all' | 'bullish' | 'bearish' | 'gut';
 
 interface HistoryPulseProps {
   onEntrySelect?: (entry: HistoryEntry) => void;
@@ -25,9 +25,9 @@ const HistoryPulse: React.FC<HistoryPulseProps> = ({ onEntrySelect }) => {
   // Filter entries based on active filter
   const filteredEntries = demoHistoryEntries.filter(entry => {
     switch (activeFilter) {
-      case 'moon':
+      case 'bullish':
         return ['MOON', 'PARTIAL_MOON'].includes(entry.classification);
-      case 'rug':
+      case 'bearish':
         return ['RUG', 'NUCLEAR_RUG'].includes(entry.classification);
       case 'gut':
         return entry.gutVote && entry.gutVote !== 'PASS';
@@ -68,24 +68,24 @@ const HistoryPulse: React.FC<HistoryPulseProps> = ({ onEntrySelect }) => {
             All
           </button>
           <button
-            onClick={() => setActiveFilter('moon')}
+            onClick={() => setActiveFilter('bullish')}
             className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-              activeFilter === 'moon'
+              activeFilter === 'bullish'
                 ? 'bg-green-600 text-white shadow-lg'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
             }`}
           >
-            Moon Picks
+            Bullish Picks
           </button>
           <button
-            onClick={() => setActiveFilter('rug')}
+            onClick={() => setActiveFilter('bearish')}
             className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-              activeFilter === 'rug'
+              activeFilter === 'bearish'
                 ? 'bg-red-600 text-white shadow-lg'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
             }`}
           >
-            Rug Picks
+            Bearish Picks
           </button>
           <button
             onClick={() => setActiveFilter('gut')}

@@ -3,38 +3,38 @@
 /* BullsBears Design System - Modern Fintech Theme */
 
 :root {
-  /* Light Mode Colors */
-  --bg-primary: #FAFAFA; /* Clean white-gray */
-  --bg-secondary: #FFFFFF; /* Pure white for cards */
-  --bg-tertiary: #F5F5F5; /* Light gray for subtle backgrounds */
-  --bg-accent: #F8F9FA; /* Subtle accent background */
-  --text-primary: #1A1A1A; /* Near black for primary text */
-  --text-secondary: #4A4A4A; /* Medium gray for secondary text */
-  --text-muted: #6B7280; /* Muted gray for less important text */
-  --border-color: #E5E7EB; /* Light border color */
-  --border-hover: #D1D5DB; /* Darker border on hover */
+  /* BullsBears Modern Color Scheme */
+  --bg-primary: #074173; /* Dark blue background */
+  --bg-secondary: #BADFDB; /* Light mint for cards and boxes */
+  --bg-tertiary: #FCF9EA; /* Cream for subtle backgrounds */
+  --bg-accent: #FCF9EA; /* Cream accent background */
+  --text-primary: #FCF9EA; /* Cream for primary text on dark backgrounds */
+  --text-secondary: #074173; /* Dark blue for text on light backgrounds */
+  --text-muted: #5A6B7D; /* Medium blue-gray for muted text */
+  --border-color: rgba(186, 223, 219, 0.4); /* Semi-transparent mint border */
+  --border-hover: rgba(186, 223, 219, 0.7); /* More visible mint border on hover */
 
-  /* Modern Fintech Colors - Professional Green/Red */
-  --color-gain: #10B981; /* Professional green (Emerald-500) */
-  --color-loss: #EF4444; /* Professional red (Red-500) */
-  --color-neutral: #6B7280; /* Professional gray */
-  --color-gain-bg: rgba(16, 185, 129, 0.1); /* Light green background */
-  --color-loss-bg: rgba(239, 68, 68, 0.1); /* Light red background */
-  --color-neutral-bg: rgba(107, 114, 128, 0.1); /* Light gray background */
-  --color-gain-border: rgba(16, 185, 129, 0.2); /* Green border */
-  --color-loss-border: rgba(239, 68, 68, 0.2); /* Red border */
+  /* Bull/Bear Colors - BullsBears Specific */
+  --color-gain: #77E4C8; /* Mint green for bulls and up stocks */
+  --color-loss: #FF8080; /* Red for bears and down stocks */
+  --color-neutral: #BADFDB; /* Light mint for neutral */
+  --color-gain-bg: rgba(119, 228, 200, 0.15); /* Light mint background */
+  --color-loss-bg: rgba(255, 128, 128, 0.15); /* Light red background */
+  --color-neutral-bg: rgba(186, 223, 219, 0.1); /* Light mint background */
+  --color-gain-border: rgba(119, 228, 200, 0.3); /* Mint border */
+  --color-loss-border: rgba(255, 128, 128, 0.3); /* Red border */
 
-  /* Bull/Bear Brand Colors - Subtle Professional */
-  --color-bull: #059669; /* Darker emerald for bull theme */
-  --color-bear: #DC2626; /* Darker red for bear theme */
-  --color-bull-bg: rgba(5, 150, 105, 0.05); /* Very subtle bull background */
-  --color-bear-bg: rgba(220, 38, 38, 0.05); /* Very subtle bear background */
+  /* Bull/Bear Brand Colors */
+  --color-bull: #77E4C8; /* Mint green for bull theme */
+  --color-bear: #FF8080; /* Red for bear theme */
+  --color-bull-bg: rgba(119, 228, 200, 0.1); /* Subtle bull background */
+  --color-bear-bg: rgba(255, 128, 128, 0.1); /* Subtle bear background */
 
   /* Accent Colors */
-  --color-primary: #3B82F6; /* Blue-500 for primary actions */
-  --color-primary-hover: #2563EB; /* Blue-600 for hover */
-  --color-warning: #F59E0B; /* Amber-500 for warnings */
-  --color-info: #06B6D4; /* Cyan-500 for info */
+  --color-primary: #77E4C8; /* Mint green for primary actions */
+  --color-primary-hover: #5DDCC0; /* Darker mint for hover */
+  --color-warning: #FFB366; /* Orange for warnings */
+  --color-info: #77E4C8; /* Mint for info */
 
   /* Design System Spacing - Modern Scale */
   --spacing-xs: 0.25rem; /* 4px */
@@ -64,12 +64,12 @@
   --font-size-3xl: 1.875rem; /* 30px */
   --font-size-4xl: 2.25rem; /* 36px */
 
-  /* Modern Shadows - Subtle Depth */
-  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  /* Modern Shadows - Enhanced Depth for Sleek Look */
+  --shadow-xs: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+  --shadow-sm: 0 4px 8px 0 rgba(0, 0, 0, 0.15), 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 8px 16px -2px rgba(0, 0, 0, 0.2), 0 4px 8px -2px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 16px 32px -4px rgba(0, 0, 0, 0.25), 0 8px 16px -4px rgba(0, 0, 0, 0.2);
+  --shadow-xl: 0 32px 64px -8px rgba(0, 0, 0, 0.3), 0 16px 32px -8px rgba(0, 0, 0, 0.25);
 
   /* Animation Timing */
   --transition-fast: 0.15s ease;
@@ -78,39 +78,39 @@
 }
 
 .dark {
-  /* Dark Mode - Modern Fintech Dark Theme */
-  --bg-primary: #0F172A; /* Slate-900 - Deep professional dark */
-  --bg-secondary: #1E293B; /* Slate-800 - Card backgrounds */
-  --bg-tertiary: #334155; /* Slate-700 - Subtle backgrounds */
-  --bg-accent: #475569; /* Slate-600 - Accent backgrounds */
-  --text-primary: #F8FAFC; /* Slate-50 - Primary text */
-  --text-secondary: #CBD5E1; /* Slate-300 - Secondary text */
-  --text-muted: #94A3B8; /* Slate-400 - Muted text */
-  --border-color: #334155; /* Slate-700 - Borders */
-  --border-hover: #475569; /* Slate-600 - Hover borders */
+  /* Dark Mode - BullsBears Theme (same as light mode for consistency) */
+  --bg-primary: #074173; /* Dark blue background */
+  --bg-secondary: #BADFDB; /* Light mint for cards and boxes */
+  --bg-tertiary: #FCF9EA; /* Cream for subtle backgrounds */
+  --bg-accent: #FCF9EA; /* Cream accent background */
+  --text-primary: #FCF9EA; /* Cream for primary text on dark backgrounds */
+  --text-secondary: #074173; /* Dark blue for text on light backgrounds */
+  --text-muted: #5A6B7D; /* Medium blue-gray for muted text */
+  --border-color: rgba(186, 223, 219, 0.4); /* Semi-transparent mint border */
+  --border-hover: rgba(186, 223, 219, 0.7); /* More visible mint border on hover */
 
-  /* Dark mode maintains same gain/loss colors for consistency */
-  --color-gain: #10B981; /* Same professional green */
-  --color-loss: #EF4444; /* Same professional red */
-  --color-gain-bg: rgba(16, 185, 129, 0.15); /* Slightly more visible in dark */
-  --color-loss-bg: rgba(239, 68, 68, 0.15); /* Slightly more visible in dark */
-  --color-gain-border: rgba(16, 185, 129, 0.3); /* More visible borders */
-  --color-loss-border: rgba(239, 68, 68, 0.3); /* More visible borders */
+  /* Bull/Bear Colors - Same as light mode */
+  --color-gain: #77E4C8; /* Mint green for bulls and up stocks */
+  --color-loss: #FF8080; /* Red for bears and down stocks */
+  --color-gain-bg: rgba(119, 228, 200, 0.15); /* Light mint background */
+  --color-loss-bg: rgba(255, 128, 128, 0.15); /* Light red background */
+  --color-gain-border: rgba(119, 228, 200, 0.3); /* Mint border */
+  --color-loss-border: rgba(255, 128, 128, 0.3); /* Red border */
 
-  /* Bull/Bear colors adjusted for dark mode */
-  --color-bull: #34D399; /* Lighter emerald for dark backgrounds */
-  --color-bear: #F87171; /* Lighter red for dark backgrounds */
-  --color-bull-bg: rgba(52, 211, 153, 0.1); /* Bull background for dark */
-  --color-bear-bg: rgba(248, 113, 113, 0.1); /* Bear background for dark */
+  /* Bull/Bear Brand Colors */
+  --color-bull: #77E4C8; /* Mint green for bull theme */
+  --color-bear: #FF8080; /* Red for bear theme */
+  --color-bull-bg: rgba(119, 228, 200, 0.1); /* Subtle bull background */
+  --color-bear-bg: rgba(255, 128, 128, 0.1); /* Subtle bear background */
 
-  /* Accent colors for dark mode */
-  --color-primary: #60A5FA; /* Blue-400 for dark mode */
-  --color-primary-hover: #3B82F6; /* Blue-500 for hover */
+  /* Accent colors */
+  --color-primary: #77E4C8; /* Mint green for primary actions */
+  --color-primary-hover: #5DDCC0; /* Darker mint for hover */
 }
 
 body {
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  background: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11'; /* Inter font features for better readability */
   overflow-x: hidden;
@@ -118,6 +118,15 @@ body {
   line-height: 1.6; /* Better readability */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Force override any conflicting styles */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--bg-primary) !important;
 }
 
 /* Mobile optimizations */
@@ -182,8 +191,8 @@ body {
 .clean-button {
   background: var(--color-primary);
   border: 1px solid var(--color-primary);
-  color: white;
-  font-weight: 500;
+  color: #074173; /* Dark blue text for maximum contrast on mint background */
+  font-weight: 700; /* Bold for better readability */
   padding: var(--spacing-md) var(--spacing-xl);
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -196,6 +205,7 @@ body {
   gap: var(--spacing-sm);
   text-decoration: none;
   line-height: 1;
+  box-shadow: var(--shadow-md);
 }
 
 .clean-button:hover:not(:disabled) {
@@ -261,7 +271,7 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
-/* Card/Panel Components */
+/* Card/Panel Components - Enhanced Depth */
 .clean-panel {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -269,16 +279,16 @@ body {
   padding: var(--spacing-xl);
   transition: all var(--transition-normal);
   margin-bottom: var(--spacing-lg);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-md); /* Enhanced default shadow for depth */
 }
 
 .clean-panel:hover {
   border-color: var(--border-hover);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg); /* Stronger hover shadow */
+  transform: translateY(-4px); /* More pronounced lift */
 }
 
-/* Special Bull/Bear themed panels */
+/* Special Bull/Bear themed panels - Enhanced with Shadows */
 .bull-panel {
   background: var(--color-bull-bg);
   border: 1px solid var(--color-gain-border);
@@ -286,6 +296,7 @@ body {
   padding: var(--spacing-xl);
   transition: all var(--transition-normal);
   margin-bottom: var(--spacing-lg);
+  box-shadow: var(--shadow-md); /* Add depth to bull panels */
 }
 
 .bear-panel {
@@ -295,6 +306,7 @@ body {
   padding: var(--spacing-xl);
   transition: all var(--transition-normal);
   margin-bottom: var(--spacing-lg);
+  box-shadow: var(--shadow-md); /* Add depth to bear panels */
 }
 
 /* Stock Price Change Indicators - Modern Fintech Style */
@@ -603,13 +615,13 @@ body {
   box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
 }
 
-/* Modern Data Visualization */
+/* Modern Data Visualization - Enhanced with Shadow */
 .chart-container {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-md); /* Enhanced chart container shadow for depth */
 }
 
 .metric-card {
@@ -620,6 +632,7 @@ body {
   transition: all var(--transition-normal);
   position: relative;
   overflow: hidden;
+  box-shadow: var(--shadow-md); /* Add depth to metric cards */
 }
 
 .metric-card::before {
@@ -639,8 +652,8 @@ body {
 }
 
 .metric-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  transform: translateY(-4px); /* More pronounced lift */
+  box-shadow: var(--shadow-lg); /* Stronger hover shadow */
   border-color: var(--border-hover);
 }
 
@@ -658,18 +671,18 @@ body {
 }
 
 .bg-gain {
-  background-color: rgba(0, 255, 65, 0.1);
+  background-color: var(--color-gain-bg);
 }
 
 .bg-loss {
-  background-color: rgba(255, 7, 58, 0.1);
+  background-color: var(--color-loss-bg);
 }
 
 .bg-neutral {
-  background-color: rgba(128, 128, 128, 0.1);
+  background-color: var(--color-neutral-bg);
 }
 
-/* Modern Table Styles */
+/* Modern Table Styles - Enhanced with Shadow */
 .clean-table {
   width: 100%;
   border-collapse: collapse;
@@ -677,7 +690,7 @@ body {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-md); /* Enhanced table shadow for depth */
 }
 
 .clean-table th,
@@ -900,4 +913,93 @@ button[title]:hover::before {
   border-top: 6px solid var(--border-color);
   z-index: 1001;
   pointer-events: none;
+}
+
+/* Force BullsBears Color Scheme Override */
+.bg-gray-900,
+.bg-gray-800,
+.bg-gray-700,
+.bg-slate-900,
+.bg-slate-800 {
+  background: var(--bg-primary) !important;
+}
+
+.bg-gray-100,
+.bg-gray-50,
+.bg-white,
+.bg-slate-100,
+.bg-slate-50 {
+  background: var(--bg-secondary) !important;
+}
+
+.text-white,
+.text-gray-100,
+.text-slate-100 {
+  color: var(--text-primary) !important;
+}
+
+.text-gray-400,
+.text-gray-500,
+.text-slate-400,
+.text-slate-500 {
+  color: var(--text-muted) !important;
+}
+
+.text-green-400,
+.text-green-500,
+.text-emerald-400,
+.text-emerald-500 {
+  color: var(--color-gain) !important;
+}
+
+.text-red-400,
+.text-red-500 {
+  color: var(--color-loss) !important;
+}
+
+.border-gray-700,
+.border-gray-600,
+.border-slate-700,
+.border-slate-600 {
+  border-color: var(--border-color) !important;
+}
+
+.bg-green-400,
+.bg-green-500,
+.bg-emerald-400,
+.bg-emerald-500 {
+  background-color: var(--color-gain) !important;
+}
+
+.bg-red-400,
+.bg-red-500 {
+  background-color: var(--color-loss) !important;
+}
+
+/* Text contrast fixes for specific backgrounds */
+[style*="background: var(--bg-secondary)"] *,
+[style*="backgroundColor: var(--bg-secondary)"] * {
+  color: var(--text-secondary) !important;
+}
+
+[style*="background: var(--bg-primary)"] *,
+[style*="backgroundColor: var(--bg-primary)"] * {
+  color: var(--text-primary) !important;
+}
+
+/* Button text contrast */
+button[style*="background: var(--color-primary)"],
+.button,
+.clean-button {
+  color: #074173 !important;
+  font-weight: 700 !important;
+}
+
+/* Bottom tab bar specific fixes */
+.fixed.bottom-0 button {
+  color: var(--text-primary) !important;
+}
+
+.fixed.bottom-0 button[style*="color: var(--color-primary)"] {
+  color: var(--color-primary) !important;
 }

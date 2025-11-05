@@ -1,5 +1,5 @@
 """
-Moon Alerts API - Endpoints for "When Moon?" pattern alerts
+Bullish Alerts API - Endpoints for "When Bullish?" pattern alerts
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,13 +11,13 @@ from pydantic import BaseModel
 
 from ...core.database import get_db
 from ...models.analysis_results import AnalysisResult, AlertType, AlertOutcome
-from ...analyzers.moon_analyzer import MoonAnalyzer, analyze_moon_potential
+from ...analyzers.bullish_analyzer import BullishAnalyzer, analyze_bullish_potential
 
-router = APIRouter(prefix="/moon_alerts", tags=["moon_alerts"])
+router = APIRouter(prefix="/bullish_alerts", tags=["bullish_alerts"])
 
 
-class MoonAlertResponse(BaseModel):
-    """Response model for moon alerts"""
+class BullishAlertResponse(BaseModel):
+    """Response model for bullish alerts"""
     id: int
     symbol: str
     company_name: Optional[str]
@@ -59,7 +59,7 @@ class MoonAnalysisResponse(BaseModel):
     message: str
 
 
-@router.get("/", response_model=List[MoonAlertResponse])
+@router.get("/", response_model=List[BullishAlertResponse])
 async def get_moon_alerts(
     limit: int = Query(50, le=200, description="Maximum number of alerts to return"),
     offset: int = Query(0, ge=0, description="Number of alerts to skip"),
@@ -105,7 +105,7 @@ async def get_moon_alerts(
         for alert in alerts:
             features = alert.features_json or {}
             
-            response_alert = MoonAlertResponse(
+            response_alert = BullishAlertResponse(
                 id=alert.id,
                 symbol=alert.symbol,
                 company_name=alert.symbol,  # Could be enhanced with actual company names
@@ -130,7 +130,7 @@ async def get_moon_alerts(
         raise HTTPException(status_code=500, detail=f"Error retrieving moon alerts: {str(e)}")
 
 
-@router.get("/latest", response_model=List[MoonAlertResponse])
+@router.get("/latest", response_model=List[BullishAlertResponse])
 async def get_latest_moon_alerts(
     limit: int = Query(10, le=50, description="Number of latest alerts to return"),
     db: Session = Depends(get_db)
@@ -148,7 +148,7 @@ async def get_latest_moon_alerts(
         for alert in alerts:
             features = alert.features_json or {}
             
-            response_alert = MoonAlertResponse(
+            response_alert = BullishAlertResponse(
                 id=alert.id,
                 symbol=alert.symbol,
                 company_name=alert.symbol,
@@ -285,7 +285,7 @@ async def get_moon_alert_stats(
         raise HTTPException(status_code=500, detail=f"Error retrieving moon alert stats: {str(e)}")
 
 
-@router.get("/{alert_id}", response_model=MoonAlertResponse)
+@router.get("/{alert_id}", response_model=BullishAlertResponse)
 async def get_moon_alert_by_id(
     alert_id: int,
     db: Session = Depends(get_db)
@@ -306,7 +306,7 @@ async def get_moon_alert_by_id(
         
         features = alert.features_json or {}
         
-        return MoonAlertResponse(
+        return BullishAlertResponse(
             id=alert.id,
             symbol=alert.symbol,
             company_name=alert.symbol,

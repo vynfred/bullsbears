@@ -111,24 +111,24 @@ export default function ActivityTabs({ onNavigateToAnalyzer }: ActivityTabsProps
 
       // const data = await response.json();
 
-      // Transform backend data to match frontend interface
-      const transformedEarnings: EarningsEvent[] = data.events.map((event: any) => ({
-        symbol: event.symbol,
-        company_name: event.company_name,
-        earnings_date: event.earnings_date,
-        estimated_eps: event.estimated_eps || 0,
-        actual_eps: event.actual_eps,
-        surprise_percent: event.surprise_percent,
-        market_cap: event.market_cap || 1000000000,
-        last_quarter_eps: event.last_quarter_eps,
-        last_quarter_surprise: event.last_quarter_surprise,
-        ai_sentiment: event.ai_sentiment,
-        ai_summary: event.ai_summary,
-        sector: event.sector,
-        time: event.time,
-        has_analysis: event.has_analysis,
-        analysis_age_minutes: event.analysis_age_minutes
-      }));
+      // Transform backend data to match frontend interface (commented out for now)
+      // const transformedEarnings: EarningsEvent[] = data.events.map((event: any) => ({
+      //   symbol: event.symbol,
+      //   company_name: event.company_name,
+      //   earnings_date: event.earnings_date,
+      //   estimated_eps: event.estimated_eps || 0,
+      //   actual_eps: event.actual_eps,
+      //   surprise_percent: event.surprise_percent,
+      //   market_cap: event.market_cap || 1000000000,
+      //   last_quarter_eps: event.last_quarter_eps,
+      //   last_quarter_surprise: event.last_quarter_surprise,
+      //   ai_sentiment: event.ai_sentiment,
+      //   ai_summary: event.ai_summary,
+      //   sector: event.sector,
+      //   time: event.time,
+      //   has_analysis: event.has_analysis,
+      //   analysis_age_minutes: event.analysis_age_minutes
+      // }));
 
       // setEarningsEvents(transformedEarnings);
 
@@ -373,6 +373,9 @@ export default function ActivityTabs({ onNavigateToAnalyzer }: ActivityTabsProps
         },
         disclaimer: "Demo data - unusual options analysis for educational purposes only."
       });
+    } catch (error) {
+      console.error('Error fetching unusual options:', error);
+      setError('Failed to load unusual options data');
     }
   };
 

@@ -3,46 +3,32 @@
 import React from 'react';
 import { Rocket, Brain, Trophy, TrendingUp, Star } from 'lucide-react';
 
-export type TabType = 'pulse' | 'gutcheck' | 'performance' | 'trends' | 'watchlist';
+export type TabType = 'pulse' | 'watchlist' | 'analytics';
 
 interface BottomTabBarProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
-  gutCheckBadgeCount?: number;
 }
 
-export function BottomTabBar({ activeTab, onTabChange, gutCheckBadgeCount = 0 }: BottomTabBarProps) {
+export function BottomTabBar({ activeTab, onTabChange }: BottomTabBarProps) {
   const tabs = [
     {
       id: 'pulse' as TabType,
-      label: 'Pulse',
+      label: 'Picks',
       icon: Rocket,
       color: 'blue'
-    },
-    {
-      id: 'gutcheck' as TabType,
-      label: 'Gut Check',
-      icon: Brain,
-      color: 'orange',
-      badge: gutCheckBadgeCount
-    },
-    {
-      id: 'performance' as TabType,
-      label: 'Performance',
-      icon: Trophy,
-      color: 'green'
-    },
-    {
-      id: 'trends' as TabType,
-      label: 'Trends',
-      icon: TrendingUp,
-      color: 'purple'
     },
     {
       id: 'watchlist' as TabType,
       label: 'Watchlist',
       icon: Star,
       color: 'yellow'
+    },
+    {
+      id: 'analytics' as TabType,
+      label: 'Analytics',
+      icon: Trophy,
+      color: 'green'
     }
   ];
 
@@ -58,7 +44,7 @@ export function BottomTabBar({ activeTab, onTabChange, gutCheckBadgeCount = 0 }:
         yellow: 'text-yellow-400 border-yellow-400'
       };
       
-      return `${baseStyles} ${colorMap[tab.color]} border-b-2 bg-gray-700/50 shadow-lg`;
+      return `${baseStyles} ${colorMap[tab.color as keyof typeof colorMap]} border-b-2 bg-gray-700/50 shadow-lg`;
     }
     
     return `${baseStyles} text-gray-400 border-transparent border-b-2 hover:text-gray-300 hover:border-gray-600`;
@@ -75,11 +61,18 @@ export function BottomTabBar({ activeTab, onTabChange, gutCheckBadgeCount = 0 }:
       yellow: 'shadow-yellow-400/50'
     };
     
-    return `shadow-lg ${glowMap[tab.color]}`;
+    return `shadow-lg ${glowMap[tab.color as keyof typeof glowMap]}`;
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-700 z-50" style={{ backgroundColor: '#111827' }}>
+    <div
+      className="fixed bottom-0 left-0 right-0 border-t z-50"
+      style={{
+        backgroundColor: 'var(--bg-primary)', // Use dark background for contrast
+        borderColor: 'var(--border-color)',
+        boxShadow: 'var(--shadow-lg)'
+      }}
+    >
       <div className="flex">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -89,19 +82,17 @@ export function BottomTabBar({ activeTab, onTabChange, gutCheckBadgeCount = 0 }:
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
-              className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 px-2 text-xs font-medium transition-all duration-200 relative ${
-                isActive
-                  ? 'text-white border-b-2 border-cyan-400'
-                  : 'text-gray-400 border-b-2 border-transparent hover:text-gray-300'
-              }`}
+              className="flex-1 flex flex-col items-center justify-center gap-1 py-3 px-2 text-xs font-medium transition-all duration-200 relative border-b-2"
+              style={{
+                color: isActive ? 'var(--color-primary)' : 'var(--text-primary)', // Use primary text color for visibility
+                borderBottomColor: isActive ? 'var(--color-primary)' : 'transparent',
+                backgroundColor: isActive ? 'rgba(119, 228, 200, 0.1)' : 'transparent' // Subtle active background
+              }}
             >
               <div className="relative">
                 <Icon className="w-5 h-5" />
 
-                {/* Red Badge for Gut Check */}
-                {tab.id === 'gutcheck' && tab.badge && tab.badge > 0 && (
-                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></div>
-                )}
+
               </div>
 
               <span className="truncate max-w-full">

@@ -152,18 +152,9 @@ export function PulseStockCard({
             <div className="text-cyan-400 font-bold">{alert.confidence}%</div>
           </div>
           <div className="text-center">
-            <div className="text-xs text-gray-500">Gut</div>
-            <div className={`font-bold ${
-              alert.gutVote === 'UP' ? 'text-green-400' :
-              alert.gutVote === 'DOWN' ? 'text-red-400' : 'text-gray-500'
-            }`}>
-              {alert.gutVote === 'UP' ? (
-                <><TrendingUp className="w-4 h-4 inline" /> UP</>
-              ) : alert.gutVote === 'DOWN' ? (
-                <><TrendingDown className="w-4 h-4 inline" /> DOWN</>
-              ) : (
-                'PASS'
-              )}
+            <div className="text-xs text-gray-500">Type</div>
+            <div className="font-bold text-cyan-400">
+              {alert.type === 'bullish' ? 'BULL' : 'BEAR'}
             </div>
           </div>
         </div>

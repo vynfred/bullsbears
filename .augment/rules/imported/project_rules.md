@@ -53,11 +53,12 @@ Self-Training Integration: Use DB-stored alert outcomes for weekly retraining (e
 
 Tool-Specific Rules
 
-"When Moon?" Tool: Identifies patterns for +20% stock jumps in 1-3 trading days via backtesting and daily scans. Features: Oversold technicals (e.g., RSI <30), volume surges (>1.5x avg), positive sentiment (>0.5 score), active CEO X activity, upcoming earnings beats.
-"When Rug?" Tool: Identifies patterns for -20% stock drops in 1-3 trading days. Features: Overbought technicals (e.g., RSI >70), negative sentiment (< -0.5 score), quiet CEO activity, bearish news/earnings misses.
-Backtesting: Initial 3 months historical data (e.g., Aug-Oct 2025); label pre-signal windows (5-10 days); store in PostgreSQL for training.
-Daily Scans: Celery cron at 9:30 AM ET on ~200 volatile tickers; alert if confidence >70%; track outcomes 3 days post-alert.
-Alerts: DB-recorded with timestamp, features, confidence; exposed via API endpoints (/api/v1/moon_alerts, /api/v1/rug_alerts).
+"When Bullish?" Tool: Identifies patterns for significant upward stock movements via AI/ML analysis and daily scans. Features: Technical indicators, volume analysis, sentiment scores, earnings catalysts, social media activity.
+"When Bearish?" Tool: Identifies patterns for significant downward stock movements via AI/ML analysis. Features: Technical indicators, volume analysis, sentiment scores, earnings risks, social media sentiment.
+AI/ML System: 82-feature system (74 base + 8 AI features) with ensemble models delivering realistic predictions (48-52% bullish, 27-45% bearish).
+Daily Scans: Automated scanning of volatile tickers; generate bullish/bearish picks with confidence scores and target ranges.
+Watchlist System: Users can add AI picks or custom stocks to personal watchlist; track performance vs AI picks.
+Alerts: DB-recorded with timestamp, features, confidence; exposed via API endpoints (/api/v1/bullish_alerts, /api/v1/bearish_alerts).
 
 Development Rules
 1. Build-First Philosophy
@@ -87,12 +88,12 @@ Database queries: < 50ms average
 
 Clear loading states with progress indicators (e.g., for scans/backtests)
 Helpful error messages with retry options
-Intuitive navigation and information hierarchy (e.g., dashboard tabs for Moon/Rug alerts)
-Consistent bull/bear branding throughout, adapted to moon/rug themes
-CRITICAL: Stock identification display rules:
-- During Gut Check phase ONLY: Show anonymous stock IDs (e.g., #47291, #83756) to prevent bias
-- All other phases (Pulse, Performance, Trends, Watchlist): Show actual stock tickers (TSLA, NVDA, AAPL, etc.)
-- This prevents user bias during anonymous gut voting while providing transparency everywhere else
+Intuitive navigation and information hierarchy (e.g., dashboard tabs for Bullish/Bearish alerts)
+Consistent bull/bear branding throughout with professional design
+Stock identification display rules:
+- Always show actual stock tickers (TSLA, NVDA, AAPL, etc.) since no bias concerns with AI-only approach
+- Clear AI confidence scores and reasoning for transparency
+- Target price ranges and estimated timeframes for all picks
 
 5. Legal Safety Requirements (CRITICAL)
 

@@ -17,7 +17,6 @@ from app.main import app
 from app.services.ai_consensus import ConsensusResult, AgreementLevel
 from app.services.grok_ai import GrokAnalysis
 from app.services.deepseek_ai import DeepSeekSentimentAnalysis
-from app.models.ai_option_play import AIOptionPlay
 
 client = TestClient(app)
 

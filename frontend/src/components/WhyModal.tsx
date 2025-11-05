@@ -14,7 +14,7 @@ const getFeatureContributions = (alert: MoonAlert) => {
   const baseContributions = [
     { feature: 'Volume surge', value: 31, color: 'text-green-600' },
     { feature: 'Grok AI technical', value: 24, color: 'text-green-600' },
-    { feature: 'Your Gut (UP)', value: alert.gutVote === 'UP' ? 18 : alert.gutVote === 'DOWN' ? -8 : 0, color: alert.gutVote === 'UP' ? 'text-green-600' : alert.gutVote === 'DOWN' ? 'text-red-600' : 'text-gray-500' },
+    { feature: 'AI Confidence', value: Math.round((alert.confidence - 50) * 0.4), color: alert.confidence > 50 ? 'text-green-600' : 'text-red-600' },
     { feature: 'RSI oversold', value: 16, color: 'text-green-600' },
     { feature: 'DeepSeek sentiment', value: 14, color: 'text-green-600' },
     { feature: 'Options flow', value: 12, color: 'text-green-600' },

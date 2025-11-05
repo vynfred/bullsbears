@@ -80,20 +80,9 @@ export default function HistoryCard({ entry, onSelect }: HistoryCardProps) {
           <span className="px-2 py-1 bg-blue-900 text-blue-300 rounded text-xs font-medium">
             AI: {entry.aiConfidence}%
           </span>
-          {entry.gutVote && (
-            <span className={`px-2 py-1 rounded text-xs font-medium ${
-              entry.gutVote === 'UP' ? 'bg-green-900 text-green-300' :
-              entry.gutVote === 'DOWN' ? 'bg-red-900 text-red-300' :
-              'bg-gray-700 text-gray-300'
-            }`}>
-              Gut: {entry.gutVote}
-            </span>
-          )}
-          {entry.gutVote && entry.gutVote !== 'PASS' && (
-            <span className="px-2 py-1 bg-orange-900 text-orange-300 rounded text-xs font-medium">
-              Pick: 5s
-            </span>
-          )}
+          <span className="px-2 py-1 bg-cyan-900 text-cyan-300 rounded text-xs font-medium">
+            AI Pick
+          </span>
         </div>
         <div className="text-xs text-gray-400">
           Max: {entry.maxGain}% • Peak: {entry.daysToPeak}d

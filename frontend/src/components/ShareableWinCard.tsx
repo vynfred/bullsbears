@@ -61,11 +61,9 @@ export default function ShareableWinCard({ entry, onClose }: ShareableWinCardPro
             {/* Prediction Details */}
             <div className="bg-white/50 rounded-lg p-3 text-sm">
               <div className="flex justify-between items-center mb-1">
-                <span className="text-gray-600">My gut said:</span>
-                <span className={`font-medium ${
-                  entry.gutVote === 'UP' ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {entry.gutVote}
+                <span className="text-gray-600">AI Pick:</span>
+                <span className="font-medium text-blue-600">
+                  {entry.classification.includes('MOON') || entry.classification === 'WIN' ? 'BULLISH' : 'BEARISH'}
                 </span>
               </div>
               <div className="flex justify-between items-center mb-1">

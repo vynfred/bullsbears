@@ -85,53 +85,51 @@ export default function StockAnalyzer({
       // });
 
       // Simulate API response with mock data
-      const response = { ok: false };
-
-      if (!response.ok) {
-        // Handle different error types with user-friendly messages
-        if (response.status === 500) {
-          const errorData = await response.json().catch(() => ({}));
-          if (errorData.detail?.includes('No analysis data available')) {
-            throw new Error(`📊 Analysis temporarily unavailable for ${symbol.toUpperCase()}. Our system is currently rate-limited by data providers. Please try again in a few minutes or try a different stock.`);
-          } else {
-            throw new Error(`🔄 Analysis system is currently processing data for ${symbol.toUpperCase()}. This may take a moment due to API rate limits. Please try again shortly.`);
+      const data = {
+        success: true,
+        analysis: {
+          ticker: symbol.toUpperCase(),
+          companyName: `${symbol.toUpperCase()} Company`,
+          currentPrice: 150.00,
+          aiConfidence: 75,
+          targetPrice: 165.00,
+          timeWindow: 3,
+          reasoning: "Strong technical indicators and positive sentiment analysis suggest bullish momentum.",
+          features: {
+            technical: { rsi: 65, macd: 0.5, volume: 1.2 },
+            sentiment: { score: 0.7, sources: 5 },
+            fundamental: { pe: 25, growth: 0.15 }
           }
-        } else if (response.status === 429) {
-          throw new Error(`⏱️ Rate limit reached. Please wait a moment before analyzing another stock.`);
-        } else {
-          throw new Error(`❌ Analysis failed: ${response.statusText}. Please try again.`);
         }
-      }
-
-      const data = await response.json();
+      };
 
       if (data.success) {
         // Transform API response to match component interface
         const transformedData: StockAnalysisResult = {
-          symbol: data.data.symbol,
-          company_name: data.data.symbol, // API doesn't return company name yet
-          current_price: data.data.current_price || 0,
-          analysis_timestamp: data.data.timestamp,
+          symbol: data.analysis.ticker,
+          company_name: data.analysis.companyName,
+          current_price: data.analysis.currentPrice,
+          analysis_timestamp: new Date().toISOString(),
 
           // Map API recommendation to ai_recommendation
-          ai_recommendation: data.data.recommendation || 'HOLD',
-          ai_commentary: data.data.analysis_summary || 'Analysis completed successfully',
-          confidence_score: data.data.confidence_score || 50,
+          ai_recommendation: 'BUY',
+          ai_commentary: data.analysis.reasoning,
+          confidence_score: data.analysis.aiConfidence,
 
           // Technical indicators with defaults
           technical_indicators: {
-            rsi: data.data.technical_analysis?.rsi || 50,
-            macd: data.data.technical_analysis?.macd || 0,
-            bollinger_position: data.data.technical_analysis?.bb_signal || 'NEUTRAL',
+            rsi: data.analysis.features.technical.rsi || 50,
+            macd: data.analysis.features.technical.macd || 0,
+            bollinger_position: 'NEUTRAL',
             moving_averages: {
-              sma_20: data.data.technical_analysis?.sma_20 || 0,
-              sma_50: data.data.technical_analysis?.sma_50 || 0,
-              ema_12: data.data.technical_analysis?.ema_12 || 0,
-              ema_26: data.data.technical_analysis?.ema_26 || 0,
+              sma_20: 0,
+              sma_50: 0,
+              ema_12: 0,
+              ema_26: 0,
             },
             support_resistance: {
-              support: data.data.current_price * 0.95 || 0,
-              resistance: data.data.current_price * 1.05 || 0,
+              support: data.analysis.currentPrice * 0.95,
+              resistance: data.analysis.currentPrice * 1.05,
             },
           },
 
@@ -141,21 +139,21 @@ export default function StockAnalyzer({
             beta: 1.0,
             position_size_recommendation: 1000,
             max_position_value: 5000,
-            stop_loss_suggestion: data.data.current_price * 0.95 || 0,
+            stop_loss_suggestion: data.analysis.currentPrice * 0.95,
           },
 
           // Sentiment analysis with defaults
           sentiment_analysis: {
-            news_sentiment: data.data.news_analysis?.news_score || 50,
-            social_sentiment: data.data.social_analysis?.social_score || 50,
-            overall_sentiment: 'NEUTRAL',
-            sentiment_sources: 0,
+            news_sentiment: data.analysis.features.sentiment.score * 100,
+            social_sentiment: data.analysis.features.sentiment.score * 100,
+            overall_sentiment: 'POSITIVE',
+            sentiment_sources: data.analysis.features.sentiment.sources,
           },
         };
 
         setAnalysisResult(transformedData);
       } else {
-        throw new Error(data.error || 'Analysis failed');
+        throw new Error('Analysis failed');
       }
     } catch (err) {
       console.error('Analysis error:', err);
@@ -243,21 +241,14 @@ export default function StockAnalyzer({
       //   body: JSON.stringify(watchlistData),
 
       // Simulate successful response
-      const response = { ok: true };
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to add to watchlist: ${response.statusText}`);
-      }
-
-      const result = await response.json();
+      const result = { success: true };
 
       if (result.success) {
         setWatchlistSuccess(`✅ ${analysisResult.symbol} added to watchlist! Target: $${targetPrice.toFixed(2)}`);
         // Clear success message after 5 seconds
         setTimeout(() => setWatchlistSuccess(null), 5000);
       } else {
-        throw new Error(result.message || 'Failed to add to watchlist');
+        throw new Error('Failed to add to watchlist');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add to watchlist');

@@ -4,7 +4,7 @@
 import axios from 'axios';
 
 // API base URL - connects to FastAPI backend
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = 'http://127.0.0.1:8000';
 
 // Create axios instance with default config
 const apiClient = axios.create({
@@ -386,6 +386,134 @@ export interface UserPreferences {
   watchlist_symbols: string[];
 }
 
+// Watchlist interfaces
+export interface WatchlistEntry {
+  id: number;
+  symbol: string;
+  company_name?: string;
+  entry_type: string; // 'STOCK', 'OPTION_CALL', 'OPTION_PUT'
+  entry_price: number;
+  target_price: number;
+  stop_loss_price?: number;
+  current_price?: number;
+  current_return_percent?: number;
+  current_return_dollars?: number;
+  ai_confidence_score: number;
+  ai_recommendation: string;
+  status: string; // 'ACTIVE', 'CLOSED', 'EXPIRED'
+  is_winner?: boolean;
+  days_held: number;
+  entry_date: string;
+  last_price_update?: string;
+  strike_price?: number;
+  expiration_date?: string;
+  // Exit details (when trade is closed)
+  exit_price?: number;
+  exit_date?: string;
+  exit_reason?: string;
+  final_return_percent?: number;
+  final_return_dollars?: number;
+}
+
+export interface AddToWatchlistRequest {
+  symbol: string;
+  company_name?: string;
+  entry_type: string;
+  entry_price: number;
+  target_price: number;
+  stop_loss_price?: number;
+  ai_confidence_score: number;
+  ai_recommendation: string;
+  ai_reasoning?: string;
+  ai_key_factors?: string[];
+  position_size_dollars?: number;
+  strike_price?: number;
+  expiration_date?: string;
+  option_contract_symbol?: string;
+}
+
+export interface UpdateWatchlistEntryRequest {
+  entry_price?: number;
+  target_price?: number;
+  stop_loss_price?: number;
+  ai_confidence_score?: number;
+  ai_recommendation?: string;
+  ai_reasoning?: string;
+  ai_key_factors?: string[];
+  position_size_dollars?: number;
+  status?: string;
+  exit_price?: number;
+  exit_reason?: string;
+}
+
+export interface BulkWatchlistOperation {
+  operation: string; // 'delete', 'close', 'update_status'
+  entry_ids: number[];
+  new_status?: string;
+  exit_reason?: string;
+}
+
+export interface WatchlistPerformanceMetrics {
+  total_trades: number;
+  active_trades: number;
+  closed_trades: number;
+  winning_trades: number;
+  losing_trades: number;
+  win_rate: number;
+  average_return: number;
+  total_return: number;
+  best_trade_return: number;
+  worst_trade_return: number;
+  high_confidence_accuracy: number;
+  medium_confidence_accuracy: number;
+  low_confidence_accuracy: number;
+  stock_win_rate: number;
+  option_win_rate: number;
+}
+
+export interface AIVsWatchlistPerformance {
+  comparison_period_days: number;
+  ai_performance: {
+    total_picks: number;
+    bullish_picks: number;
+    bearish_picks: number;
+    average_return_percent: number;
+    win_rate: number;
+    best_pick_return: number;
+    worst_pick_return: number;
+    top_picks: Array<{
+      symbol: string;
+      confidence: number;
+      alert_type: string;
+      timestamp: string;
+    }>;
+  };
+  watchlist_performance: {
+    total_entries: number;
+    active_entries: number;
+    closed_entries: number;
+    average_return_percent: number;
+    win_rate: number;
+    best_pick_return: number;
+    worst_pick_return: number;
+    top_picks: Array<{
+      symbol: string;
+      entry_price: number;
+      exit_price: number;
+      return_percent: number;
+      days_held: number;
+      ai_confidence: number;
+    }>;
+  };
+  comparison: {
+    performance_advantage_percent: number;
+    win_rate_advantage: number;
+    better_performer: 'watchlist' | 'ai';
+    advantage_magnitude: number;
+    insights: string[];
+  };
+}
+
 export interface RiskProfileStrategy {
   name: string;
   description: string;
@@ -600,6 +728,172 @@ export const api = {
     }
   },
 
+  // Bullish/Bearish Alert APIs
+  /**
+   * Get latest bullish alerts for dashboard
+   */
+  getBullishAlerts: async (limit: number = 10): Promise<BullishAlert[]> => {
+    try {
+      const response = await apiClient.get(`/api/v1/bullish_alerts/latest?limit=${limit}`);
+      return response.data.map(transformBullishAlertResponse);
+    } catch (error) {
+      console.error('Error fetching bullish alerts:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get latest bearish alerts for dashboard
+   */
+  getBearishAlerts: async (limit: number = 10): Promise<BullishAlert[]> => {
+    try {
+      const response = await apiClient.get(`/api/v1/bearish_alerts/latest?limit=${limit}`);
+      return response.data.map(transformBearishAlertResponse);
+    } catch (error) {
+      console.error('Error fetching bearish alerts:', error);
+      throw error;
+    }
+  },
+
+  // Legacy aliases for backward compatibility
+  getMoonAlerts: async (limit: number = 10): Promise<BullishAlert[]> => {
+    return api.getBullishAlerts(limit);
+  },
+
+  getRugAlerts: async (limit: number = 10): Promise<BullishAlert[]> => {
+    return api.getBearishAlerts(limit);
+  },
+
+  /**
+   * Get all alerts (bullish + bearish) for dashboard
+   */
+  getAllAlerts: async (bullishLimit: number = 10, bearishLimit: number = 10): Promise<BullishAlert[]> => {
+    try {
+      const [bullishAlerts, bearishAlerts] = await Promise.all([
+        api.getBullishAlerts(bullishLimit),
+        api.getBearishAlerts(bearishLimit)
+      ]);
+
+      // Combine and sort by timestamp (newest first)
+      const allAlerts = [...bullishAlerts, ...bearishAlerts];
+      return allAlerts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    } catch (error) {
+      console.error('Error fetching all alerts:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Analyze symbol for bullish potential
+   */
+  analyzeBullishPotential: async (symbol: string, companyName?: string): Promise<BullishAlert> => {
+    try {
+      const response = await apiClient.post('/api/v1/bullish_alerts/analyze', {
+        symbol: symbol.toUpperCase(),
+        company_name: companyName
+      });
+      return transformBullishAlertResponse(response.data);
+    } catch (error) {
+      console.error('Error analyzing bullish potential:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Analyze symbol for bearish potential
+   */
+  analyzeBearishPotential: async (symbol: string, companyName?: string): Promise<BullishAlert> => {
+    try {
+      const response = await apiClient.post('/api/v1/bearish_alerts/analyze', {
+        symbol: symbol.toUpperCase(),
+        company_name: companyName
+      });
+      return transformBearishAlertResponse(response.data);
+    } catch (error) {
+      console.error('Error analyzing bearish potential:', error);
+      throw error;
+    }
+  },
+
+  // Legacy aliases for backward compatibility
+  analyzeMoonPotential: async (symbol: string, companyName?: string): Promise<BullishAlert> => {
+    return api.analyzeBullishPotential(symbol, companyName);
+  },
+
+  analyzeRugPotential: async (symbol: string, companyName?: string): Promise<BullishAlert> => {
+    return api.analyzeBearishPotential(symbol, companyName);
+  },
+
+  // Gut Check APIs
+  /**
+   * Get pending anonymous alerts for gut check voting
+   */
+  getPendingGutCheckAlerts: async (userId: string, limit: number = 10): Promise<AnonymousAlert[]> => {
+    try {
+      const response = await apiClient.get(`/api/v1/gut-check/pending/${userId}?limit=${limit}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching pending gut check alerts:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Submit gut check vote
+   */
+  submitGutCheckVote: async (userId: string, voteData: GutCheckVoteData): Promise<GutCheckVoteResponse> => {
+    try {
+      const response = await apiClient.post(`/api/v1/gut-check/vote/${userId}`, voteData);
+      return response.data;
+    } catch (error) {
+      console.error('Error submitting gut check vote:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get user gut check statistics
+   */
+  getUserGutCheckStats: async (userId: string): Promise<UserGutStats> => {
+    try {
+      const response = await apiClient.get(`/api/v1/gut-check/stats/${userId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching user gut check stats:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Complete gut check session and reveal actual symbols
+   */
+  completeGutCheckSession: async (userId: string, sessionId: string): Promise<GutCheckSessionResult> => {
+    try {
+      const response = await apiClient.post(`/api/v1/gut-check/complete-session/${userId}`, {
+        session_id: sessionId
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error completing gut check session:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Generate new gut check session
+   */
+  generateGutCheckSession: async (userId: string, alertCount: number = 7): Promise<GutCheckSession> => {
+    try {
+      const response = await apiClient.post(`/api/v1/gut-check/generate-session/${userId}`, {
+        alert_count: alertCount
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error generating gut check session:', error);
+      throw error;
+    }
+  },
+
   async updateUserPreferences(userId: string, preferences: Partial<UserPreferences>): Promise<{ success: boolean; data: UserPreferences; message: string }> {
     try {
       const response = await apiClient.put(`/api/v1/preferences/${userId}`, preferences);
@@ -648,7 +942,322 @@ export const api = {
       console.error('Error fetching default preferences:', error);
       throw error;
     }
+  },
+
+  // Watchlist API
+  async addToWatchlist(request: AddToWatchlistRequest): Promise<{ success: boolean; message: string; watchlist_entry_id: number }> {
+    try {
+      const response = await apiClient.post('/api/v1/watchlist/add', request);
+      return response.data;
+    } catch (error) {
+      console.error('Error adding to watchlist:', error);
+      throw error;
+    }
+  },
+
+  async getWatchlistEntries(status?: string, entryType?: string, limit?: number): Promise<WatchlistEntry[]> {
+    try {
+      const params: any = {};
+      if (status) params.status = status;
+      if (entryType) params.entry_type = entryType;
+      if (limit) params.limit = limit;
+
+      const response = await apiClient.get('/api/v1/watchlist/entries', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching watchlist entries:', error);
+      throw error;
+    }
+  },
+
+  async getWatchlistEntry(entryId: number): Promise<WatchlistEntry> {
+    try {
+      const response = await apiClient.get(`/api/v1/watchlist/entry/${entryId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching watchlist entry:', error);
+      throw error;
+    }
+  },
+
+  async updateWatchlistEntry(entryId: number, request: UpdateWatchlistEntryRequest): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await apiClient.put(`/api/v1/watchlist/entry/${entryId}`, request);
+      return response.data;
+    } catch (error) {
+      console.error('Error updating watchlist entry:', error);
+      throw error;
+    }
+  },
+
+  async removeFromWatchlist(entryId: number): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await apiClient.delete(`/api/v1/watchlist/entry/${entryId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error removing from watchlist:', error);
+      throw error;
+    }
+  },
+
+  async bulkWatchlistOperation(request: BulkWatchlistOperation): Promise<{ success: boolean; message: string; affected_count: number }> {
+    try {
+      const response = await apiClient.post('/api/v1/watchlist/bulk-operation', request);
+      return response.data;
+    } catch (error) {
+      console.error('Error performing bulk watchlist operation:', error);
+      throw error;
+    }
+  },
+
+  async getWatchlistPerformance(days?: number): Promise<WatchlistPerformanceMetrics> {
+    try {
+      const params = days ? { days } : {};
+      const response = await apiClient.get('/api/v1/watchlist/performance', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching watchlist performance:', error);
+      throw error;
+    }
+  },
+
+  async updateWatchlistPrices(): Promise<{ success: boolean; message: string; updated_count: number }> {
+    try {
+      const response = await apiClient.post('/api/v1/watchlist/update-prices');
+      return response.data;
+    } catch (error) {
+      console.error('Error updating watchlist prices:', error);
+      throw error;
+    }
+  },
+
+  async getWatchlistSymbols(status?: string): Promise<string[]> {
+    try {
+      const params = status ? { status } : {};
+      const response = await apiClient.get('/api/v1/watchlist/symbols', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching watchlist symbols:', error);
+      throw error;
+    }
+  },
+
+  async getWatchlistSummary(): Promise<any> {
+    try {
+      const response = await apiClient.get('/api/v1/watchlist/summary');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching watchlist summary:', error);
+      throw error;
+    }
+  },
+
+  async getAIVsWatchlistPerformance(days?: number): Promise<AIVsWatchlistPerformance> {
+    try {
+      const params = days ? { days } : {};
+      const response = await apiClient.get('/api/v1/watchlist/ai-vs-watchlist-performance', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching AI vs Watchlist performance:', error);
+      throw error;
+    }
+  },
+
+  // Notification functions
+  async checkNotifications(): Promise<any[]> {
+    try {
+      console.log('🔔 Checking watchlist notifications...');
+      const response = await apiClient.get('/api/v1/watchlist/notifications/check');
+      console.log('📬 Notifications checked:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error checking notifications:', error);
+      throw error;
+    }
+  },
+
+  async getDailySummary(): Promise<any> {
+    try {
+      console.log('📊 Getting daily summary...');
+      const response = await apiClient.get('/api/v1/watchlist/notifications/daily-summary');
+      console.log('📈 Daily summary:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error getting daily summary:', error);
+      throw error;
+    }
+  },
+
+  async testNotifications(entryId: number): Promise<any> {
+    try {
+      console.log(`🧪 Testing notifications for entry ${entryId}...`);
+      const response = await apiClient.post(`/api/v1/watchlist/notifications/test/${entryId}`);
+      console.log('🧪 Test notifications result:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error testing notifications:', error);
+      throw error;
+    }
   }
 };
+
+// Type definitions for Bullish/Bearish alerts and Gut Check
+export interface BullishAlert {
+  id: string;
+  randomId: number;
+  ticker: string;
+  companyName: string;
+  confidence: number;
+  topReason: string;
+  targetRange: {
+    low: number;
+    avg: number;
+    high: number;
+    estimatedDays: number;
+  };
+  entryPrice: number;
+  currentPrice: number;
+  timestamp: Date;
+  isNew?: boolean;
+  type: 'bullish' | 'bearish';
+  daysToTarget: number;
+  gutVote?: 'BULLISH' | 'BEARISH' | 'PASS';
+  finalConfidence?: number;
+}
+
+// Alias for backward compatibility during transition
+export type MoonAlert = BullishAlert;
+
+export interface AnonymousAlert {
+  id: number;
+  random_id: string;
+  symbol: string;
+  ml_confidence_bullish: number;
+  ml_confidence_bearish: number;
+  prediction_type: 'BULLISH' | 'BEARISH';
+  target_price_range: string; // JSON string
+  expires_at: string;
+  created_at: string;
+}
+
+export interface GutCheckVoteData {
+  anonymous_alert_id: number;
+  vote: 'BULLISH' | 'BEARISH' | 'PASS';
+  response_time_ms: number;
+  confidence_level?: number;
+  session_id: string;
+  vote_order: number;
+  total_session_votes: number;
+}
+
+export interface GutCheckVoteResponse {
+  success: boolean;
+  vote_id: number;
+  updated_confidence: number;
+  user_stats: UserGutStats;
+}
+
+export interface UserGutStats {
+  user_id: string;
+  total_votes: number;
+  correct_votes: number;
+  accuracy_rate: number;
+  bullish_votes: number;
+  bearish_votes: number;
+  pass_votes: number;
+  bullish_accuracy: number;
+  bearish_accuracy: number;
+  confidence_boost_factor: number;
+  streak_current: number;
+  streak_best: number;
+  global_rank?: number;
+  percentile?: number;
+}
+
+export interface GutCheckSessionResult {
+  session_id: string;
+  votes: Array<{
+    vote: string;
+    actual_symbol: string;
+    was_correct: boolean;
+    confidence_boost: number;
+  }>;
+  session_stats: {
+    total_votes: number;
+    correct_votes: number;
+    accuracy_rate: number;
+    average_response_time: number;
+  };
+  updated_user_stats: UserGutStats;
+}
+
+export interface GutCheckSession {
+  session_id: string;
+  alerts: AnonymousAlert[];
+  expires_at: string;
+}
+
+// Transformation functions to convert backend responses to frontend types
+function transformBullishAlertResponse(backendAlert: any): BullishAlert {
+  const targetRange = backendAlert.target_price_range ?
+    JSON.parse(backendAlert.target_price_range) :
+    { low: 5, avg: 15, high: 25, estimatedDays: 2 };
+
+  return {
+    id: `bullish_${backendAlert.id}`,
+    randomId: Math.floor(Math.random() * 900000) + 100000, // Generate 6-digit random ID
+    ticker: backendAlert.symbol,
+    companyName: backendAlert.company_name || backendAlert.symbol,
+    confidence: Math.round(backendAlert.confidence),
+    topReason: backendAlert.reasons?.[0] || 'Technical analysis indicates bullish momentum',
+    targetRange: {
+      low: targetRange.low || 5,
+      avg: targetRange.avg || 15,
+      high: targetRange.high || 25,
+      estimatedDays: targetRange.estimatedDays || 2
+    },
+    entryPrice: backendAlert.entry_price || 100, // Will be updated with real price
+    currentPrice: backendAlert.current_price || 100, // Will be updated with real price
+    timestamp: new Date(backendAlert.timestamp),
+    isNew: true,
+    type: 'bullish',
+    daysToTarget: targetRange.estimatedDays || 2,
+    finalConfidence: backendAlert.confidence
+  };
+}
+
+// Legacy alias for backward compatibility
+const transformMoonAlertResponse = transformBullishAlertResponse;
+
+function transformBearishAlertResponse(backendAlert: any): BullishAlert {
+  const targetRange = backendAlert.target_price_range ?
+    JSON.parse(backendAlert.target_price_range) :
+    { low: -25, avg: -15, high: -5, estimatedDays: 2 };
+
+  return {
+    id: `bearish_${backendAlert.id}`,
+    randomId: Math.floor(Math.random() * 900000) + 100000, // Generate 6-digit random ID
+    ticker: backendAlert.symbol,
+    companyName: backendAlert.company_name || backendAlert.symbol,
+    confidence: Math.round(backendAlert.confidence),
+    topReason: backendAlert.reasons?.[0] || 'Technical analysis indicates bearish momentum',
+    targetRange: {
+      low: targetRange.low || -25,
+      avg: targetRange.avg || -15,
+      high: targetRange.high || -5,
+      estimatedDays: targetRange.estimatedDays || 2
+    },
+    entryPrice: backendAlert.entry_price || 100, // Will be updated with real price
+    currentPrice: backendAlert.current_price || 100, // Will be updated with real price
+    timestamp: new Date(backendAlert.timestamp),
+    isNew: true,
+    type: 'bearish',
+    daysToTarget: targetRange.estimatedDays || 2,
+    finalConfidence: backendAlert.confidence
+  };
+}
+
+// Legacy alias for backward compatibility
+const transformRugAlertResponse = transformBearishAlertResponse;
 
 export default api;

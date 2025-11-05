@@ -109,8 +109,8 @@ const PersonalPulseCard: React.FC<PersonalPulseCardProps> = ({ entry, rank }) =>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {/* Gut Vote Badge */}
-          <span className={`px-2 py-1 text-xs font-medium rounded ${getGutVoteBadge(entry.gutVote)}`}>
-            GUT: {entry.gutVote}
+          <span className="px-2 py-1 text-xs font-medium rounded bg-cyan-900 text-cyan-300">
+            AI: {entry.confidence}%
           </span>
 
           {/* Trend Icon */}

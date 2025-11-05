@@ -17,6 +17,7 @@ from ..models.precomputed_analysis import PrecomputedAnalysis, PrecomputeJobStat
 from ..models.stock import Stock
 from ..analyzers.confidence import ConfidenceScorer
 from ..services.stock_data import StockDataService
+from ..services.enhanced_economic_events_analyzer import EnhancedEconomicEventsAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -299,3 +300,239 @@ def trigger_update_top_stocks(market_hours: bool = True):
 def trigger_update_single_stock(symbol: str):
     """Manually trigger update of a single stock."""
     return update_single_stock.delay(symbol=symbol.upper())
+
+
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=300)
+def update_economic_data_batch(self, symbols: Optional[List[str]] = None):
+    """
+    Batch update economic data for stocks to avoid real-time API hits.
+
+    This task runs daily to pre-fetch economic data (SEC, FRED, BLS)
+    and cache it for use in real-time analysis.
+
+    Args:
+        symbols: Optional list of symbols to update (defaults to TOP_STOCKS)
+    """
+    job_id = self.request.id
+    symbols_to_update = symbols or TOP_STOCKS
+
+    logger.info(f"Starting economic data batch update {job_id} for {len(symbols_to_update)} stocks")
+
+    # Create job status record
+    db = SessionLocal()
+    try:
+        job_status = PrecomputeJobStatus(
+            job_id=job_id,
+            job_type="update_economic_data",
+            symbols=symbols_to_update,
+            market_hours=False,  # Economic data updates are not market-hours dependent
+            status="RUNNING",
+            started_at=datetime.now()
+        )
+        db.add(job_status)
+        db.commit()
+
+        # Run the async economic data update
+        result = asyncio.run(_update_economic_data_async(
+            symbols_to_update, job_id
+        ))
+
+        # Update job status
+        job_status.status = "SUCCESS" if result["success"] else "FAILED"
+        job_status.completed_at = datetime.now()
+        job_status.symbols_processed = result["processed"]
+        job_status.symbols_failed = result["failed"]
+        job_status.total_api_calls = result["api_calls"]
+        job_status.total_time_seconds = result["total_time"]
+        job_status.average_time_per_symbol = result["avg_time_per_symbol"]
+        job_status.error_messages = result["errors"]
+
+        db.commit()
+
+        logger.info(f"Economic data batch update {job_id} completed: {result}")
+        return result
+
+    except Exception as e:
+        logger.error(f"Economic data batch update {job_id} failed: {e}")
+
+        # Update job status to failed
+        if 'job_status' in locals():
+            job_status.status = "FAILED"
+            job_status.completed_at = datetime.now()
+            job_status.error_messages = [str(e)]
+            db.commit()
+
+        # Retry with exponential backoff
+        raise self.retry(exc=e, countdown=5 * 60 * (2 ** self.request.retries))  # 5, 10, 20 minutes
+
+    finally:
+        db.close()
+
+
+async def _update_economic_data_async(
+    symbols: List[str],
+    job_id: str
+) -> Dict[str, Any]:
+    """Async function to batch update economic data."""
+    start_time = time.time()
+    processed = 0
+    failed = 0
+    total_api_calls = 0
+    errors = []
+
+    economic_analyzer = EnhancedEconomicEventsAnalyzer()
+
+    for symbol in symbols:
+        try:
+            logger.info(f"Updating economic data for {symbol} in job {job_id}")
+
+            # Pre-fetch and cache economic analysis
+            analysis_start = time.time()
+            economic_analysis = await economic_analyzer.analyze_stock_economic_impact(
+                symbol, use_cache=False  # Force fresh data for batch updates
+            )
+            analysis_time = int((time.time() - analysis_start) * 1000)
+
+            # The analysis is automatically cached by the analyzer
+            processed += 1
+            total_api_calls += 3  # Approximate: SEC + FRED + BLS calls
+
+            logger.info(f"Successfully updated economic data for {symbol} in {analysis_time}ms")
+            logger.info(f"  - Overall score: {economic_analysis.overall_economic_score:.3f}")
+            logger.info(f"  - Insider sentiment: {economic_analysis.insider_sentiment_score:.3f}")
+            logger.info(f"  - Institutional flow: {economic_analysis.institutional_flow_score:.3f}")
+
+        except Exception as e:
+            failed += 1
+            error_msg = f"{symbol}: {str(e)}"
+            errors.append(error_msg)
+            logger.error(f"Failed to update economic data for {symbol}: {e}")
+
+        # Delay between symbols to respect API rate limits
+        await asyncio.sleep(2)  # 2 second delay between symbols
+
+    total_time = time.time() - start_time
+    avg_time_per_symbol = total_time / len(symbols) if symbols else 0
+
+    return {
+        "success": failed == 0,
+        "processed": processed,
+        "failed": failed,
+        "total_time": total_time,
+        "avg_time_per_symbol": avg_time_per_symbol,
+        "api_calls": total_api_calls,
+        "errors": errors
+    }
+
+
+def trigger_economic_data_update(symbols: Optional[List[str]] = None):
+    """Manually trigger economic data batch update."""
+    return update_economic_data_batch.delay(symbols=symbols)
+
+
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=300)
+def monitor_watchlist_stocks(self):
+    """
+    Monitor watchlist stocks for significant events during market hours.
+
+    Runs every 60 minutes during market hours to check for:
+    1. Fresh insider buying/selling (>$500k or 3+ filers in 24h)
+    2. Major 13F change (top-10 holder ±10% QoQ)
+    3. Macro catalyst (CPI, FOMC, Jobs, Earnings date confirmed)
+
+    Reuses existing infrastructure with zero new costs.
+    """
+    job_id = self.request.id
+
+    logger.info(f"Starting watchlist stock monitoring {job_id}")
+
+    # Create job status record
+    db = SessionLocal()
+    try:
+        job_status = PrecomputeJobStatus(
+            job_id=job_id,
+            job_type="monitor_watchlist_stocks",
+            symbols=[],  # Will be populated with monitored symbols
+            market_hours=True,  # Only runs during market hours
+            status="RUNNING",
+            started_at=datetime.now()
+        )
+        db.add(job_status)
+        db.commit()
+
+        # Run the async monitoring
+        result = asyncio.run(_monitor_watchlist_stocks_async(job_id))
+
+        # Update job status
+        job_status.status = "SUCCESS" if result["success"] else "FAILED"
+        job_status.completed_at = datetime.now()
+        job_status.symbols_processed = result.get("stocks_monitored", 0)
+        job_status.symbols_failed = len(result.get("errors", []))
+        job_status.total_api_calls = result.get("api_calls_made", 0)
+        job_status.total_time_seconds = result.get("total_time", 0)
+        job_status.average_time_per_symbol = (
+            result.get("total_time", 0) / max(result.get("stocks_monitored", 1), 1)
+        )
+        job_status.error_messages = result.get("errors", [])
+
+        # Store monitored symbols for tracking
+        job_status.symbols = [
+            alert["symbol"] for alert in result.get("alerts", [])
+        ]
+
+        db.commit()
+
+        logger.info(f"Watchlist monitoring {job_id} completed: {result}")
+        return result
+
+    except Exception as e:
+        logger.error(f"Watchlist monitoring {job_id} failed: {e}")
+
+        # Update job status to failed
+        if 'job_status' in locals():
+            job_status.status = "FAILED"
+            job_status.completed_at = datetime.now()
+            job_status.error_messages = [str(e)]
+            db.commit()
+
+        # Retry with exponential backoff
+        raise self.retry(exc=e, countdown=5 * 60 * (2 ** self.request.retries))  # 5, 10, 20 minutes
+
+    finally:
+        db.close()
+
+
+async def _monitor_watchlist_stocks_async(job_id: str) -> Dict[str, Any]:
+    """Async function to monitor watchlist stocks."""
+    from ..services.stock_monitoring_service import StockMonitoringService
+
+    start_time = time.time()
+
+    try:
+        # Initialize monitoring service
+        monitoring_service = StockMonitoringService()
+
+        # Run monitoring
+        result = await monitoring_service.monitor_watchlist_stocks()
+
+        # Add job tracking info
+        result["job_id"] = job_id
+        result["api_calls_made"] = result.get("stocks_monitored", 0) * 3  # Approximate API calls
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Async watchlist monitoring failed: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "job_id": job_id,
+            "total_time": time.time() - start_time,
+            "stocks_monitored": 0,
+            "alerts_generated": 0
+        }
+
+
+def trigger_watchlist_monitoring():
+    """Manually trigger watchlist stock monitoring."""
+    return monitor_watchlist_stocks.delay()

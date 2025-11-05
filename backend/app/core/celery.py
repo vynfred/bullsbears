@@ -14,7 +14,8 @@ celery_app = Celery(
         "app.tasks.precompute",
         "app.tasks.performance_updater",
         "app.tasks.daily_scan",
-        "app.tasks.weekly_retrain"
+        "app.tasks.weekly_retrain",
+        "app.tasks.notification_checker"
     ]
 )
 
@@ -97,6 +98,20 @@ celery_app.conf.update(
             "task": "app.tasks.weekly_retrain.weekly_retrain_models",
             "schedule": "0 6 * * 0",  # 6:00 AM UTC on Sundays
             "options": {"queue": "ml_training"}
+        },
+
+        # Daily economic data batch update
+        "economic-data-batch-update": {
+            "task": "app.tasks.precompute.update_economic_data_batch",
+            "schedule": "0 10 * * *",  # 10:00 AM UTC daily (6:00 AM ET)
+            "options": {"queue": "precompute"}
+        },
+
+        # Watchlist stock monitoring (market hours only)
+        "watchlist-stock-monitoring": {
+            "task": "app.tasks.precompute.monitor_watchlist_stocks",
+            "schedule": 3600.0,  # Every 60 minutes
+            "options": {"queue": "precompute"}
         }
     },
     

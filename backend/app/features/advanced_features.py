@@ -293,7 +293,62 @@ class AdvancedFeatureEngineer:
             # Fill with defaults
             for col in ['momentum_sentiment', 'trend_strength', 'fear_greed_proxy']:
                 df[col] = 0.0
-        
+
+        return df
+
+    async def add_economic_features(self, df: pd.DataFrame, symbol: str) -> pd.DataFrame:
+        """
+        Add economic and insider trading features.
+
+        Features added:
+        - insider_sentiment_score: Net insider buying/selling sentiment (0-1)
+        - institutional_flow_score: Net institutional flow momentum (-1 to 1)
+        - economic_headwind_tailwind: Macro economic conditions (-1 to 1)
+        - event_catalyst_score: Proximity to economic events (0-1)
+        - economic_confidence: Overall confidence in economic analysis (0-1)
+        - risk_factor_count: Number of identified risk factors
+        - bullish_catalyst_count: Number of bullish catalysts
+        - bearish_catalyst_count: Number of bearish catalysts
+        """
+        try:
+            logger.info(f"📊 Adding economic features for {symbol}...")
+
+            # Import here to avoid circular imports
+            from ..services.enhanced_economic_events_analyzer import EnhancedEconomicEventsAnalyzer
+
+            # Get economic analysis
+            economic_analyzer = EnhancedEconomicEventsAnalyzer()
+            economic_features = await economic_analyzer.get_economic_features_for_ml(symbol)
+
+            # Add features to dataframe
+            for feature_name, feature_value in economic_features.items():
+                df[feature_name] = feature_value
+
+            logger.info(f"✅ Added {len(economic_features)} economic features for {symbol}")
+            logger.info(f"   - Insider sentiment: {economic_features.get('economic_insider_sentiment', 0):.3f}")
+            logger.info(f"   - Institutional flow: {economic_features.get('economic_institutional_flow', 0):.3f}")
+            logger.info(f"   - Macro score: {economic_features.get('economic_macro_score', 0):.3f}")
+            logger.info(f"   - Overall score: {economic_features.get('economic_overall_score', 0):.3f}")
+
+        except Exception as e:
+            logger.error(f"❌ Economic features failed for {symbol}: {e}")
+            # Fill with defaults if economic analysis fails
+            default_economic_features = {
+                'economic_overall_score': 0.0,
+                'economic_insider_sentiment': 0.0,
+                'economic_institutional_flow': 0.0,
+                'economic_macro_score': 0.0,
+                'economic_confidence': 0.0,
+                'economic_risk_factor_count': 0,
+                'economic_bullish_catalyst_count': 0,
+                'economic_bearish_catalyst_count': 0
+            }
+
+            for feature_name, feature_value in default_economic_features.items():
+                df[feature_name] = feature_value
+
+            logger.warning(f"⚠️  Economic features unavailable for {symbol}, using defaults")
+
         return df
     
     async def engineer_all_features(self, df: pd.DataFrame, symbol: str) -> pd.DataFrame:
@@ -305,6 +360,7 @@ class AdvancedFeatureEngineer:
         df = await self.add_options_flow_features(df, symbol)
         df = self.add_market_microstructure_features(df)
         df = self.add_sentiment_features(df, symbol)
+        df = await self.add_economic_features(df, symbol)
 
         # Clean up any NaNs or infinite values introduced by advanced features
         logger.info("🧹 Cleaning advanced features...")
@@ -315,7 +371,8 @@ class AdvancedFeatureEngineer:
         # Fill NaNs in advanced features with appropriate defaults
         advanced_feature_cols = [col for col in df.columns if any(keyword in col.lower() for keyword in
                                ['short', 'options', 'put_call', 'volume_oi', 'gamma', 'spread', 'liquidity',
-                                'buying_pressure', 'selling_pressure', 'momentum_sentiment', 'trend_strength', 'fear_greed'])]
+                                'buying_pressure', 'selling_pressure', 'momentum_sentiment', 'trend_strength', 'fear_greed',
+                                'economic', 'insider', 'institutional', 'macro', 'catalyst', 'risk_factor'])]
 
         for col in advanced_feature_cols:
             if df[col].isna().any():

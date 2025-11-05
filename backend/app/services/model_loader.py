@@ -43,7 +43,7 @@ class ModelLoader:
         self.cached_models = {}
         self.model_metadata = {}
         self.shap_explainer = None
-        self.confidence_threshold = 0.70  # Adjusted for ensemble models
+        self.confidence_threshold = 0.48  # Lowered to 48% for more picks - let users decide
 
         # Ensure models directory exists
         self.models_dir.mkdir(parents=True, exist_ok=True)
@@ -59,19 +59,22 @@ class ModelLoader:
             logger.info("🚀 Loading ML models into cache...")
             
             # Find latest model files - prioritize ensemble models
-            moon_model_file = self._find_latest_model_file("moon_ensemble", "moon_model")
-            rug_model_file = self._find_latest_model_file("rug_ensemble", "rug_model")
+            # Support both new (bullish/bearish) and legacy (moon/rug) model names
+            bullish_model_file = (self._find_latest_model_file("bullish_ensemble", "bullish_model") or
+                                 self._find_latest_model_file("moon_ensemble", "moon_model"))
+            bearish_model_file = (self._find_latest_model_file("bearish_ensemble", "bearish_model") or
+                                 self._find_latest_model_file("rug_ensemble", "rug_model"))
             shap_file = self._find_latest_model_file("shap_explainer")
-            
-            if not moon_model_file or not rug_model_file:
+
+            if not bullish_model_file or not bearish_model_file:
                 logger.error("❌ Required model files not found")
                 return False
-            
-            # Load moon model
-            moon_success = await self._load_single_model("moon", moon_model_file)
-            
-            # Load rug model  
-            rug_success = await self._load_single_model("rug", rug_model_file)
+
+            # Load bullish model (maps to internal "bullish" key but can load moon files)
+            bullish_success = await self._load_single_model("bullish", bullish_model_file)
+
+            # Load bearish model (maps to internal "bearish" key but can load rug files)
+            bearish_success = await self._load_single_model("bearish", bearish_model_file)
             
             # Load SHAP explainer (optional)
             if shap_file:
@@ -81,12 +84,12 @@ class ModelLoader:
                 except Exception as e:
                     logger.warning(f"⚠️  SHAP explainer failed to load: {e}")
             
-            success = moon_success and rug_success
-            
+            success = bullish_success and bearish_success
+
             if success:
                 logger.info("🎉 All ML models loaded successfully!")
-                logger.info(f"🌙 Moon model: {self.model_metadata['moon'].accuracy:.1%} accuracy")
-                logger.info(f"💥 Rug model: {self.model_metadata['rug'].accuracy:.1%} accuracy")
+                logger.info(f"📈 Bullish model: {self.model_metadata['bullish'].accuracy:.1%} accuracy")
+                logger.info(f"📉 Bearish model: {self.model_metadata['bearish'].accuracy:.1%} accuracy")
                 logger.info(f"🎯 Confidence threshold: {self.confidence_threshold:.0%}")
             else:
                 logger.error("❌ Failed to load required models")
@@ -242,29 +245,38 @@ class ModelLoader:
             logger.error(f"Error finding model files: {e}")
             return None
     
+    async def predict_bullish(self, features: Dict[str, float]) -> Tuple[float, Dict[str, Any]]:
+        """
+        Predict bullish indication probability using cached model.
+
+        Args:
+            features: Dictionary of feature values
+
+        Returns:
+            Tuple of (confidence, prediction_details)
+        """
+        return await self._predict_with_model("bullish", features)
+
+    async def predict_bearish(self, features: Dict[str, float]) -> Tuple[float, Dict[str, Any]]:
+        """
+        Predict bearish indication probability using cached model.
+
+        Args:
+            features: Dictionary of feature values
+
+        Returns:
+            Tuple of (confidence, prediction_details)
+        """
+        return await self._predict_with_model("bearish", features)
+
+    # Legacy aliases for backward compatibility during transition
     async def predict_moon(self, features: Dict[str, float]) -> Tuple[float, Dict[str, Any]]:
-        """
-        Predict moon probability using cached model.
-        
-        Args:
-            features: Dictionary of feature values
-            
-        Returns:
-            Tuple of (confidence, prediction_details)
-        """
-        return await self._predict_with_model("moon", features)
-    
+        """Legacy alias for predict_bullish - will be deprecated"""
+        return await self.predict_bullish(features)
+
     async def predict_rug(self, features: Dict[str, float]) -> Tuple[float, Dict[str, Any]]:
-        """
-        Predict rug probability using cached model.
-        
-        Args:
-            features: Dictionary of feature values
-            
-        Returns:
-            Tuple of (confidence, prediction_details)
-        """
-        return await self._predict_with_model("rug", features)
+        """Legacy alias for predict_bearish - will be deprecated"""
+        return await self.predict_bearish(features)
     
     async def _predict_with_model(self, model_type: str, features: Dict[str, float]) -> Tuple[float, Dict[str, Any]]:
         """Internal method to make predictions with cached models."""
@@ -439,8 +451,8 @@ class ModelLoader:
             "confidence_threshold": self.confidence_threshold,
             "last_check": datetime.now().isoformat()
         }
-        
-        for model_type in ["moon", "rug"]:
+
+        for model_type in ["bullish", "bearish"]:
             if model_type in self.model_metadata:
                 info = self.model_metadata[model_type]
                 model_health = {
@@ -480,12 +492,21 @@ async def get_model_loader() -> ModelLoader:
     
     return _model_loader
 
-async def predict_moon_ml(features: Dict[str, float]) -> Tuple[float, Dict[str, Any]]:
-    """Convenience function for moon prediction."""
+async def predict_bullish_ml(features: Dict[str, float]) -> Tuple[float, Dict[str, Any]]:
+    """Convenience function for bullish indication prediction."""
     loader = await get_model_loader()
-    return await loader.predict_moon(features)
+    return await loader.predict_bullish(features)
+
+async def predict_bearish_ml(features: Dict[str, float]) -> Tuple[float, Dict[str, Any]]:
+    """Convenience function for bearish indication prediction."""
+    loader = await get_model_loader()
+    return await loader.predict_bearish(features)
+
+# Legacy aliases for backward compatibility
+async def predict_moon_ml(features: Dict[str, float]) -> Tuple[float, Dict[str, Any]]:
+    """Legacy alias for predict_bullish_ml - will be deprecated"""
+    return await predict_bullish_ml(features)
 
 async def predict_rug_ml(features: Dict[str, float]) -> Tuple[float, Dict[str, Any]]:
-    """Convenience function for rug prediction."""
-    loader = await get_model_loader()
-    return await loader.predict_rug(features)
+    """Legacy alias for predict_bearish_ml - will be deprecated"""
+    return await predict_bearish_ml(features)

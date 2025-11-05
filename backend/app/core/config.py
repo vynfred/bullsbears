@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     polygon_api_key: Optional[str] = Field(None, env="POLYGON_API_KEY")
     newsapi_key: Optional[str] = Field(None, env="NEWS_API_KEY")
 
+    # API Keys - Economic & Regulatory Data
+    sec_api_key: str = Field(..., env="SEC_API")
+    fred_api_key: str = Field(..., env="fred_api_key")
+    bls_api_key: str = Field(..., env="BUREEAU_OF_LABOR_STATS_API_KEY")
+
     # API Keys - AI Services (Dual AI System)
     grok_api_key: str = Field(..., env="GROK_API_KEY")
     deepseek_api_key: str = Field(..., env="DEEPSEEK_API_KEY")

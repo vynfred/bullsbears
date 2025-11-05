@@ -10,10 +10,13 @@ from ..core.database import Base
 
 
 class AlertType(enum.Enum):
-    """Alert types for moon/rug pattern recognition"""
-    MOON = "MOON"  # +20% jump potential
-    RUG = "RUG"    # -20% drop potential
+    """Alert types for bullish/bearish pattern recognition"""
+    BULLISH = "BULLISH"  # +20% jump potential
+    BEARISH = "BEARISH"    # -20% drop potential
     GENERAL = "GENERAL"  # General stock analysis
+    # Legacy values for backward compatibility
+    MOON = "MOON"  # Deprecated: use BULLISH
+    RUG = "RUG"    # Deprecated: use BEARISH
 
 
 class AlertOutcome(enum.Enum):
@@ -39,12 +42,12 @@ class AnalysisResult(Base):
     timeframe = Column(String(10), default="1D")  # Analysis timeframe
     timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
 
-    # Moon/Rug Alert Fields (Phase 2 Extension)
+    # Bullish/Bearish Alert Fields (Phase 2 Extension)
     alert_type = Column(Enum(AlertType), default=AlertType.GENERAL, nullable=False, index=True)
     features_json = Column(JSON)  # Pre-signal features for pattern recognition
     pattern_confidence = Column(Float)  # Pattern-specific confidence (0-100)
     target_timeframe_days = Column(Integer, default=3)  # Expected days to move (1-3)
-    move_threshold_percent = Column(Float)  # Expected move percentage (+20% for moon, -20% for rug)
+    move_threshold_percent = Column(Float)  # Expected move percentage (+20% for bullish, -20% for bearish)
 
     # Alert Outcome Tracking (for self-training loop)
     alert_outcome = Column(Enum(AlertOutcome), default=AlertOutcome.PENDING, index=True)
@@ -143,7 +146,7 @@ class AnalysisResult(Base):
         # Composite indexes for time-series ML analysis
         Index('idx_symbol_created_consensus', 'symbol', 'created_at', 'consensus_score'),
         Index('idx_agreement_confidence_time', 'agreement_level', 'confidence_score', 'created_at'),
-        # Moon/Rug Alert Indexes (Phase 2 Extension)
+        # Bullish/Bearish Alert Indexes (Phase 2 Extension)
         Index('idx_alert_type_timestamp', 'alert_type', 'timestamp'),
         Index('idx_alert_outcome_timestamp', 'alert_outcome', 'outcome_timestamp'),
         Index('idx_symbol_alert_type', 'symbol', 'alert_type'),

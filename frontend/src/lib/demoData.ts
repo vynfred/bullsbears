@@ -1,7 +1,7 @@
 // Demo data for MVP Trading Co-Pilot
 // This will be replaced with live data via a single switch
 
-export interface MoonAlert {
+export interface BullishAlert {
   id: string;
   randomId: number; // Anonymous ID for gut check
   ticker: string; // Actual stock ticker (TSLA, NVDA, etc.)
@@ -17,13 +17,19 @@ export interface MoonAlert {
   entryPrice: number; // Entry price
   currentPrice?: number; // Current price (for live tracking)
   timestamp: Date;
-  gutVote?: 'UP' | 'DOWN' | 'PASS'; // User's gut vote
+  gutVote?: 'BULLISH' | 'BEARISH' | 'PASS'; // User's gut vote
   finalConfidence?: number; // After gut vote boost
   isNew?: boolean; // For notification badges
   userStreak?: number; // User's current streak
-  type: 'moon' | 'rug'; // Alert type
+  type: 'bullish' | 'bearish'; // Alert type
   daysToTarget: number; // Days to target
+  direction?: 'LONG' | 'SHORT'; // Position direction
+  sparklineData?: number[]; // Mini price history for sparkline
+  status?: 'active' | 'completed' | 'expired'; // Alert status
 }
+
+// Legacy alias for backward compatibility
+export type MoonAlert = BullishAlert;
 
 export interface HistoryEntry {
   id: string;
@@ -32,7 +38,7 @@ export interface HistoryEntry {
   companyName: string; // Company name
   callTime: Date;
   aiConfidence: number;
-  gutVote: 'UP' | 'DOWN' | 'PASS';
+  gutVote: 'BULLISH' | 'BEARISH' | 'PASS';
   targetPct: number;
   actualPct: number;
   maxGain: number; // Maximum gain during window
@@ -46,8 +52,8 @@ export interface HistoryEntry {
   finalConfidence: number;
 }
 
-// Demo moon alerts for 8:30 AM pulse
-export const demoMoonAlerts: MoonAlert[] = [
+// Demo bullish alerts for 8:30 AM pulse
+export const demoBullishAlerts: BullishAlert[] = [
   {
     id: '1',
     randomId: 47291,
@@ -63,12 +69,12 @@ export const demoMoonAlerts: MoonAlert[] = [
     },
     entryPrice: 247.80,
     currentPrice: 298.40,
-    timestamp: new Date('2024-11-03T08:30:00'),
+    timestamp: new Date('2024-11-04T08:30:00'), // Today
     isNew: true,
-    type: 'moon',
+    type: 'bullish',
     daysToTarget: 2,
     userStreak: 5,
-    gutVote: 'UP',
+    gutVote: 'BULLISH',
     finalConfidence: 94,
   },
   {
@@ -86,12 +92,34 @@ export const demoMoonAlerts: MoonAlert[] = [
     },
     entryPrice: 89.25,
     currentPrice: 95.40,
-    timestamp: new Date('2024-11-03T08:30:00'),
+    timestamp: new Date('2024-11-03T08:30:00'), // 1 day old
     isNew: true,
-    type: 'moon',
+    type: 'bullish',
     daysToTarget: 3,
-    gutVote: 'UP',
+    gutVote: 'BULLISH',
     finalConfidence: 87,
+  },
+  {
+    id: '2b',
+    randomId: 12345,
+    ticker: 'AMZN',
+    companyName: 'Amazon.com Inc',
+    confidence: 75,
+    topReason: 'Historical pattern match',
+    targetRange: {
+      low: 15,
+      avg: 20,
+      high: 28,
+      estimatedDays: 2
+    },
+    entryPrice: 145.20,
+    currentPrice: 162.80, // +12.1% gain
+    timestamp: new Date('2024-10-25T08:30:00'), // 10 days old - should go to Performance
+    isNew: false,
+    type: 'bullish',
+    daysToTarget: 2,
+    gutVote: 'BULLISH',
+    finalConfidence: 80,
   },
   {
     id: '3',
@@ -110,6 +138,10 @@ export const demoMoonAlerts: MoonAlert[] = [
     currentPrice: 234.75,
     timestamp: new Date('2024-11-03T08:30:00'),
     isNew: true,
+    type: 'bullish',
+    daysToTarget: 2,
+    gutVote: 'BULLISH',
+    finalConfidence: 74,
   },
   {
     id: '4',
@@ -128,6 +160,10 @@ export const demoMoonAlerts: MoonAlert[] = [
     currentPrice: 67.80,
     timestamp: new Date('2024-11-03T08:30:00'),
     isNew: true,
+    type: 'bullish',
+    daysToTarget: 3,
+    gutVote: 'BULLISH',
+    finalConfidence: 71,
   },
   {
     id: '5',
@@ -146,6 +182,10 @@ export const demoMoonAlerts: MoonAlert[] = [
     currentPrice: 156.90,
     timestamp: new Date('2024-11-03T08:30:00'),
     isNew: true,
+    type: 'bullish',
+    daysToTarget: 2,
+    gutVote: 'BULLISH',
+    finalConfidence: 68,
   },
   {
     id: '6',
@@ -163,6 +203,11 @@ export const demoMoonAlerts: MoonAlert[] = [
     entryPrice: 98.45,
     currentPrice: 98.45,
     timestamp: new Date('2024-11-03T08:30:00'),
+    isNew: false,
+    type: 'bullish',
+    daysToTarget: 4,
+    gutVote: 'BULLISH',
+    finalConfidence: 65,
   },
   {
     id: '7',
@@ -180,6 +225,11 @@ export const demoMoonAlerts: MoonAlert[] = [
     entryPrice: 203.20,
     currentPrice: 203.20,
     timestamp: new Date('2024-11-03T08:30:00'),
+    isNew: false,
+    type: 'bullish',
+    daysToTarget: 3,
+    gutVote: 'BULLISH',
+    finalConfidence: 62,
   },
   {
     id: '8',
@@ -197,11 +247,16 @@ export const demoMoonAlerts: MoonAlert[] = [
     entryPrice: 45.60,
     currentPrice: 45.60,
     timestamp: new Date('2024-11-03T08:30:00'),
+    isNew: false,
+    type: 'bullish',
+    daysToTarget: 2,
+    gutVote: 'BULLISH',
+    finalConfidence: 59,
   }
 ];
 
-// Demo rug alerts for bearish predictions
-export const demoRugAlerts: MoonAlert[] = [
+// Demo bearish alerts for bearish predictions
+export const demoBearishAlerts: BullishAlert[] = [
   {
     id: 'r1',
     randomId: 73829,
@@ -219,9 +274,9 @@ export const demoRugAlerts: MoonAlert[] = [
     currentPrice: 19.20, // -22.6% drop
     timestamp: new Date('2024-11-03T08:30:00'),
     isNew: true,
-    type: 'rug',
+    type: 'bearish',
     daysToTarget: 2,
-    gutVote: 'DOWN',
+    gutVote: 'BEARISH',
     finalConfidence: 83,
   },
   {
@@ -241,9 +296,9 @@ export const demoRugAlerts: MoonAlert[] = [
     currentPrice: 89.50,
     timestamp: new Date('2024-11-03T08:30:00'),
     isNew: true,
-    type: 'rug',
+    type: 'bearish',
     daysToTarget: 3,
-    gutVote: 'DOWN',
+    gutVote: 'BEARISH',
     finalConfidence: 76,
   },
   {
@@ -263,15 +318,19 @@ export const demoRugAlerts: MoonAlert[] = [
     currentPrice: 45.30,
     timestamp: new Date('2024-11-03T08:30:00'),
     isNew: true,
-    type: 'rug',
+    type: 'bearish',
     daysToTarget: 2,
     gutVote: 'PASS',
     finalConfidence: 65,
   }
 ];
 
+// Legacy aliases for backward compatibility
+export const demoMoonAlerts = demoBullishAlerts;
+export const demoRugAlerts = demoBearishAlerts;
+
 // Combined alerts for demo
-export const demoAllAlerts: MoonAlert[] = [...demoMoonAlerts, ...demoRugAlerts];
+export const demoAllAlerts: BullishAlert[] = [...demoBullishAlerts, ...demoBearishAlerts];
 
 // Demo history data showing various outcomes
 export const demoHistoryEntries: HistoryEntry[] = [
@@ -282,7 +341,7 @@ export const demoHistoryEntries: HistoryEntry[] = [
     companyName: 'NVIDIA Corp',
     callTime: new Date('2024-10-31T08:30:00'),
     aiConfidence: 87,
-    gutVote: 'UP',
+    gutVote: 'BULLISH',
     targetPct: 20,
     actualPct: 35,
     maxGain: 38,
@@ -302,7 +361,7 @@ export const demoHistoryEntries: HistoryEntry[] = [
     companyName: 'Tesla Inc',
     callTime: new Date('2024-10-30T08:30:00'),
     aiConfidence: 76,
-    gutVote: 'DOWN',
+    gutVote: 'BEARISH',
     targetPct: 20,
     actualPct: 19,
     maxGain: 22,
@@ -322,7 +381,7 @@ export const demoHistoryEntries: HistoryEntry[] = [
     companyName: 'Apple Inc',
     callTime: new Date('2024-10-29T08:30:00'),
     aiConfidence: 82,
-    gutVote: 'UP',
+    gutVote: 'BULLISH',
     targetPct: 20,
     actualPct: 8,
     maxGain: 12,
@@ -361,7 +420,7 @@ export const demoHistoryEntries: HistoryEntry[] = [
     companyName: 'Meta Platforms',
     callTime: new Date('2024-10-27T08:30:00'),
     aiConfidence: 71,
-    gutVote: 'UP',
+    gutVote: 'BULLISH',
     targetPct: 20,
     actualPct: -22,
     maxGain: -2,
@@ -380,7 +439,7 @@ export const demoHistoryEntries: HistoryEntry[] = [
     companyName: 'Alphabet Inc',
     callTime: new Date('2024-10-26T08:30:00'),
     aiConfidence: 85,
-    gutVote: 'DOWN',
+    gutVote: 'BEARISH',
     targetPct: 20,
     actualPct: -45,
     maxGain: -8,
@@ -555,7 +614,7 @@ export interface PersonalPulseEntry {
   anonymousId: string; // e.g., "#X9K2"
   ticker: string; // For internal tracking (not shown in pulse)
   companyName: string; // For internal tracking
-  gutVote: 'UP' | 'DOWN' | 'PASS';
+  gutVote: 'BULLISH' | 'BEARISH' | 'PASS';
   voteTime: Date;
   confidence: number; // Final confidence after gut boost
   entryPrice: number;
@@ -574,7 +633,7 @@ export const demoPersonalPulse: PersonalPulseEntry[] = [
     anonymousId: '#X9K2',
     ticker: 'NVDA',
     companyName: 'NVIDIA Corp',
-    gutVote: 'UP',
+    gutVote: 'BULLISH',
     voteTime: new Date('2024-11-01T08:35:00'),
     confidence: 93,
     entryPrice: 125.40,
@@ -589,7 +648,7 @@ export const demoPersonalPulse: PersonalPulseEntry[] = [
     anonymousId: '#M8J3',
     ticker: 'TSLA',
     companyName: 'Tesla Inc',
-    gutVote: 'UP',
+    gutVote: 'BULLISH',
     voteTime: new Date('2024-11-02T08:35:00'),
     confidence: 87,
     entryPrice: 89.75,
@@ -604,7 +663,7 @@ export const demoPersonalPulse: PersonalPulseEntry[] = [
     anonymousId: '#P1M9',
     ticker: 'AAPL',
     companyName: 'Apple Inc',
-    gutVote: 'UP',
+    gutVote: 'BULLISH',
     voteTime: new Date('2024-10-31T08:35:00'),
     confidence: 74,
     entryPrice: 156.20,
@@ -635,7 +694,7 @@ export const demoPersonalPulse: PersonalPulseEntry[] = [
     anonymousId: '#R7Q4',
     ticker: 'META',
     companyName: 'Meta Platforms',
-    gutVote: 'DOWN',
+    gutVote: 'BEARISH',
     voteTime: new Date('2024-10-29T08:35:00'),
     confidence: 76,
     entryPrice: 134.50,
