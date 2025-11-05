@@ -27,7 +27,7 @@ BullsBears.xyz is a **AI/ML-powered stock analysis app** that uses advanced mach
 - **Stock Analyzer**: Comprehensive technical and fundamental analysis
 - **Social Sentiment**: Market sentiment and social media trend analysis
 
-## Current Status Overview - ENHANCED AI/ML SYSTEM COMPLETED ✅ (November 4, 2024)
+## Current Status Overview - UX REDESIGN PHASE ⚡ (November 5, 2024)
 - **Backend**: ✅ PRODUCTION READY - Enhanced 82-feature AI/ML system with advanced predictions working perfectly
 - **Frontend Cleanup**: ✅ COMPLETED - Removed all Gut Check and Trends components (15 files deleted)
 - **Infrastructure**: ✅ READY - Docker, PostgreSQL, Redis, Celery all configured
@@ -38,7 +38,8 @@ BullsBears.xyz is a **AI/ML-powered stock analysis app** that uses advanced mach
 - **Watchlist System**: ✅ COMPLETED - Full CRUD operations, performance tracking, AI vs Watchlist comparison
 - **Enhanced AI/ML System**: ✅ COMPLETED - Relative confidence scoring, economic events, insider trading, short squeeze detection
 - **Comprehensive Data Integration**: ✅ COMPLETED - SEC/FRED/BLS services with 8 new economic features integrated into ML pipeline
-- **Current Phase**: 🎯 READY FOR PRODUCTION - All core AI/ML systems completed and integrated
+- **🎨 NEW: Figma UX Redesign**: 🚧 IN PROGRESS - Complete UI/UX overhaul with professional Figma designs
+- **Current Phase**: 🎯 UX REDESIGN - Implementing new 3-tab mobile-first design with enhanced user experience
 
 ## AI/ML-Only Workflow (November 4, 2024)
 
@@ -96,7 +97,324 @@ BullsBears.xyz is a **AI/ML-powered stock analysis app** that uses advanced mach
 - **Performance Comparison**: "AI vs My Picks" comparison metrics
 - **Enhanced Cards**: Outcome badges (WIN/PARTIAL/LOSS) + sparkline snippets
 
-## Frontend Pages Status (November 3, 2024)
+## 🎨 FIGMA UX REDESIGN - COMPLETE UI/UX OVERHAUL (November 5, 2024)
+
+### New Design System Overview
+- **Source**: Professional Figma designs with complete component library
+- **Architecture**: Mobile-first 3-tab navigation with hamburger menu
+- **Design Language**: Modern dark theme with cyberpunk aesthetics, bull/bear iconography
+- **Component Library**: Complete shadcn/ui integration with custom BullsBears styling
+- **Assets**: Professional bull/bear icons, animated logos, candle background effects
+
+### New Page Structure (3-Tab Mobile-First Design)
+1. **🔥 Picks Tab** - Daily AI bullish/bearish picks with confidence scoring
+2. **👁️ Watchlist Tab** - Personal stock tracking with waterfall equity curve charts
+3. **📊 Analytics Tab** - Performance metrics, accuracy trends, and AI vs user comparison
+
+### Key UX Improvements
+- **Mobile-First Navigation**: Hamburger menu with slide-out sidebar
+- **Enhanced Visual Hierarchy**: Clear confidence indicators, target ranges, performance badges
+- **Interactive Charts**: Waterfall equity curves, accuracy trend lines, performance comparisons
+- **Professional Branding**: Consistent bull/bear iconography, animated elements
+- **Responsive Design**: Mobile-optimized with desktop scaling
+
+### Implementation Strategy
+- **Phase 1**: Replace current page structure with new 3-tab design
+- **Phase 2**: Integrate existing API endpoints with new components
+- **Phase 3**: Implement waterfall equity curve charts for watchlist
+- **Phase 4**: Mobile optimization and responsive scaling
+- **Phase 5**: Asset integration and branding consistency
+
+---
+
+## 🚀 FIGMA UX REDESIGN - DETAILED IMPLEMENTATION ROADMAP
+
+### PHASE 1: Core Structure Migration ⚡ (Priority: IMMEDIATE)
+**Estimated Time**: 2-3 hours
+**Status**: 🚧 READY TO START
+
+#### 1.1 Replace Main App Structure
+- [ ] **Replace `frontend/src/app/layout.tsx`** with new 3-tab mobile-first layout
+- [ ] **Create new main dashboard** at `frontend/src/app/page.tsx` with tab navigation
+- [ ] **Remove legacy pages**: `/dashboard`, `/performance`, `/history`, `/pulse` routes
+- [ ] **Implement hamburger menu** with slide-out sidebar navigation
+- [ ] **Add responsive tab bar** for mobile-first experience
+
+#### 1.2 Component Library Integration
+- [ ] **Copy shadcn/ui components** from Figma design to `frontend/src/components/ui/`
+- [ ] **Integrate motion/react** for animations and transitions
+- [ ] **Copy custom styling** from Figma `src/styles/` and `src/index.css`
+- [ ] **Add bull/bear assets** from Figma `src/assets/` to `frontend/public/assets/`
+- [ ] **Implement animated logo** and candle background components
+
+### PHASE 2: Picks Tab Implementation 🔥 (Priority: HIGH)
+**Estimated Time**: 3-4 hours
+**Status**: 🚧 PENDING PHASE 1
+
+#### 2.1 Replace Pulse/Dashboard with PicksTab
+- [ ] **Copy `PicksTab.tsx`** from Figma design to `frontend/src/components/`
+- [ ] **Remove legacy components**: `Pulse.tsx`, `ActivityTabs.tsx`, `BottomTabBar.tsx`
+- [ ] **Integrate API endpoints**: Connect to `/api/v1/bullish_alerts` and `/api/v1/bearish_alerts`
+- [ ] **Map data structure**: Transform API response to match `StockPick` interface
+- [ ] **Implement confidence scoring**: HIGH 🔥, MEDIUM 📈, SPECULATIVE ⚡ badges
+
+#### 2.2 Enhanced Pick Cards
+- [ ] **Replace `AlertCard.tsx`** with new design from Figma
+- [ ] **Add collapsible details** with AI reasoning and target ranges
+- [ ] **Implement sentiment indicators** with bull/bear icons
+- [ ] **Add "Add to Watchlist"** functionality with API integration
+- [ ] **Real-time price updates** via WebSocket or polling
+
+### PHASE 3: Watchlist Tab Implementation 👁️ (Priority: HIGH)
+**Estimated Time**: 4-5 hours
+**Status**: 🚧 PENDING PHASE 2
+
+#### 3.1 Replace Watchlist with WatchlistTab
+- [ ] **Copy `WatchlistTab.tsx`** from Figma design
+- [ ] **Remove legacy**: `Watchlist.tsx`, `AIVsWatchlistDashboard.tsx`
+- [ ] **Integrate watchlist API**: Connect to existing `/api/v1/watchlist` endpoints
+- [ ] **Map watchlist data**: Transform to match `WatchlistStock` interface
+- [ ] **Implement CRUD operations**: Add, edit, delete watchlist items
+
+#### 3.2 Waterfall Equity Curve Chart (COMPLEX)
+- [ ] **Create new chart component**: `WaterfallEquityChart.tsx` using Recharts
+- [ ] **Implement waterfall logic**: Percent change from 0 base with cumulative gains/losses
+- [ ] **Add performance data**: Connect to existing performance tracking APIs
+- [ ] **Real-time updates**: Live price feeds for current positions
+- [ ] **Interactive features**: Hover tooltips, target hit indicators
+- [ ] **Mobile optimization**: Touch-friendly chart interactions
+
+### PHASE 4: Analytics Tab Implementation 📊 (Priority: MEDIUM)
+**Estimated Time**: 2-3 hours
+**Status**: 🚧 PENDING PHASE 3
+
+#### 4.1 Replace Performance with AnalyticsTab
+- [ ] **Copy `AnalyticsTab.tsx`** from Figma design
+- [ ] **Remove legacy**: `Performance.tsx`, `PerformanceDashboard.tsx`, `Analytics.tsx`
+- [ ] **Integrate performance APIs**: Connect to existing accuracy and performance endpoints
+- [ ] **Implement accuracy trends**: Line charts showing AI performance over time
+- [ ] **Add win/loss carousel**: Recent picks with outcome indicators
+- [ ] **Next scan countdown**: Real-time countdown to next AI scan
+
+### PHASE 5: Mobile Optimization & Polish ✨ (Priority: LOW)
+**Estimated Time**: 2-3 hours
+**Status**: 🚧 PENDING PHASE 4
+
+#### 5.1 Mobile-First Refinements
+- [ ] **Touch interactions**: Optimize for mobile gestures and taps
+- [ ] **Performance optimization**: Lazy loading, code splitting
+- [ ] **PWA features**: Add manifest, service worker for app-like experience
+- [ ] **Responsive scaling**: Ensure desktop compatibility
+- [ ] **Cross-browser testing**: Safari, Chrome, Firefox mobile compatibility
+
+#### 5.2 Final Integration & Testing
+- [ ] **End-to-end testing**: Complete user flows across all tabs
+- [ ] **API integration testing**: Verify all data connections work properly
+- [ ] **Performance testing**: Load times, chart rendering, real-time updates
+- [ ] **User acceptance testing**: Mobile usability and navigation flow
+
+---
+
+## 📊 DATA MAPPING & API INTEGRATION PLAN
+
+### Picks Tab Data Sources
+```typescript
+// API Endpoints
+GET /api/v1/bullish_alerts  → StockPick[] (sentiment: "bullish")
+GET /api/v1/bearish_alerts  → StockPick[] (sentiment: "bearish")
+
+// Data Transformation
+interface StockPick {
+  id: string;
+  symbol: string;           // From API: ticker
+  name: string;            // From API: company_name
+  priceAtAlert: number;    // From API: price_at_alert
+  currentPrice: number;    // Real-time via WebSocket/polling
+  confidence: number;      // From API: confidence_score (0-100)
+  reasoning: string;       // From API: ai_reasoning
+  entryPriceMin: number;   // From API: entry_range.min
+  entryPriceMax: number;   // From API: entry_range.max
+  targetPriceLow: number;  // From API: target_ranges.low
+  targetPriceMid: number;  // From API: target_ranges.mid
+  targetPriceHigh: number; // From API: target_ranges.high
+  stopLoss: number;        // From API: stop_loss_price
+  aiSummary: string;       // From API: ai_summary
+  sentiment: "bullish" | "bearish";
+}
+```
+
+### Watchlist Tab Data Sources
+```typescript
+// API Endpoints
+GET /api/v1/watchlist     → WatchlistStock[]
+POST /api/v1/watchlist    → Add stock to watchlist
+PUT /api/v1/watchlist/:id → Update watchlist item
+DELETE /api/v1/watchlist/:id → Remove from watchlist
+
+// Waterfall Chart Data
+GET /api/v1/watchlist/:id/performance → PerformanceData[]
+// Real-time price updates via WebSocket or polling
+
+interface WatchlistStock {
+  id: string;
+  symbol: string;          // User input
+  name: string;           // From stock lookup API
+  addedPrice: number;     // Price when added to watchlist
+  currentPrice: number;   // Real-time current price
+  change: number;         // Percentage change from addedPrice
+  targetLow: number;      // User-defined targets
+  targetMid: number;
+  targetHigh: number;
+  stopLoss: number;
+  notes: string;          // User notes
+  performanceData: Array<{date: string; value: number}>; // For waterfall chart
+}
+```
+
+### Analytics Tab Data Sources
+```typescript
+// API Endpoints
+GET /api/v1/analytics/accuracy → AccuracyOverTime[]
+GET /api/v1/analytics/recent-picks → RecentPicksWithOutcomes[]
+GET /api/v1/analytics/next-scan → NextScanInfo
+
+// Performance tracking from existing AI vs Watchlist system
+GET /api/v1/performance/ai-picks → AI pick performance data
+GET /api/v1/performance/user-picks → User watchlist performance data
+```
+
+---
+
+## 🗂️ COMPONENT MIGRATION PLAN
+
+### Components to REMOVE (Legacy)
+```
+❌ frontend/src/app/dashboard/page.tsx
+❌ frontend/src/app/performance/page.tsx
+❌ frontend/src/app/history/page.tsx
+❌ frontend/src/app/pulse/page.tsx
+❌ frontend/src/components/Pulse.tsx
+❌ frontend/src/components/ActivityTabs.tsx
+❌ frontend/src/components/BottomTabBar.tsx
+❌ frontend/src/components/Performance.tsx
+❌ frontend/src/components/PerformanceDashboard.tsx
+❌ frontend/src/components/Analytics.tsx
+❌ frontend/src/components/Watchlist.tsx
+❌ frontend/src/components/AIVsWatchlistDashboard.tsx
+❌ frontend/src/components/AlertCard.tsx (replace with new design)
+❌ frontend/src/components/DetailedPickCard.tsx (replace with new design)
+```
+
+### Components to ADD (From Figma)
+```
+✅ frontend/src/components/PicksTab.tsx
+✅ frontend/src/components/WatchlistTab.tsx
+✅ frontend/src/components/AnalyticsTab.tsx
+✅ frontend/src/components/AnimatedLogo.tsx
+✅ frontend/src/components/CandleBackground.tsx
+✅ frontend/src/components/WaterfallEquityChart.tsx (custom implementation)
+✅ frontend/src/components/ui/* (complete shadcn/ui library)
+```
+
+### Components to KEEP & INTEGRATE
+```
+🔄 frontend/src/components/LiveLinesChart.tsx → Adapt for Analytics tab
+🔄 frontend/src/components/NotificationSystem.tsx → Keep for alerts
+🔄 frontend/src/components/ThemeToggle.tsx → Integrate with new design
+🔄 frontend/src/components/ShareableContent.tsx → Keep for sharing features
+```
+
+---
+
+## 🛠️ TECHNICAL IMPLEMENTATION DETAILS
+
+### Waterfall Equity Curve Chart Specification
+```typescript
+// Custom chart component for watchlist performance visualization
+interface WaterfallChartProps {
+  data: Array<{
+    date: string;           // Date of price point
+    value: number;          // Cumulative % change from entry price
+    dailyChange: number;    // Daily % change
+    price: number;          // Actual stock price
+  }>;
+  entryPrice: number;       // Base price (0% line)
+  targetLevels: {          // Target price levels to show as reference lines
+    low: number;
+    mid: number;
+    high: number;
+  };
+  stopLoss: number;        // Stop loss level
+}
+
+// Chart Features:
+// - Zero baseline (entry price = 0% change)
+// - Waterfall bars showing daily gains/losses
+// - Cumulative line showing total performance
+// - Reference lines for targets and stop loss
+// - Mobile-optimized touch interactions
+// - Real-time updates via WebSocket
+```
+
+### Mobile-First Responsive Breakpoints
+```css
+/* Mobile First (320px+) */
+.mobile-first { /* Default styles */ }
+
+/* Tablet (768px+) */
+@media (min-width: 768px) { /* Tablet adaptations */ }
+
+/* Desktop (1024px+) */
+@media (min-width: 1024px) { /* Desktop enhancements */ }
+
+/* Large Desktop (1440px+) */
+@media (min-width: 1440px) { /* Large screen optimizations */ }
+```
+
+### Performance Requirements
+- **Initial Load**: < 3 seconds on mobile 3G
+- **Tab Switching**: < 200ms transition animations
+- **Chart Rendering**: < 500ms for waterfall equity curves
+- **Real-time Updates**: < 100ms price update latency
+- **Touch Response**: < 16ms touch interaction feedback
+
+---
+
+## ✅ SUCCESS CRITERIA & VALIDATION
+
+### Phase 1 Success Criteria
+- [ ] **Navigation**: 3-tab structure works on mobile devices
+- [ ] **Hamburger Menu**: Slide-out sidebar functions properly
+- [ ] **Responsive**: Layout adapts from 320px to 1440px+ screens
+- [ ] **Assets**: Bull/bear icons and branding elements display correctly
+
+### Phase 2 Success Criteria
+- [ ] **API Integration**: Picks tab displays real bullish/bearish alerts
+- [ ] **Confidence Scoring**: HIGH/MEDIUM/SPECULATIVE badges show correctly
+- [ ] **Real-time Prices**: Current prices update automatically
+- [ ] **Add to Watchlist**: Users can add picks to watchlist successfully
+
+### Phase 3 Success Criteria
+- [ ] **Watchlist CRUD**: Add, edit, delete watchlist items works
+- [ ] **Waterfall Chart**: Equity curve displays performance correctly
+- [ ] **Performance Tracking**: Shows cumulative gains/losses accurately
+- [ ] **Target Indicators**: Reference lines for targets and stop loss
+
+### Phase 4 Success Criteria
+- [ ] **Analytics Display**: Accuracy trends and performance metrics show
+- [ ] **Win/Loss Tracking**: Recent picks carousel with outcomes
+- [ ] **Countdown Timer**: Next scan countdown updates in real-time
+- [ ] **Performance Comparison**: AI vs user picks comparison
+
+### Phase 5 Success Criteria
+- [ ] **Mobile UX**: Smooth touch interactions and gestures
+- [ ] **Performance**: All pages load under 3 seconds on mobile
+- [ ] **Cross-browser**: Works on Safari, Chrome, Firefox mobile
+- [ ] **PWA Ready**: App-like experience with offline capabilities
+
+---
+
+## Frontend Pages Status (November 3, 2024) - LEGACY (TO BE REPLACED)
 
 ### Completed Pages ✅
 - **`/pulse`** - Main pulse page with Moon/Rug tabs, sorting, and completed picks display
