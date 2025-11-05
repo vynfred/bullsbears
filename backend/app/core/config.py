@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     finnhub_api_key: Optional[str] = Field(None, env="FINNHUB_API_KEY")
     polygon_api_key: Optional[str] = Field(None, env="POLYGON_API_KEY")
     newsapi_key: Optional[str] = Field(None, env="NEWS_API_KEY")
+    databento_api_key: Optional[str] = Field(None, env="DATABENTO_API_KEY")
 
     # API Keys - Economic & Regulatory Data
     sec_api_key: str = Field(..., env="SEC_API")
