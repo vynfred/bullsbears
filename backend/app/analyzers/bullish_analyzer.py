@@ -102,7 +102,7 @@ class BullishAnalyzer:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit"""
         if self.redis_client:
-            await self.redis_client.close()
+            await self.redis_client.disconnect()
 
     async def analyze_bullish_potential(self, symbol: str, company_name: str = None) -> Optional[BullishAlert]:
         """
@@ -120,8 +120,8 @@ class BullishAnalyzer:
             logger.info(f"🔍 Analyzing bullish potential for {symbol}")
 
             # Use existing confidence scorer for comprehensive analysis
-            analysis_result = await self.confidence_scorer.analyze_symbol(
-                symbol, company_name or symbol
+            analysis_result = await self.confidence_scorer.analyze_stock(
+                symbol, None, company_name or symbol
             )
 
             if not analysis_result:

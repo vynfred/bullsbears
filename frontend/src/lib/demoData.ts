@@ -724,7 +724,7 @@ export const getStaleEntries = (): PersonalPulseEntry[] => {
 };
 
 // Switch for demo vs live data
-export const USE_DEMO_DATA = true; // Set to false for live data
+export const USE_DEMO_DATA = false; // Set to false for live data
 
 // Helper functions
 export const getRandomNumericId = (): number => {

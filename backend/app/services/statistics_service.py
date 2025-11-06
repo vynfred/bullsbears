@@ -13,7 +13,7 @@ from ..core.database import get_db
 from ..models.analysis_results import AnalysisResult, AlertType, AlertOutcome
 from ..models.watchlist import WatchlistEntry
 from ..models.dual_ai_training import DualAITrainingData
-from ..core.redis_client import redis_client
+from ..core.redis_client import redis_client, get_redis_client, get_redis_client
 
 logger = logging.getLogger(__name__)
 

@@ -598,6 +598,30 @@ async def get_rate_limit_status():
             "can_generate": True
         }
 
+# Manual trigger endpoints for testing
+@app.post("/api/v1/trigger-daily-scan")
+async def trigger_daily_scan():
+    """Manually trigger daily scan for testing purposes."""
+    try:
+        from .tasks.daily_scan import combined_daily_scan
+
+        # Trigger the scan task
+        task = combined_daily_scan.delay()
+
+        return {
+            "success": True,
+            "message": "Daily scan triggered successfully",
+            "task_id": task.id if hasattr(task, 'id') else None,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error triggering daily scan: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
 # Include API routers (will be added in next phase)
 # from .api.v1 import api_router
 # app.include_router(api_router, prefix="/api/v1")
