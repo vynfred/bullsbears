@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { motion } from "motion/react";
 import bullIcon from "figma:asset/c3e770b966b6d5a416d8c1f7ae65662c5d1ec823.png";
 import bearIcon from "figma:asset/0d71900b25ab7a4faa6af5a8479b89c8c8ed3aa8.png";
+import { usePicksStatistics } from "../../../frontend/src/hooks/useStatistics";
 
 interface StockPick {
   id: string;
@@ -269,6 +270,13 @@ export function PicksTab() {
     seconds: 30
   });
 
+  // Get live statistics
+  const { picksStats, isLoading: statsLoading, error: statsError } = usePicksStatistics({
+    refreshInterval: 300000, // 5 minutes
+    enabled: true,
+    autoRefresh: true
+  });
+
   useEffect(() => {
     const timer = setInterval(() => {
       setCountdown(prev => {
@@ -338,9 +346,12 @@ export function PicksTab() {
   const allPicks = timePeriod === "today" ? mockPicks : [...mockPicks, ...recentPicks];
   const sortedPicks = sortPicks(allPicks);
 
-  const picksCount = allPicks.length;
-  const bullishCount = allPicks.filter(p => p.sentiment === "bullish").length;
-  const bearishCount = allPicks.filter(p => p.sentiment === "bearish").length;
+  // Use live statistics if available, fallback to mock data
+  const picksCount = picksStats?.total_picks_today ?? allPicks.length;
+  const bullishCount = picksStats?.bullish_count ?? allPicks.filter(p => p.sentiment === "bullish").length;
+  const bearishCount = picksStats?.bearish_count ?? allPicks.filter(p => p.sentiment === "bearish").length;
+  const avgConfidence = picksStats?.avg_confidence ?? 75;
+  const weekWinRate = picksStats?.week_win_rate ?? 68;
 
   const formatTimeToTarget = (hours: number): string => {
     const days = Math.floor(hours / 24);

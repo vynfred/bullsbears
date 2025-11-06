@@ -25,6 +25,7 @@ from ..core.celery_app import celery_app
 from ..core.database import get_db
 from ..models.analysis_results import AnalysisResult, AlertType, AlertOutcome
 from ..core.config import settings
+from ..services.ml_feedback_service import ml_feedback_service
 
 logger = logging.getLogger(__name__)
 
@@ -192,25 +193,59 @@ def update_alert_outcomes(self):
     try:
         logger.info("Starting alert outcome updates")
         start_time = datetime.now()
-        
+
         # Get pending alerts that are old enough to evaluate (3+ days)
         cutoff_date = datetime.now() - timedelta(days=3)
         updated_count = _update_pending_outcomes(cutoff_date)
-        
+
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
-        
+
         logger.info(f"Updated {updated_count} alert outcomes in {duration:.1f}s")
-        
+
         return {
             "status": "success",
             "updated_alerts": updated_count,
             "duration_seconds": duration
         }
-        
+
     except Exception as e:
         logger.error(f"Alert outcome update failed: {e}")
         raise self.retry(countdown=1800, exc=e)  # Retry in 30 minutes
+
+
+@celery_app.task(bind=True)
+def track_target_hits_for_ml(self):
+    """
+    Track target hits (low/medium/high) for ML feedback learning.
+    Runs every 4 hours during market hours to capture target hits quickly.
+    """
+    try:
+        logger.info("🎯 Starting ML target hit tracking")
+        start_time = datetime.now()
+
+        db = next(get_db())
+        try:
+            # Use the ML feedback service to track target hits
+            results = asyncio.run(ml_feedback_service.track_target_hits(db))
+
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+
+            logger.info(f"🎯 ML target hit tracking completed in {duration:.1f}s: {results}")
+
+            return {
+                "status": "success",
+                "duration_seconds": duration,
+                **results
+            }
+
+        finally:
+            db.close()
+
+    except Exception as e:
+        logger.error(f"💥 ML target hit tracking failed: {e}")
+        raise self.retry(countdown=3600, exc=e)  # Retry in 1 hour
 
 
 def _get_training_data(weeks_back: int = 4) -> pd.DataFrame:

@@ -145,13 +145,13 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add CORS middleware
+# Add CORS middleware - Allow all origins for development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.get_allowed_origins(),
-    allow_credentials=True,
-    allow_methods=settings.get_allowed_methods(),
-    allow_headers=settings.get_allowed_headers(),
+    allow_origins=["*"],
+    allow_credentials=False,  # Must be False when allow_origins=["*"]
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Add trusted host middleware for security
@@ -192,6 +192,10 @@ app.include_router(bearish_alerts.router, prefix="/api/v1", tags=["bearish-alert
 # Import and include notifications router (Watchlist Monitoring)
 from .api.v1 import notifications
 app.include_router(notifications.router, prefix="/api/v1", tags=["notifications"])
+
+# Import and include statistics router (Badge Data Accuracy)
+from .api.v1 import statistics
+app.include_router(statistics.router, prefix="/api/v1", tags=["statistics"])
 
 
 

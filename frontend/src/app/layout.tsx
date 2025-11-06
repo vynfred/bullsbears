@@ -9,6 +9,8 @@ const inter = Inter({
   weight: ["300", "400", "500", "600", "700"],
 });
 
+
+
 export const metadata: Metadata = {
   title: "BullsBears - AI Stock & Options Analysis",
   description: "Clean, simple AI-powered stock and options trading analysis platform",

@@ -24,6 +24,10 @@ class NotificationType(Enum):
     PRICE_ALERT = "price_alert"
     PERFORMANCE_MILESTONE = "performance_milestone"
     DAILY_SUMMARY = "daily_summary"
+    BULLISH_SENTIMENT = "bullish_sentiment"
+    BEARISH_SENTIMENT = "bearish_sentiment"
+    VOLUME_SPIKE = "volume_spike"
+    MOMENTUM_SHIFT = "momentum_shift"
 
 
 class AlertSeverity(Enum):
@@ -304,3 +308,166 @@ class WatchlistNotificationService:
         except Exception as e:
             logger.error(f"Error generating daily summary: {e}")
             return None
+
+    async def send_price_alert(self, alert: Dict) -> bool:
+        """Send price alert notification"""
+        try:
+            # Create notification from alert data
+            notification = WatchlistNotification(
+                id=f"alert_{alert['symbol']}_{int(datetime.now().timestamp())}",
+                entry_id=alert.get('entry_id', 0),
+                symbol=alert['symbol'],
+                notification_type=NotificationType.PRICE_ALERT,
+                severity=AlertSeverity.MEDIUM,
+                title=f"{alert['symbol']} Price Alert",
+                message=alert['message'],
+                current_price=alert['current_price'],
+                entry_price=alert.get('entry_price', alert['current_price']),
+                target_price=alert.get('target_price'),
+                stop_loss_price=alert.get('stop_loss_price'),
+                gain_percent=alert.get('gain_percent', 0),
+                gain_dollars=alert.get('gain_dollars', 0),
+                timestamp=datetime.now(),
+                metadata=alert
+            )
+
+            # Send notification
+            await self._send_notification(notification)
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to send price alert: {e}")
+            return False
+
+    async def send_sentiment_alert(self, symbol: str, sentiment_type: str, confidence: float,
+                                 current_price: float, entry_price: float,
+                                 sentiment_data: Dict) -> bool:
+        """Send bullish/bearish sentiment alert"""
+        try:
+            # Determine notification type and severity
+            if sentiment_type.lower() == 'bullish':
+                notification_type = NotificationType.BULLISH_SENTIMENT
+                title = f"🚀 {symbol} Bullish Sentiment"
+                message = f"Strong bullish signals detected for {symbol} (confidence: {confidence:.1f}%)"
+                severity = AlertSeverity.HIGH if confidence > 80 else AlertSeverity.MEDIUM
+            else:
+                notification_type = NotificationType.BEARISH_SENTIMENT
+                title = f"🐻 {symbol} Bearish Sentiment"
+                message = f"Strong bearish signals detected for {symbol} (confidence: {confidence:.1f}%)"
+                severity = AlertSeverity.HIGH if confidence > 80 else AlertSeverity.MEDIUM
+
+            # Add specific sentiment reasons to message
+            reasons = sentiment_data.get('reasons', [])
+            if reasons:
+                message += f" - {', '.join(reasons[:3])}"
+
+            gain_percent = ((current_price - entry_price) / entry_price) * 100
+
+            notification = WatchlistNotification(
+                id=f"sentiment_{symbol}_{sentiment_type}_{int(datetime.now().timestamp())}",
+                entry_id=sentiment_data.get('entry_id', 0),
+                symbol=symbol,
+                notification_type=notification_type,
+                severity=severity,
+                title=title,
+                message=message,
+                current_price=current_price,
+                entry_price=entry_price,
+                target_price=sentiment_data.get('target_price'),
+                stop_loss_price=sentiment_data.get('stop_loss_price'),
+                gain_percent=gain_percent,
+                gain_dollars=0,  # Calculate if position size available
+                timestamp=datetime.now(),
+                metadata={
+                    'sentiment_type': sentiment_type,
+                    'confidence': confidence,
+                    'sentiment_data': sentiment_data
+                }
+            )
+
+            await self._send_notification(notification)
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to send sentiment alert for {symbol}: {e}")
+            return False
+
+    async def send_volume_spike_alert(self, symbol: str, current_volume: int,
+                                    average_volume: int, volume_ratio: float,
+                                    current_price: float, entry_price: float) -> bool:
+        """Send volume spike alert"""
+        try:
+            severity = AlertSeverity.HIGH if volume_ratio > 5.0 else AlertSeverity.MEDIUM
+
+            notification = WatchlistNotification(
+                id=f"volume_{symbol}_{int(datetime.now().timestamp())}",
+                entry_id=0,
+                symbol=symbol,
+                notification_type=NotificationType.VOLUME_SPIKE,
+                severity=severity,
+                title=f"📊 {symbol} Volume Spike",
+                message=f"{symbol} volume is {volume_ratio:.1f}x above average ({current_volume:,} vs {average_volume:,})",
+                current_price=current_price,
+                entry_price=entry_price,
+                target_price=None,
+                stop_loss_price=None,
+                gain_percent=((current_price - entry_price) / entry_price) * 100,
+                gain_dollars=0,
+                timestamp=datetime.now(),
+                metadata={
+                    'current_volume': current_volume,
+                    'average_volume': average_volume,
+                    'volume_ratio': volume_ratio
+                }
+            )
+
+            await self._send_notification(notification)
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to send volume spike alert for {symbol}: {e}")
+            return False
+
+    async def send_momentum_shift_alert(self, symbol: str, shift_type: str,
+                                      current_price: float, entry_price: float,
+                                      momentum_data: Dict) -> bool:
+        """Send momentum shift alert (bullish to bearish or vice versa)"""
+        try:
+            if shift_type.lower() == 'bullish':
+                title = f"📈 {symbol} Momentum Shift: Bullish"
+                message = f"{symbol} showing bullish momentum shift - consider position adjustment"
+            else:
+                title = f"📉 {symbol} Momentum Shift: Bearish"
+                message = f"{symbol} showing bearish momentum shift - consider risk management"
+
+            notification = WatchlistNotification(
+                id=f"momentum_{symbol}_{shift_type}_{int(datetime.now().timestamp())}",
+                entry_id=momentum_data.get('entry_id', 0),
+                symbol=symbol,
+                notification_type=NotificationType.MOMENTUM_SHIFT,
+                severity=AlertSeverity.MEDIUM,
+                title=title,
+                message=message,
+                current_price=current_price,
+                entry_price=entry_price,
+                target_price=momentum_data.get('target_price'),
+                stop_loss_price=momentum_data.get('stop_loss_price'),
+                gain_percent=((current_price - entry_price) / entry_price) * 100,
+                gain_dollars=0,
+                timestamp=datetime.now(),
+                metadata={
+                    'shift_type': shift_type,
+                    'momentum_data': momentum_data
+                }
+            )
+
+            await self._send_notification(notification)
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to send momentum shift alert for {symbol}: {e}")
+            return False
+
+
+# Global instance
+watchlist_notification_service = WatchlistNotificationService()

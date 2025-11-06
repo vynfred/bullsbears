@@ -27,6 +27,7 @@ celery_app.conf.update(
         "app.tasks.performance_updater.*": {"queue": "performance"},
         "app.tasks.daily_scan.*": {"queue": "scanning"},
         "app.tasks.weekly_retrain.*": {"queue": "ml_training"},
+        "app.tasks.realtime_monitoring.*": {"queue": "realtime"},
     },
     
     # Task serialization
@@ -111,6 +112,76 @@ celery_app.conf.update(
         "watchlist-stock-monitoring": {
             "task": "app.tasks.precompute.monitor_watchlist_stocks",
             "schedule": 3600.0,  # Every 60 minutes
+            "options": {"queue": "precompute"}
+        },
+
+        # Real-time monitoring tasks (market hours)
+        "start-realtime-monitoring": {
+            "task": "app.tasks.realtime_monitoring.start_realtime_monitoring",
+            "schedule": 900.0,  # Every 15 minutes
+            "options": {"queue": "realtime"}
+        },
+
+        "stop-realtime-monitoring": {
+            "task": "app.tasks.realtime_monitoring.stop_realtime_monitoring",
+            "schedule": 3600.0,  # Every 60 minutes
+            "options": {"queue": "realtime"}
+        },
+
+        "monitor-price-alerts": {
+            "task": "app.tasks.realtime_monitoring.monitor_price_alerts",
+            "schedule": 120.0,  # Every 2 minutes
+            "options": {"queue": "realtime"}
+        },
+
+        "update-realtime-prices": {
+            "task": "app.tasks.realtime_monitoring.update_realtime_prices",
+            "schedule": 60.0,  # Every 1 minute
+            "options": {"queue": "realtime"}
+        },
+
+        "cleanup-monitoring-cache": {
+            "task": "app.tasks.realtime_monitoring.cleanup_monitoring_cache",
+            "schedule": "0 2 * * *",  # 2:00 AM UTC daily
+            "options": {"queue": "realtime"}
+        },
+
+        # ML target hit tracking (every 4 hours during market hours)
+        "track-target-hits-ml": {
+            "task": "app.tasks.weekly_retrain.track_target_hits_for_ml",
+            "schedule": 14400.0,  # Every 4 hours
+            "options": {"queue": "ml_training"}
+        },
+
+        # Sentiment monitoring (every 30 minutes during market hours)
+        "monitor-watchlist-sentiment": {
+            "task": "app.tasks.realtime_monitoring.monitor_watchlist_sentiment",
+            "schedule": 1800.0,  # Every 30 minutes
+            "options": {"queue": "realtime"}
+        },
+
+        # Statistics cache updates (Phase 4 - Badge Data Accuracy)
+        "update-statistics-cache": {
+            "task": "update_statistics_cache",
+            "schedule": 300.0,  # Every 5 minutes
+            "options": {"queue": "precompute"}
+        },
+
+        "update-badge-data-cache": {
+            "task": "update_badge_data_cache",
+            "schedule": 120.0,  # Every 2 minutes during market hours
+            "options": {"queue": "realtime"}
+        },
+
+        "validate-statistics-accuracy": {
+            "task": "validate_statistics_accuracy",
+            "schedule": 3600.0,  # Every hour
+            "options": {"queue": "precompute"}
+        },
+
+        "generate-statistics-report": {
+            "task": "generate_statistics_report",
+            "schedule": "0 12 * * *",  # Daily at 12:00 PM UTC
             "options": {"queue": "precompute"}
         }
     },

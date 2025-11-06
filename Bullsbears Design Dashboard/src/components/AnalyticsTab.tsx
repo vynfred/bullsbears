@@ -7,6 +7,7 @@ import { Button } from "./ui/button";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "./ui/chart";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "./ui/carousel";
+import { useAnalyticsStatistics } from "../../../frontend/src/hooks/useStatistics";
 
 interface AnalyticsTabProps {
   onNavigateToPicks: () => void;
@@ -45,6 +46,13 @@ export function AnalyticsTab({ onNavigateToPicks }: AnalyticsTabProps) {
     hours: 6,
     minutes: 12,
     seconds: 3
+  });
+
+  // Get live analytics statistics
+  const { analyticsStats, isLoading: statsLoading, error: statsError } = useAnalyticsStatistics({
+    refreshInterval: 300000, // 5 minutes
+    enabled: true,
+    autoRefresh: true
   });
   const [timePeriod, setTimePeriod] = useState<TimePeriod>("90d");
 
@@ -88,13 +96,17 @@ export function AnalyticsTab({ onNavigateToPicks }: AnalyticsTabProps) {
             className="w-48 h-48 rounded-full bg-gradient-to-br from-emerald-500 via-blue-500 to-purple-500 p-1 shadow-2xl"
           >
             <div className="w-full h-full rounded-full bg-slate-900 flex flex-col items-center justify-center">
-              <div className="text-4xl text-blue-400">72.4%</div>
+              <div className="text-4xl text-blue-400">
+                {analyticsStats?.model_accuracy?.toFixed(1) ?? '72.4'}%
+              </div>
               <div className="text-xs text-slate-400">MODEL ACCURACY</div>
               <div className="flex items-center gap-1 text-emerald-400 text-sm mt-1">
                 <TrendingUp className="w-3 h-3" />
                 ↑0.8%
               </div>
-              <div className="text-xs text-slate-500 mt-2">(145 total picks)</div>
+              <div className="text-xs text-slate-500 mt-2">
+                ({analyticsStats?.total_predictions ?? 145} total picks)
+              </div>
             </div>
           </motion.div>
         </div>

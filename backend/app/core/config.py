@@ -85,10 +85,10 @@ class Settings(BaseSettings):
 
     # AI APIs - Configuration handled above in dual AI section
     
-    # CORS
-    allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001"
-    allowed_methods: str = "GET,POST,PUT,DELETE,OPTIONS"
-    allowed_headers: str = "*"
+    # CORS - Allow all origins for development
+    allowed_origins: str = Field("*", env="ALLOWED_ORIGINS")
+    allowed_methods: str = Field("GET,POST,PUT,DELETE,OPTIONS", env="ALLOWED_METHODS")
+    allowed_headers: str = Field("*", env="ALLOWED_HEADERS")
     
     # Rate Limiting
     rate_limit_requests: int = 100
@@ -149,6 +149,8 @@ class Settings(BaseSettings):
     
     def get_allowed_origins(self) -> List[str]:
         """Parse CORS origins from string."""
+        if self.allowed_origins == "*":
+            return ["*"]
         return [origin.strip() for origin in self.allowed_origins.split(",")]
 
     def get_allowed_methods(self) -> List[str]:

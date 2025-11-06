@@ -548,6 +548,63 @@ export interface RiskProfileInfo {
   };
 }
 
+// New API types for live data integration
+export interface BullishAlertResponse {
+  id: number;
+  symbol: string;
+  company_name?: string;
+  confidence: number;
+  reasons: string[];
+  technical_score: number;
+  sentiment_score: number;
+  social_score: number;
+  earnings_score: number;
+  timestamp: string;
+  target_timeframe: string;
+  risk_factors: string[];
+  alert_outcome?: string;
+  actual_move_percent?: number;
+  days_to_move?: number;
+}
+
+export interface BearishAlertResponse {
+  id: number;
+  symbol: string;
+  company_name?: string;
+  confidence: number;
+  reasons: string[];
+  technical_score: number;
+  sentiment_score: number;
+  social_score: number;
+  earnings_score: number;
+  timestamp: string;
+  target_timeframe: string;
+  risk_factors: string[];
+  alert_outcome?: string;
+  actual_move_percent?: number;
+  days_to_move?: number;
+}
+
+export interface WatchlistEntryResponse {
+  id: number;
+  symbol: string;
+  company_name?: string;
+  entry_type: string;
+  entry_price: number;
+  target_price: number;
+  stop_loss_price?: number;
+  current_price?: number;
+  current_return_percent?: number;
+  current_return_dollars?: number;
+  ai_confidence_score: number;
+  ai_recommendation: string;
+  status: string;
+  is_winner?: boolean;
+  days_held: number;
+  entry_date: string;
+  last_price_update?: string;
+}
+
 // API functions
 export const api = {
   /**
@@ -565,6 +622,71 @@ export const api = {
   getOptionsData: async (symbol: string, expirationDate?: string): Promise<OptionsData> => {
     const params = expirationDate ? { expiration_date: expirationDate } : {};
     const response = await apiClient.get(`/api/v1/options/${symbol.toUpperCase()}`, { params });
+    return response.data;
+  },
+
+  /**
+   * Get bullish alerts from backend
+   */
+  getBullishAlerts: async (limit: number = 50, minConfidence?: number): Promise<BullishAlertResponse[]> => {
+    const params: any = { limit };
+    if (minConfidence) params.min_confidence = minConfidence;
+    const response = await apiClient.get('/api/v1/bullish_alerts/', { params });
+    return response.data;
+  },
+
+  /**
+   * Get bearish alerts from backend
+   */
+  getBearishAlerts: async (limit: number = 50, minConfidence?: number): Promise<BearishAlertResponse[]> => {
+    const params: any = { limit };
+    if (minConfidence) params.min_confidence = minConfidence;
+    const response = await apiClient.get('/api/v1/bearish_alerts/', { params });
+    return response.data;
+  },
+
+  /**
+   * Get watchlist entries
+   */
+  getWatchlistEntries: async (): Promise<WatchlistEntryResponse[]> => {
+    const response = await apiClient.get('/api/v1/watchlist/');
+    return response.data;
+  },
+
+  /**
+   * Add stock to watchlist
+   */
+  addToWatchlist: async (data: {
+    symbol: string;
+    company_name?: string;
+    entry_price: number;
+    target_price: number;
+    stop_loss_price?: number;
+    ai_confidence_score: number;
+    ai_recommendation: string;
+    ai_reasoning?: string;
+  }) => {
+    const response = await apiClient.post('/api/v1/watchlist/add', {
+      ...data,
+      entry_type: 'STOCK',
+      position_size_dollars: 1000.0
+    });
+    return response.data;
+  },
+
+  /**
+   * Update watchlist entry
+   */
+  updateWatchlistEntry: async (id: number, data: Partial<WatchlistEntryResponse>) => {
+    const response = await apiClient.put(`/api/v1/watchlist/${id}`, data);
+    return response.data;
+  },
+
+  /**
+   * Remove from watchlist
+   */
+  removeFromWatchlist: async (id: number) => {
+    const response = await apiClient.delete(`/api/v1/watchlist/${id}`);
     return response.data;
   },
 

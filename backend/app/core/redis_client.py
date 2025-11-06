@@ -52,6 +52,12 @@ class RedisClient:
             logger.info("Redis connections closed")
         except Exception as e:
             logger.error(f"Error closing Redis connections: {e}")
+
+    async def ping(self):
+        """Test Redis connection."""
+        if not self.client:
+            await self.connect()
+        return await self.client.ping()
     
     async def get(self, key: str) -> Optional[Any]:
         """Get value from Redis with JSON deserialization."""
