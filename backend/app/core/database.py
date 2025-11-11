@@ -1,120 +1,111 @@
 """
-Database configuration and session management.
+Database configuration – FINAL v3.3 (November 11, 2025)
+Sync + Async PostgreSQL only. No SQLite. No leaks. No surprises.
 """
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-import asyncpg
+
 import logging
-from typing import Optional
+from typing import AsyncGenerator
+import asyncpg
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+from sqlalchemy.ext.declarative import declarative_base
+import os
 
 from .config import settings
 
 logger = logging.getLogger(__name__)
 
-# Create database engine
-if "sqlite" in settings.database_url:
-    # SQLite configuration
-    engine = create_engine(
-        settings.database_url,
-        echo=settings.debug,
-        poolclass=StaticPool,
-        connect_args={"check_same_thread": False}
-    )
-else:
-    # PostgreSQL configuration
-    engine = create_engine(
-        settings.database_url,
-        pool_pre_ping=True,
-        pool_recycle=300,
-        echo=settings.debug,
-        pool_size=20,
-        max_overflow=30,
-    )
-
-# Create session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 # Create base class for models
 Base = declarative_base()
 
+# === SYNC ENGINE (for migrations, admin tools) ===
+database_url = settings.get_database_url()
+sync_engine = create_engine(
+    database_url.replace("postgresql+asyncpg://", "postgresql://") if "postgresql+asyncpg://" in database_url else database_url,
+    pool_pre_ping=True,
+    pool_recycle=300,
+    echo=settings.debug,
+    pool_size=10,
+    max_overflow=20,
+)
 
-def get_db():
-    """
-    Dependency to get database session.
-    Yields a database session and ensures it's closed after use.
-    """
-    db = SessionLocal()
+SyncSessionLocal = sessionmaker(bind=sync_engine, autoflush=False, autocommit=False)
+
+# Backward compatibility alias
+engine = sync_engine
+
+def get_sync_db() -> Session:
+    db = SyncSessionLocal()
     try:
         yield db
     except Exception as e:
-        logger.error(f"Database session error: {e}")
+        logger.error(f"Sync DB error: {e}")
         db.rollback()
         raise
     finally:
         db.close()
 
+# === ASYNC ENGINE (for all agents + API) ===
+async_database_url = database_url.replace("postgresql://", "postgresql+asyncpg://") if "postgresql://" in database_url else database_url
+async_engine = create_async_engine(
+    async_database_url,
+    pool_pre_ping=True,
+    pool_recycle=300,
+    echo=settings.debug,
+    future=True,
+)
 
-async def init_db():
-    """Initialize database tables."""
-    try:
-        # Import all models to ensure they're registered
-        from ..models import stock, options_data, user_preferences, analysis_results, watchlist, pick_candidates
+AsyncSessionLocal = sessionmaker(
+    bind=async_engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autoflush=False,
+    autocommit=False,
+)
 
-        # Create all tables
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
-        raise
-
-
-async def close_db():
-    """Close database connections."""
-    try:
-        engine.dispose()
-        logger.info("Database connections closed")
-    except Exception as e:
-        logger.error(f"Error closing database connections: {e}")
-        raise
-
-
-# Async database connection for agent system
-_async_db_pool: Optional[asyncpg.Pool] = None
-
-
-async def get_database() -> asyncpg.Pool:
-    """Get async database connection pool for agent system"""
-    global _async_db_pool
-
-    if _async_db_pool is None:
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """Primary dependency – used by FastAPI + all agents"""
+    async with AsyncSessionLocal() as session:
         try:
-            # Extract connection details from DATABASE_URL
-            if settings.database_url.startswith('postgresql://'):
-                _async_db_pool = await asyncpg.create_pool(
-                    settings.database_url,
-                    min_size=5,
-                    max_size=20,
-                    command_timeout=30
-                )
-                logger.info("Async database pool created successfully")
-            else:
-                logger.error("Async database only supports PostgreSQL")
-                raise ValueError("Async database requires PostgreSQL")
-
+            yield session
         except Exception as e:
-            logger.error(f"Failed to create async database pool: {e}")
+            logger.error(f"Async DB error: {e}")
+            await session.rollback()
             raise
 
-    return _async_db_pool
+# === LEGACY asyncpg pool (kept for raw queries) ===
+_async_pool = None
 
+async def get_asyncpg_pool() -> asyncpg.Pool:
+    global _async_pool
+    if _async_pool is None:
+        database_url = settings.get_database_url()
+        _async_pool = await asyncpg.create_pool(
+            dsn=database_url.replace("+asyncpg", ""),
+            min_size=5,
+            max_size=30,
+            command_timeout=30,
+        )
+        logger.info("asyncpg pool created")
+    return _async_pool
 
-async def close_async_db():
-    """Close async database pool"""
-    global _async_db_pool
+async def close_asyncpg_pool():
+    global _async_pool
+    if _async_pool:
+        await _async_pool.close()
+        _async_pool = None
+        logger.info("asyncpg pool closed")
 
-    if _async_db_pool:
-        await _async_db_pool.close()
-        _async_db_pool = None
-        logger.info("Async database pool closed")
+# === DB INIT & CLOSE ===
+async def init_db():
+    from ..models import Base  # Import here to avoid circular imports
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("All tables created")
+
+async def close_db():
+    await async_engine.dispose()
+    await close_asyncpg_pool()
+    logger.info("Database connections closed")

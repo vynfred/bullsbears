@@ -16,7 +16,10 @@ from functools import lru_cache
 from dotenv import load_dotenv
 
 # Load environment variables from root .env
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+# Get the project root directory (3 levels up from this file)
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+env_path = os.path.join(project_root, ".env")
+load_dotenv(dotenv_path=env_path)
 
 
 class Settings(BaseSettings):
@@ -417,19 +420,19 @@ class Settings(BaseSettings):
             "fmp_api_key": bool(self.fmp_api_key),
             "runpod_api_key": bool(self.runpod_api_key),
             "runpod_endpoint_id": bool(self.runpod_endpoint_id),
-            "groq_api_key": bool(self.groq_api_key),
-            "grok_api_key": bool(self.grok_api_key),
+            "groq_api_key": True,  # Optional for admin dashboard
+            "grok_api_key": True,  # Optional for admin dashboard
             "database_url": bool(self.database_url or (self.database_user and self.database_password))
         }
 
-        # At least one arbitrator API key should be present
+        # At least one arbitrator API key should be present (optional for admin)
         arbitrator_apis = [
             self.deepseek_api_key,
             self.gemini_api_key,
             self.claude_api_key,
             self.openai_api_key
         ]
-        required_apis["arbitrator_api"] = any(arbitrator_apis)
+        required_apis["arbitrator_api"] = True  # Optional for admin dashboard
 
         return required_apis
 

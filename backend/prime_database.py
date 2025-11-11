@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Prime Database Script - ONE-TIME INITIAL SETUP
-Collects 1-week historical data for ALL NASDAQ stocks to prime the system
+Prime Database – FINAL v3.3 (November 11, 2025)
+ONE-TIME: 90-day bootstrap via FMP Premium (7-week rolling batch)
+Never run again after first success.
 """
 
 import asyncio
@@ -9,73 +10,64 @@ import logging
 import sys
 from datetime import datetime
 
-# Setup logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("PRIME_DB")
 
 async def main():
-    """Prime the database with 1-week historical data"""
+    """One-time Prime DB bootstrap – 90 days for all NASDAQ"""
+    logger.info("PRIME DB BOOTSTRAP START – ONE-TIME ONLY")
+    logger.info("=" * 70)
+
     try:
-        logger.info("🚀 Starting DATABASE PRIMING - ONE-TIME INITIAL SETUP")
-        logger.info("=" * 60)
-        
-        # Import services
-        from app.services.data_flow_manager import DataFlowManager
-        from app.services.stock_classification_service import StockClassificationService
-        
-        # Initialize services
-        logger.info("Initializing services...")
-        data_flow_manager = DataFlowManager()
-        stock_service = StockClassificationService()
-        
-        await data_flow_manager.initialize()
-        await stock_service.initialize()
-        
-        logger.info("✅ Services initialized")
-        
-        # Check if database is already primed
-        tier_stats = await stock_service.get_tier_statistics()
-        all_count = tier_stats.get('ALL', 0)
-        if all_count > 0:
-            logger.warning(f"⚠️ Database already contains {all_count} stocks in ALL tier")
-            response = input("Continue with priming? This will add historical data. (y/N): ")
-            if response.lower() != 'y':
-                logger.info("❌ Priming cancelled by user")
+        # Import only what we need
+        from app.services.fmp_data_ingestion import FMPIngestion
+        from app.services.stock_classification_service import get_stock_classification_service
+
+        # Initialize
+        fmp = FMPIngestion()
+        await fmp.initialize()
+        stock_service = await get_stock_classification_service()
+
+        # Safety check
+        stats = await stock_service.get_tier_statistics()
+        if stats.get("ALL", 0) > 1000:
+            logger.warning(f"ALL tier already has {stats['ALL']:,} stocks")
+            if input("Continue anyway? (y/N): ").strip().lower() != "y":
+                logger.info("Bootstrap cancelled by user")
                 return
-        
-        # Run initial data setup (1-week historical collection)
-        logger.info("🔄 Starting 1-week historical data collection...")
-        logger.info("This is a ONE-TIME operation that primes the system")
-        logger.info("Future updates will be weekly (ALL tier) + daily (ACTIVE tier)")
-        
-        await data_flow_manager.initial_data_setup()
-        
-        # Verify results
+
+        logger.info("Starting 90-day bootstrap – 7-week rolling batch")
+        logger.info("This will take ~25 minutes – go grab coffee")
+
+        start = datetime.now()
+        await fmp.bootstrap_prime_db()
+        duration = datetime.now() - start
+
+        # Final verification
         final_stats = await stock_service.get_tier_statistics()
-        final_all_count = final_stats.get('ALL', 0)
-        logger.info("📊 PRIMING RESULTS:")
-        logger.info("=" * 40)
-        logger.info(f"ALL tier stocks: {final_all_count:,}")
-        logger.info("=" * 40)
-        
-        if final_all_count > 0:
-            logger.info("✅ DATABASE PRIMING COMPLETE!")
-            logger.info("📅 System is now ready for:")
-            logger.info("   - Weekly: ALL tier refresh + prefilter to ACTIVE")
-            logger.info("   - Daily: ACTIVE tier updates + prescreen pipeline")
-            logger.info("   - Daily: 16+2 agent analysis on SHORT_LIST")
+        count = final_stats.get("ALL", 0)
+
+        logger.info("=" * 70)
+        if count >= 3500:
+            logger.info(f"PRIME DB SUCCESS – {count:,} NASDAQ stocks loaded")
+            logger.info(f"Time taken: {duration}")
+            logger.info("You are now READY for daily pipeline")
+            logger.info("Next: : 3:00 AM ET → FMP daily delta")
         else:
-            logger.error("❌ Priming failed - no stocks in ALL tier")
-            
+            logger.error(f"PRIME FAILED – only {count:,} stocks")
+            logger.error("Check FMP key, network, or run again")
+
     except KeyboardInterrupt:
-        logger.info("❌ Priming interrupted by user")
-        sys.exit(1)
+        logger.info("Cancelled by user")
+        sys.exit(0)
     except Exception as e:
-        logger.error(f"❌ Priming failed: {e}")
+        logger.error(f"Bootstrap failed: {e}")
         raise
+
 
 if __name__ == "__main__":
     asyncio.run(main())

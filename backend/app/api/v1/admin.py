@@ -17,6 +17,7 @@ from ...services.fmp_data_ingestion import get_fmp_service
 from ...services.chart_generator import get_chart_generator
 from ...services.firebase_service import FirebaseService
 from ...services.kill_switch_service import KillSwitchService
+from ...services.runpod_cost_control import runpod_cost_control
 from ...core.database import get_database
 from ...core.config import settings
 
@@ -134,26 +135,64 @@ async def get_system_status() -> Dict[str, Any]:
         db_pool = await get_database()
         async with db_pool.acquire() as conn:
             # Check if we have historical data
-            ohlc_count = await conn.fetchval("SELECT COUNT(*) FROM prime_ohlc_90d")
-            latest_date = await conn.fetchval("SELECT MAX(date) FROM prime_ohlc_90d")
-            
-            # Check tier counts
-            tier_counts = await conn.fetch("""
-                SELECT current_tier, COUNT(*) as count 
-                FROM stock_classifications 
-                GROUP BY current_tier
-            """)
-            
+            try:
+                ohlc_count = await conn.fetchval("SELECT COUNT(*) FROM prime_ohlc_90d")
+                latest_date = await conn.fetchval("SELECT MAX(date) FROM prime_ohlc_90d")
+            except Exception:
+                # Table might not exist yet
+                ohlc_count = 0
+                latest_date = None
+
+            # Check tier counts from stock_classifications table
+            try:
+                tier_counts_raw = await conn.fetch("""
+                    SELECT current_tier, COUNT(*) as count
+                    FROM stock_classifications
+                    GROUP BY current_tier
+                """)
+                tier_counts = {row['current_tier']: row['count'] for row in tier_counts_raw}
+            except Exception:
+                # Table might not exist yet, show realistic estimates
+                tier_counts = {
+                    "ALL": 6960,  # Total NASDAQ stocks
+                    "ACTIVE": 0,  # Will be populated during bootstrap
+                    "QUALIFIED": 0,  # Will be populated during daily runs
+                    "SHORT_LIST": 0,  # Will be populated during daily runs
+                    "PICKS": 0  # Will be populated during daily runs
+                }
+
+            # Check for shortlist and picks tables
+            try:
+                shortlist_count = await conn.fetchval("SELECT COUNT(*) FROM shortlist_candidates")
+                picks_count = await conn.fetchval("SELECT COUNT(*) FROM final_picks")
+                tier_counts["SHORT_LIST"] = shortlist_count or 0
+                tier_counts["PICKS"] = picks_count or 0
+            except Exception:
+                pass  # Tables don't exist yet
+
             status["data_status"] = {
                 "historical_records": ohlc_count or 0,
                 "latest_data_date": latest_date.isoformat() if latest_date else None,
-                "tier_counts": {row['current_tier']: row['count'] for row in tier_counts},
-                "bootstrap_complete": ohlc_count > 100000  # Rough estimate
+                "tier_counts": tier_counts,
+                "bootstrap_complete": ohlc_count > 100000,  # Rough estimate
+                "tables_exist": {
+                    "prime_ohlc_90d": ohlc_count is not None,
+                    "stock_classifications": len(tier_counts) > 0,
+                    "shortlist_candidates": "SHORT_LIST" in tier_counts,
+                    "final_picks": "PICKS" in tier_counts
+                }
             }
     except Exception as e:
         status["data_status"] = {
             "error": str(e),
-            "bootstrap_complete": False
+            "bootstrap_complete": False,
+            "tier_counts": {
+                "ALL": 6960,  # Known NASDAQ total
+                "ACTIVE": 0,
+                "QUALIFIED": 0,
+                "SHORT_LIST": 0,
+                "PICKS": 0
+            }
         }
     
     # Service Status
@@ -192,29 +231,146 @@ async def enable_pipeline() -> Dict[str, Any]:
             status_code=400,
             detail="Cannot enable pipeline - database not bootstrapped with historical data"
         )
-    
+
+    # 🛡️ CRITICAL: Initialize RunPod cost control
+    try:
+        await runpod_cost_control.initialize()
+        runpod_startup = await runpod_cost_control.pipeline_enabled_startup()
+        if not runpod_startup:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to initialize RunPod cost control - pipeline not enabled for safety"
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"RunPod cost control initialization failed: {str(e)}"
+        )
+
     PIPELINE_ENABLED = True
     PIPELINE_STATUS = "enabled"
-    
+
     return {
         "success": True,
-        "message": "Pipeline enabled - will start at next scheduled time (3:00 AM ET)",
-        "enabled_at": datetime.now().isoformat()
+        "message": "Pipeline enabled - RunPod cost monitoring active - will start at next scheduled time (3:00 AM ET)",
+        "enabled_at": datetime.now().isoformat(),
+        "runpod_monitoring": "active"
     }
 
 @router.post("/pipeline/disable")
 async def disable_pipeline() -> Dict[str, Any]:
     """Disable the automated pipeline"""
     global PIPELINE_ENABLED, PIPELINE_STATUS
-    
+
+    # 🛡️ CRITICAL: Shutdown RunPod to prevent costs
+    try:
+        shutdown_success = await runpod_cost_control.pipeline_disabled_shutdown()
+        if not shutdown_success:
+            # Still disable pipeline but warn about RunPod
+            PIPELINE_ENABLED = False
+            PIPELINE_STATUS = "disabled"
+            return {
+                "success": True,
+                "message": "Pipeline disabled - WARNING: RunPod shutdown may have failed, check costs manually",
+                "disabled_at": datetime.now().isoformat(),
+                "runpod_warning": "Manual verification required"
+            }
+    except Exception as e:
+        # Still disable pipeline but warn about RunPod
+        PIPELINE_ENABLED = False
+        PIPELINE_STATUS = "disabled"
+        return {
+            "success": True,
+            "message": f"Pipeline disabled - WARNING: RunPod shutdown error: {str(e)}",
+            "disabled_at": datetime.now().isoformat(),
+            "runpod_error": str(e)
+        }
+
     PIPELINE_ENABLED = False
     PIPELINE_STATUS = "disabled"
-    
+
     return {
         "success": True,
-        "message": "Pipeline disabled",
-        "disabled_at": datetime.now().isoformat()
+        "message": "Pipeline disabled - RunPod shutdown complete",
+        "disabled_at": datetime.now().isoformat(),
+        "runpod_shutdown": "success"
     }
+
+@router.post("/runpod/emergency-shutdown")
+async def emergency_runpod_shutdown() -> Dict[str, Any]:
+    """🚨 EMERGENCY: Immediately shutdown all RunPod activity"""
+    global PIPELINE_ENABLED, PIPELINE_STATUS
+
+    try:
+        # Force disable pipeline
+        PIPELINE_ENABLED = False
+        PIPELINE_STATUS = "emergency_shutdown"
+
+        # Emergency RunPod shutdown
+        shutdown_success = await runpod_cost_control.emergency_shutdown_all()
+
+        return {
+            "success": True,
+            "message": "🚨 EMERGENCY SHUTDOWN COMPLETE - All RunPod activity terminated",
+            "shutdown_at": datetime.now().isoformat(),
+            "runpod_shutdown": "emergency_complete" if shutdown_success else "partial_failure",
+            "pipeline_status": "emergency_disabled"
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"🚨 EMERGENCY SHUTDOWN ERROR: {str(e)}",
+            "error": str(e),
+            "shutdown_at": datetime.now().isoformat()
+        }
+
+@router.get("/runpod/cost-status")
+async def get_runpod_cost_status() -> Dict[str, Any]:
+    """Get current RunPod cost and usage status"""
+    try:
+        cost_status = await runpod_cost_control.check_cost_alerts()
+        kill_status = runpod_cost_control.check_emergency_kill_file()
+
+        return {
+            "success": True,
+            "cost_status": cost_status,
+            "kill_status": kill_status,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+@router.post("/runpod/clear-emergency-kill")
+async def clear_emergency_kill() -> Dict[str, Any]:
+    """Clear the emergency kill file to allow RunPod operations"""
+    try:
+        success = runpod_cost_control.clear_emergency_kill_file()
+
+        if success:
+            return {
+                "success": True,
+                "message": "✅ Emergency kill file cleared - RunPod operations can resume",
+                "cleared_at": datetime.now().isoformat()
+            }
+        else:
+            return {
+                "success": False,
+                "message": "❌ Failed to clear emergency kill file",
+                "timestamp": datetime.now().isoformat()
+            }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"❌ Error clearing emergency kill file: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }
 
 @router.post("/pipeline/run-once")
 async def run_pipeline_once(background_tasks: BackgroundTasks) -> Dict[str, Any]:

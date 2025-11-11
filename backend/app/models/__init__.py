@@ -1,31 +1,41 @@
 """
-Database models for the Options Trading Analyzer.
+BullsBears Database Models – FINAL v3.3 (November 11, 2025)
+All models used in the current lean pipeline.
+No legacy tables. No dead code.
 """
-from .stock import Stock, StockPrice
-from .options_data import OptionsData, OptionsChain
-from .user_preferences import UserPreferences
-from .analysis_results import AnalysisResult, ConfidenceScore
-from .chosen_option import ChosenOption, OptionPriceHistory
-from .watchlist import WatchlistEntry, WatchlistPriceHistory, PerformanceSummary, WatchlistEvent, WatchlistEventType
-from .precomputed_analysis import PrecomputedAnalysis, PrecomputeJobStatus
-from .dual_ai_training import DualAITrainingData
 
+# Core market data
+from .stock import Stock, StockPrice
+from .historical_data import HistoricalData
+
+# Classification & screening
+from .stock_classifications import StockClassification
+
+# Candidate tracking & picks (current system)
+from .pick_candidates import ShortListCandidate, FinalPick
+
+# User features
+from .user_preferences import UserPreferences
+from .watchlist import (
+    WatchlistEntry,
+    WatchlistPriceHistory,
+    PerformanceSummary,
+    WatchlistEvent,
+    WatchlistEventType,
+)
+
+# Public API – alphabetical for clarity
 __all__ = [
-    "Stock",
-    "StockPrice",
-    "OptionsData",
-    "OptionsChain",
-    "UserPreferences",
-    "AnalysisResult",
-    "ConfidenceScore",
-    "ChosenOption",
-    "OptionPriceHistory",
-    "WatchlistEntry",
-    "WatchlistPriceHistory",
+    "FinalPick",
+    "HistoricalData",
     "PerformanceSummary",
+    "ShortListCandidate",
+    "Stock",
+    "StockClassification",
+    "StockPrice",
+    "UserPreferences",
+    "WatchlistEntry",
     "WatchlistEvent",
     "WatchlistEventType",
-    "PrecomputedAnalysis",
-    "PrecomputeJobStatus",
-    "DualAITrainingData"
+    "WatchlistPriceHistory",
 ]

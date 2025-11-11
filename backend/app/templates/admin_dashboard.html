@@ -144,6 +144,45 @@
             cursor: not-allowed;
             transform: none;
         }
+
+        .btn-critical {
+            background: linear-gradient(135deg, #991b1b, #7f1d1d);
+            border: 2px solid #fca5a5;
+            animation: pulse-critical 2s infinite;
+            color: white;
+        }
+
+        .btn-info {
+            background: linear-gradient(135deg, #0891b2, #0e7490);
+            color: white;
+        }
+
+        @keyframes pulse-critical {
+            0%, 100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
+            50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.8); }
+        }
+
+        .cost-control-section {
+            background: rgba(15, 23, 42, 0.8);
+            border: 2px solid #dc2626;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .cost-status {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            border-left: 4px solid #f59e0b;
+        }
+
+        .emergency-controls {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+        }
         
         .pipeline-status {
             text-align: center;
@@ -199,6 +238,24 @@
             opacity: 0.6;
             pointer-events: none;
         }
+
+        .schedule-edit-btn {
+            margin-top: 10px;
+            width: 100%;
+            font-size: 0.85em;
+            padding: 8px 12px;
+        }
+
+        .status-grid {
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        }
+
+        .connection-item .status-indicator {
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body>
@@ -229,6 +286,25 @@
                 📊 Start Bootstrap
             </button>
         </div>
+
+        <!-- 🚨 CRITICAL COST CONTROL -->
+        <div class="cost-control-section">
+            <h2>🛡️ RunPod Cost Control</h2>
+            <div class="cost-status" id="costStatus">
+                <p id="costStatusText">Loading cost status...</p>
+            </div>
+            <div class="emergency-controls">
+                <button class="btn btn-critical" id="emergencyShutdownBtn" onclick="emergencyShutdown()">
+                    🚨 EMERGENCY SHUTDOWN RUNPOD
+                </button>
+                <button class="btn btn-info" id="refreshCostBtn" onclick="refreshCostStatus()">
+                    💰 Refresh Cost Status
+                </button>
+                <button class="btn btn-warning" id="clearKillBtn" onclick="clearEmergencyKill()" style="display: none;">
+                    🔓 Clear Emergency Kill
+                </button>
+            </div>
+        </div>
         
         <div class="status-grid">
             <div class="status-card">
@@ -240,7 +316,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="status-card">
                 <h3>📊 Data Status</h3>
                 <div class="data-stats" id="dataStats">
@@ -254,12 +330,127 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="status-card">
                 <h3>🎯 Stock Tiers</h3>
                 <div id="tierCounts">
                     <div class="connection-item">
                         <span>Loading tier data...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-card">
+                <h3>🌐 Frontend Status</h3>
+                <div id="frontendStatus">
+                    <div class="connection-item">
+                        <span>Loading frontend status...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-card">
+                <h3>👥 Users</h3>
+                <div class="data-stats" id="userStats">
+                    <div class="stat-item">
+                        <div class="stat-number">-</div>
+                        <div>Total Users</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number">-</div>
+                        <div>Active (24h)</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-card">
+                <h3>⏰ Schedule</h3>
+                <div id="scheduleInfo">
+                    <div class="connection-item">
+                        <span>Loading schedule...</span>
+                    </div>
+                </div>
+                <div style="margin-top: 15px;">
+                    <button class="btn btn-warning" onclick="editSchedule()" style="width: 100%; font-size: 0.9em;">
+                        ✏️ Edit Schedule
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- API Usage Section -->
+        <div style="margin-top: 30px;">
+            <h2 style="text-align: center; margin-bottom: 20px; color: #ffd700;">💰 API Usage & Costs</h2>
+            <div class="status-grid">
+                <div class="status-card">
+                    <h3>📊 FMP API</h3>
+                    <div id="fmpUsage">
+                        <div class="connection-item">
+                            <span>Loading FMP usage...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="status-card">
+                    <h3>🤖 RunPod GPU</h3>
+                    <div id="runpodUsage">
+                        <div class="connection-item">
+                            <span>Loading RunPod usage...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="status-card">
+                    <h3>👁️ Groq Vision</h3>
+                    <div id="groqUsage">
+                        <div class="connection-item">
+                            <span>Loading Groq usage...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="status-card">
+                    <h3>🚀 Grok API</h3>
+                    <div id="grokUsage">
+                        <div class="connection-item">
+                            <span>Loading Grok usage...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="status-card">
+                    <h3>🧠 DeepSeek-V3</h3>
+                    <div id="deepseekUsage">
+                        <div class="connection-item">
+                            <span>Loading DeepSeek usage...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="status-card">
+                    <h3>✨ Gemini 2.5 Pro</h3>
+                    <div id="geminiUsage">
+                        <div class="connection-item">
+                            <span>Loading Gemini usage...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="status-card">
+                    <h3>🎭 Claude Sonnet 4</h3>
+                    <div id="claudeUsage">
+                        <div class="connection-item">
+                            <span>Loading Claude usage...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="status-card">
+                    <h3>🤖 GPT-5</h3>
+                    <div id="gpt5Usage">
+                        <div class="connection-item">
+                            <span>Loading GPT-5 usage...</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -269,18 +460,36 @@
     <script>
         let systemStatus = {};
         
+        let frontendStatus = {};
+        let userStats = {};
+        let scheduleInfo = {};
+        let apiUsage = {};
+
         async function refreshStatus() {
             const refreshBtn = document.querySelector('.refresh-btn');
             refreshBtn.style.transform = 'rotate(360deg)';
-            
+
             try {
-                const response = await fetch('/api/v1/admin/status');
-                systemStatus = await response.json();
+                // Fetch all status data in parallel
+                const [statusResponse, frontendResponse, usersResponse, scheduleResponse, apiUsageResponse] = await Promise.all([
+                    fetch('/api/v1/admin/status'),
+                    fetch('/api/v1/admin/frontend-status'),
+                    fetch('/api/v1/admin/users'),
+                    fetch('/api/v1/admin/schedule'),
+                    fetch('/api/v1/admin/api-usage')
+                ]);
+
+                systemStatus = await statusResponse.json();
+                frontendStatus = await frontendResponse.json();
+                userStats = await usersResponse.json();
+                scheduleInfo = await scheduleResponse.json();
+                apiUsage = await apiUsageResponse.json();
+
                 updateUI();
             } catch (error) {
                 console.error('Failed to fetch status:', error);
             }
-            
+
             setTimeout(() => {
                 refreshBtn.style.transform = 'rotate(0deg)';
             }, 500);
@@ -291,6 +500,10 @@
             updateConnections();
             updateDataStatus();
             updateTierCounts();
+            updateFrontendStatus();
+            updateUserStats();
+            updateScheduleInfo();
+            updateApiUsage();
             updateButtons();
         }
         
@@ -365,11 +578,383 @@
             });
         }
         
+        function updateFrontendStatus() {
+            const frontendEl = document.getElementById('frontendStatus');
+
+            let statusClass = 'status-error';
+            let statusText = frontendStatus.status || 'Unknown';
+
+            if (frontendStatus.status === 'deployed') {
+                statusClass = 'status-connected';
+                statusText = 'Deployed';
+            } else if (frontendStatus.status === 'not_deployed') {
+                statusClass = 'status-warning';
+                statusText = 'Not Deployed';
+            } else if (frontendStatus.status === 'not_configured') {
+                statusClass = 'status-warning';
+                statusText = 'Not Configured';
+            }
+
+            frontendEl.innerHTML = `
+                <div class="connection-item">
+                    <span>Status</span>
+                    <span class="status-indicator ${statusClass}">${statusText}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Domain</span>
+                    <span class="status-indicator status-connected">${frontendStatus.domain || 'bullsbears.xyz'}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Deployment</span>
+                    <span class="status-indicator status-connected">${frontendStatus.deployment || 'Firebase Hosting'}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Firebase Project</span>
+                    <span class="status-indicator ${frontendStatus.firebase_project_id ? 'status-connected' : 'status-warning'}">${frontendStatus.firebase_project_id || 'Not Set'}</span>
+                </div>
+                ${frontendStatus.ssl_status ? `
+                <div class="connection-item">
+                    <span>SSL Status</span>
+                    <span class="status-indicator ${frontendStatus.ssl_status === 'valid' ? 'status-connected' : 'status-warning'}">${frontendStatus.ssl_status}</span>
+                </div>
+                ` : ''}
+            `;
+        }
+
+        function updateUserStats() {
+            const userStatsEl = document.getElementById('userStats');
+
+            // Show status message if Firebase isn't configured or no users yet
+            if (userStats.status === 'not_configured') {
+                userStatsEl.innerHTML = `
+                    <div class="connection-item">
+                        <span>Firebase Auth</span>
+                        <span class="status-indicator status-warning">Not Set Up</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Users</span>
+                        <span class="status-indicator status-warning">0</span>
+                    </div>
+                `;
+                return;
+            }
+
+            if (userStats.status === 'no_users_yet') {
+                userStatsEl.innerHTML = `
+                    <div class="connection-item">
+                        <span>Firebase Auth</span>
+                        <span class="status-indicator status-connected">Configured</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Users</span>
+                        <span class="status-indicator status-warning">0</span>
+                    </div>
+                `;
+                return;
+            }
+
+            // Normal user stats display (when we have users)
+            userStatsEl.innerHTML = `
+                <div class="stat-item">
+                    <div class="stat-number">${(userStats.total_users || 0).toLocaleString()}</div>
+                    <div>Total Users</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">${userStats.active_users_24h || 0}</div>
+                    <div>Active (24h)</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">${userStats.new_users_today || 0}</div>
+                    <div>New Today</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">${userStats.user_growth || 'N/A'}</div>
+                    <div>Growth</div>
+                </div>
+            `;
+        }
+
+        function updateScheduleInfo() {
+            const scheduleEl = document.getElementById('scheduleInfo');
+
+            const nextRun = scheduleInfo.next_run ? new Date(scheduleInfo.next_run).toLocaleString() : 'Not scheduled';
+            const timeUntil = scheduleInfo.time_until_next_run || 'Unknown';
+
+            scheduleEl.innerHTML = `
+                <div class="connection-item">
+                    <span>Status</span>
+                    <span class="status-indicator ${scheduleInfo.enabled ? 'status-connected' : 'status-error'}">
+                        ${scheduleInfo.enabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                </div>
+                <div class="connection-item">
+                    <span>Daily Run Time</span>
+                    <span class="status-indicator status-connected">${scheduleInfo.daily_run_time || 'N/A'} ET</span>
+                </div>
+                <div class="connection-item">
+                    <span>Next Run</span>
+                    <span class="status-indicator status-warning" style="font-size: 0.7em;">${nextRun.split(',')[1] || nextRun}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Time Until</span>
+                    <span class="status-indicator status-connected">${timeUntil}</span>
+                </div>
+            `;
+        }
+
+        function updateApiUsage() {
+            updateFmpUsage();
+            updateRunpodUsage();
+            updateGroqUsage();
+            updateGrokUsage();
+            updateDeepSeekUsage();
+            updateGeminiUsage();
+            updateClaudeUsage();
+            updateGPT5Usage();
+        }
+
+        function updateFmpUsage() {
+            const fmpEl = document.getElementById('fmpUsage');
+            const fmp = apiUsage.fmp_api || {};
+
+            if (fmp.status === 'active') {
+                const usagePercent = ((fmp.calls_today / fmp.calls_limit) * 100).toFixed(1);
+                fmpEl.innerHTML = `
+                    <div class="connection-item">
+                        <span>Plan</span>
+                        <span class="status-indicator status-connected">${fmp.plan || 'N/A'}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Calls Today</span>
+                        <span class="status-indicator status-connected">${(fmp.calls_today || 0).toLocaleString()}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Usage</span>
+                        <span class="status-indicator ${usagePercent > 80 ? 'status-warning' : 'status-connected'}">${usagePercent}%</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Cost</span>
+                        <span class="status-indicator status-connected">${fmp.cost_estimate || 'N/A'}</span>
+                    </div>
+                `;
+            } else {
+                fmpEl.innerHTML = `
+                    <div class="connection-item">
+                        <span>Status</span>
+                        <span class="status-indicator status-error">${fmp.status || 'Error'}</span>
+                    </div>
+                `;
+            }
+        }
+
+        function updateRunpodUsage() {
+            const runpodEl = document.getElementById('runpodUsage');
+            const runpod = apiUsage.ai_agents?.runpod || {};
+
+            if (runpod.status === 'active') {
+                runpodEl.innerHTML = `
+                    <div class="connection-item">
+                        <span>GPU Hours</span>
+                        <span class="status-indicator status-connected">${runpod.gpu_hours_used || 0}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Spend/Hour</span>
+                        <span class="status-indicator status-connected">$${runpod.current_spend_per_hour || 0}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Monthly Est.</span>
+                        <span class="status-indicator status-connected">${runpod.estimated_monthly || 'N/A'}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Endpoints</span>
+                        <span class="status-indicator status-connected">${runpod.active_endpoints || 0}</span>
+                    </div>
+                `;
+            } else {
+                runpodEl.innerHTML = `
+                    <div class="connection-item">
+                        <span>Status</span>
+                        <span class="status-indicator status-error">${runpod.status || 'Error'}</span>
+                    </div>
+                `;
+            }
+        }
+
+        function updateGroqUsage() {
+            const groqEl = document.getElementById('groqUsage');
+            const groq = apiUsage.ai_agents?.groq || {};
+
+            if (groq.status === 'active') {
+                const usagePercent = ((groq.requests_today / groq.requests_limit) * 100).toFixed(1);
+                groqEl.innerHTML = `
+                    <div class="connection-item">
+                        <span>Model</span>
+                        <span class="status-indicator status-connected">Llama-3.2-11B-Vision</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Charts Today</span>
+                        <span class="status-indicator status-connected">${groq.requests_today || 0}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Usage</span>
+                        <span class="status-indicator ${usagePercent > 80 ? 'status-warning' : 'status-connected'}">${usagePercent}%</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Cost</span>
+                        <span class="status-indicator status-connected">${groq.cost_estimate || 'N/A'}</span>
+                    </div>
+                `;
+            } else {
+                groqEl.innerHTML = `
+                    <div class="connection-item">
+                        <span>Status</span>
+                        <span class="status-indicator ${groq.status === 'not_configured' ? 'status-warning' : 'status-error'}">${groq.status || 'Error'}</span>
+                    </div>
+                `;
+            }
+        }
+
+        function updateGrokUsage() {
+            const grokEl = document.getElementById('grokUsage');
+            const grok = apiUsage.ai_agents?.grok || {};
+
+            const statusClass = grok.status === 'configured' ? 'status-connected' : 'status-warning';
+
+            grokEl.innerHTML = `
+                <div class="connection-item">
+                    <span>Status</span>
+                    <span class="status-indicator ${statusClass}">${grok.status || 'N/A'}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Usage Type</span>
+                    <span class="status-indicator status-connected">Social + Arbitration</span>
+                </div>
+                <div class="connection-item">
+                    <span>Calls Today</span>
+                    <span class="status-indicator status-connected">${grok.requests_today || 'Not active yet'}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Cost</span>
+                    <span class="status-indicator status-connected">${grok.cost_estimate || 'TBD'}</span>
+                </div>
+            `;
+        }
+
+        function updateDeepSeekUsage() {
+            const deepseekEl = document.getElementById('deepseekUsage');
+            const deepseek = apiUsage.ai_agents?.deepseek || {};
+
+            const statusClass = deepseek.status === 'configured' ? 'status-connected' : 'status-warning';
+            const activeIndicator = deepseek.is_active_today ? '🟢 Active Today' : '⚪ Standby';
+
+            deepseekEl.innerHTML = `
+                <div class="connection-item">
+                    <span>Status</span>
+                    <span class="status-indicator ${statusClass}">${deepseek.status || 'N/A'}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Today</span>
+                    <span class="status-indicator ${deepseek.is_active_today ? 'status-connected' : 'status-warning'}">${activeIndicator}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Calls</span>
+                    <span class="status-indicator status-connected">${deepseek.calls_today || 0}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Cost</span>
+                    <span class="status-indicator status-connected">${deepseek.cost_estimate || 'N/A'}</span>
+                </div>
+            `;
+        }
+
+        function updateGeminiUsage() {
+            const geminiEl = document.getElementById('geminiUsage');
+            const gemini = apiUsage.ai_agents?.gemini || {};
+
+            const statusClass = gemini.status === 'configured' ? 'status-connected' : 'status-warning';
+            const activeIndicator = gemini.is_active_today ? '🟢 Active Today' : '⚪ Standby';
+
+            geminiEl.innerHTML = `
+                <div class="connection-item">
+                    <span>Status</span>
+                    <span class="status-indicator ${statusClass}">${gemini.status || 'N/A'}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Today</span>
+                    <span class="status-indicator ${gemini.is_active_today ? 'status-connected' : 'status-warning'}">${activeIndicator}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Calls</span>
+                    <span class="status-indicator status-connected">${gemini.calls_today || 0}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Cost</span>
+                    <span class="status-indicator status-connected">${gemini.cost_estimate || 'N/A'}</span>
+                </div>
+            `;
+        }
+
+
+
+        function updateClaudeUsage() {
+            const claudeEl = document.getElementById('claudeUsage');
+            const claude = apiUsage.ai_agents?.claude || {};
+
+            const statusClass = claude.status === 'configured' ? 'status-connected' : 'status-warning';
+            const activeIndicator = claude.is_active_today ? '🟢 Active Today' : '⚪ Standby';
+
+            claudeEl.innerHTML = `
+                <div class="connection-item">
+                    <span>Status</span>
+                    <span class="status-indicator ${statusClass}">${claude.status || 'N/A'}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Today</span>
+                    <span class="status-indicator ${claude.is_active_today ? 'status-connected' : 'status-warning'}">${activeIndicator}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Calls</span>
+                    <span class="status-indicator status-connected">${claude.calls_today || 0}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Cost</span>
+                    <span class="status-indicator status-connected">${claude.cost_estimate || 'N/A'}</span>
+                </div>
+            `;
+        }
+
+        function updateGPT5Usage() {
+            const gpt5El = document.getElementById('gpt5Usage');
+            const gpt5 = apiUsage.ai_agents?.gpt5 || {};
+
+            const statusClass = gpt5.status === 'configured' ? 'status-connected' : 'status-warning';
+            const activeIndicator = gpt5.is_active_today ? '🟢 Active Today' : '⚪ Standby';
+
+            gpt5El.innerHTML = `
+                <div class="connection-item">
+                    <span>Status</span>
+                    <span class="status-indicator ${statusClass}">${gpt5.status || 'N/A'}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Today</span>
+                    <span class="status-indicator ${gpt5.is_active_today ? 'status-connected' : 'status-warning'}">${activeIndicator}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Calls</span>
+                    <span class="status-indicator status-connected">${gpt5.calls_today || 0}</span>
+                </div>
+                <div class="connection-item">
+                    <span>Cost</span>
+                    <span class="status-indicator status-connected">${gpt5.cost_estimate || 'N/A'}</span>
+                </div>
+            `;
+        }
+
         function updateButtons() {
             const allConnectionsOk = Object.values(systemStatus.connections || {})
                 .every(conn => conn.status === 'connected');
             const bootstrapComplete = systemStatus.data_status?.bootstrap_complete || false;
-            
+
             document.getElementById('enableBtn').disabled = !allConnectionsOk || !bootstrapComplete;
             document.getElementById('runOnceBtn').disabled = !allConnectionsOk;
             document.getElementById('bootstrapBtn').disabled = !systemStatus.connections?.fmp_api?.status === 'connected';
@@ -395,15 +980,113 @@
             try {
                 const response = await fetch('/api/v1/admin/pipeline/disable', { method: 'POST' });
                 const result = await response.json();
-                
+
                 if (result.success) {
-                    alert('✅ Pipeline disabled successfully!');
+                    if (result.runpod_warning || result.runpod_error) {
+                        alert('⚠️ Pipeline disabled but RunPod issue: ' + result.message);
+                    } else {
+                        alert('✅ Pipeline disabled - RunPod shutdown complete!');
+                    }
                     refreshStatus();
+                    refreshCostStatus();
                 } else {
                     alert('❌ Failed to disable pipeline');
                 }
             } catch (error) {
                 alert('❌ Error: ' + error.message);
+            }
+        }
+
+        async function emergencyShutdown() {
+            if (!confirm('🚨 EMERGENCY SHUTDOWN: This will immediately terminate all RunPod activity. Continue?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/v1/admin/runpod/emergency-shutdown', { method: 'POST' });
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('🚨 EMERGENCY SHUTDOWN COMPLETE: ' + result.message);
+                } else {
+                    alert('❌ Emergency shutdown failed: ' + result.message);
+                }
+
+                refreshStatus();
+                refreshCostStatus();
+            } catch (error) {
+                alert('❌ Emergency shutdown error: ' + error.message);
+            }
+        }
+
+        async function refreshCostStatus() {
+            try {
+                const response = await fetch('/api/v1/admin/runpod/cost-status');
+                const result = await response.json();
+
+                const costStatusEl = document.getElementById('costStatusText');
+                const clearKillBtn = document.getElementById('clearKillBtn');
+
+                if (result.success) {
+                    const cost = result.cost_status;
+                    const kill = result.kill_status;
+
+                    let statusText = '';
+
+                    // Check for emergency kill first
+                    if (kill && kill.kill_active) {
+                        statusText = '🚨 EMERGENCY KILL ACTIVE - RunPod operations blocked';
+                        costStatusEl.style.color = '#ef4444';
+                        clearKillBtn.style.display = 'inline-block';
+                    } else {
+                        statusText = `💰 Current: $${cost.current_spend_per_hour || 0}/hour`;
+
+                        if (cost.session_runtime && cost.session_runtime !== 'Not running') {
+                            statusText += ` | Runtime: ${cost.session_runtime}`;
+                        }
+
+                        if (cost.alerts && cost.alerts.length > 0) {
+                            statusText += ` | ⚠️ ${cost.alerts.join(', ')}`;
+                        }
+
+                        if (cost.api_accessible === false) {
+                            statusText += ' | ⚠️ API unavailable';
+                        }
+
+                        costStatusEl.style.color = cost.alerts && cost.alerts.length > 0 ? '#f59e0b' : '#10b981';
+                        clearKillBtn.style.display = 'none';
+                    }
+
+                    costStatusEl.textContent = statusText;
+                } else {
+                    costStatusEl.textContent = '❌ Cost status unavailable: ' + result.error;
+                    costStatusEl.style.color = '#ef4444';
+                    clearKillBtn.style.display = 'none';
+                }
+            } catch (error) {
+                document.getElementById('costStatusText').textContent = '❌ Cost check failed: ' + error.message;
+                document.getElementById('clearKillBtn').style.display = 'none';
+            }
+        }
+
+        async function clearEmergencyKill() {
+            if (!confirm('Clear emergency kill file? This will allow RunPod operations to resume.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/v1/admin/runpod/clear-emergency-kill', { method: 'POST' });
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('✅ Emergency kill cleared: ' + result.message);
+                } else {
+                    alert('❌ Failed to clear emergency kill: ' + result.message);
+                }
+
+                refreshCostStatus();
+            } catch (error) {
+                alert('❌ Error clearing emergency kill: ' + error.message);
             }
         }
         
@@ -447,11 +1130,65 @@
             }
         }
         
+        function editSchedule() {
+            const currentTime = scheduleInfo.daily_run_time || '03:00';
+            const currentEnabled = scheduleInfo.enabled || true;
+            const vixThreshold = scheduleInfo.kill_switch_conditions?.vix_threshold || 30;
+            const spyThreshold = scheduleInfo.kill_switch_conditions?.spy_drop_threshold || -2.0;
+
+            const newTime = prompt(`Enter daily run time (HH:MM format, ET timezone):`, currentTime);
+            if (newTime === null) return; // User cancelled
+
+            const enabledChoice = confirm(`Enable scheduled runs?\nCurrent: ${currentEnabled ? 'Enabled' : 'Disabled'}\n\nClick OK to enable, Cancel to disable.`);
+
+            const newVixThreshold = prompt(`VIX Kill Switch Threshold (current: ${vixThreshold}):`, vixThreshold);
+            if (newVixThreshold === null) return;
+
+            const newSpyThreshold = prompt(`SPY Drop Kill Switch Threshold % (current: ${spyThreshold}):`, spyThreshold);
+            if (newSpyThreshold === null) return;
+
+            updateScheduleConfig({
+                daily_run_time: newTime,
+                enabled: enabledChoice,
+                kill_switch_conditions: {
+                    vix_threshold: parseFloat(newVixThreshold),
+                    spy_drop_threshold: parseFloat(newSpyThreshold)
+                }
+            });
+        }
+
+        async function updateScheduleConfig(config) {
+            try {
+                const response = await fetch('/api/v1/admin/schedule/update', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(config)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('✅ Schedule updated successfully!');
+                    refreshStatus();
+                } else {
+                    alert('❌ Failed to update schedule: ' + result.message);
+                }
+            } catch (error) {
+                alert('❌ Error updating schedule: ' + error.message);
+            }
+        }
+
         // Auto-refresh every 30 seconds
-        setInterval(refreshStatus, 30000);
-        
+        setInterval(() => {
+            refreshStatus();
+            refreshCostStatus();
+        }, 30000);
+
         // Initial load
         refreshStatus();
+        refreshCostStatus();
     </script>
 </body>
 </html>

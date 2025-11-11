@@ -10,12 +10,11 @@ Models for the 5-tier stock classification system:
 """
 
 from sqlalchemy import Column, Integer, String, DECIMAL, BigInteger, Date, DateTime, Boolean, Index
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from datetime import datetime, date
 from typing import Optional
 
-Base = declarative_base()
+from ..core.database import Base
 
 class StockClassification(Base):
     """
