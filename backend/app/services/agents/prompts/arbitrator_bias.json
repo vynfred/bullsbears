@@ -1,0 +1,51 @@
+{
+  "_BRAINAGENT_AUTO_GENERATED": true,
+  "_DO_NOT_EDIT_MANUALLY": "This file is overwritten nightly at 4:01 AM ET by BrainAgent",
+  "_LAST_UPDATED": "2025-11-10T21:37:00-05:00",
+  "_NEXT_UPDATE": "2025-11-11T04:01:00-05:00",
+  "_HISTORY": "/workspace/bullsbears/backend/app/services/agents/learning_history/",
+  "_HIT_RATE_30D": "Starting value – will update after first 30 days of tracking",
+  "_NOTE": "Values are multipliers applied to arbitrator selection probability. Range 0.8–1.3",
+
+  "vision_flag_weights": {
+    "wyckoff_phase_2": 0.85,
+    "weekly_triangle_coil": 0.78,
+    "volume_shelf_breakout": 0.82,
+    "p_shape_profile": 0.71,
+    "fakeout_wick_rejection": 0.69,
+    "spring_setup": 0.74
+  },
+
+  "social_score_multiplier": 1.2,
+  
+  "sector_preferences": {
+    "tech": 1.1,
+    "energy": 0.9,
+    "healthcare": 1.0,
+    "finance": 0.95,
+    "consumer": 1.05
+  },
+
+  "arbitrator_rotation_bias": {
+    "DeepSeek-V3": 1.05,
+    "Gemini 2.5 Pro": 1.00,
+    "Grok 4": 1.00,
+    "Claude Sonnet 4": 1.00,
+    "GPT-5": 1.00
+  },
+
+  "confidence_calibration": 0.75,
+
+  "learning_metadata": {
+    "version": "v3.3_2025-11-10",
+    "status": "initialized",
+    "samples_analyzed": 0,
+    "moon_capture_rate": null,
+    "rug_capture_rate": null,
+    "arbitrator_leaderboard": {},
+    "last_learning_cycle": null,
+    "next_learning_cycle": "2025-11-11T04:01:00-05:00"
+  },
+
+  "_HUMAN_READABLE": "Edit only if you want to manually override rotation. BrainAgent will reset this tomorrow at 4:01 AM ET."
+}

@@ -1,0 +1,22 @@
+Select best picks from agents. Return JSON only.
+
+{
+  "bullish_picks": [
+    {
+      "ticker": "TSLA",
+      "confidence": 85,
+      "reasoning": "Agent consensus",
+      "target_low": 260,
+      "target_high": 280
+    }
+  ],
+  "bearish_picks": [
+    {
+      "ticker": "COIN",
+      "confidence": 78,
+      "reasoning": "Agent consensus",
+      "target_low": 180,
+      "target_high": 160
+    }
+  ]
+}

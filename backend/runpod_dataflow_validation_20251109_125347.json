@@ -1,0 +1,274 @@
+{
+  "agent_roles": {
+    "KillSwitchAgent": {
+      "role": "Market condition override (SPY < -2% OR VIX > 30)",
+      "input": "Market conditions (SPY, VIX)",
+      "output": "Boolean (allow/block trading)",
+      "historical_access": false
+    },
+    "PreFilterAgent": {
+      "role": "Fast screening (2,000 \u2192 200 candidates)",
+      "input": "Stock universe, market data",
+      "output": "200 high-volatility candidates",
+      "historical_access": false
+    },
+    "BullPredictorTechnical-DeepSeek": {
+      "role": "Reasoning-based technical analysis for bullish patterns",
+      "input": "Candidates, technical indicators",
+      "output": "Bullish picks with confidence",
+      "historical_access": false
+    },
+    "BullPredictorFundamental-DeepSeek": {
+      "role": "Fundamental reasoning for bullish catalysts",
+      "input": "Candidates, earnings, news",
+      "output": "Fundamental bullish picks",
+      "historical_access": false
+    },
+    "BearPredictorTechnical-DeepSeek": {
+      "role": "Bear technical reasoning (breakdowns, overbought)",
+      "input": "Candidates, technical indicators",
+      "output": "Bearish picks with confidence",
+      "historical_access": false
+    },
+    "BearPredictorSentiment-DeepSeek": {
+      "role": "Sentiment reasoning for bearish risks",
+      "input": "Candidates, sentiment data",
+      "output": "Sentiment-based bearish picks",
+      "historical_access": false
+    },
+    "BullPredictorFundamental-Qwen3": {
+      "role": "Visual fundamental analysis (charts + fundamentals)",
+      "input": "Candidates, charts, fundamentals",
+      "output": "Visual-fundamental bullish picks",
+      "historical_access": false
+    },
+    "BullPredictorTechnical-Qwen2": {
+      "role": "Complex technical analysis (32B model)",
+      "input": "Candidates, complex technical patterns",
+      "output": "Advanced technical bullish picks",
+      "historical_access": false
+    },
+    "BearPredictorSentiment-Qwen3": {
+      "role": "Visual sentiment patterns (social + charts)",
+      "input": "Candidates, social data, charts",
+      "output": "Visual sentiment bearish picks",
+      "historical_access": false
+    },
+    "BearPredictorTechnical-Qwen2": {
+      "role": "Complex bear technical analysis",
+      "input": "Candidates, advanced technical indicators",
+      "output": "Complex bearish technical picks",
+      "historical_access": false
+    },
+    "VisionAgent-Primary": {
+      "role": "Chart pattern recognition (Qwen3-VL)",
+      "input": "Charts, predictor picks",
+      "output": "Pattern analysis, targets",
+      "historical_access": false
+    },
+    "VisionAgent-Secondary": {
+      "role": "Secondary chart validation (Llama3.2-Vision)",
+      "input": "Charts, primary vision results",
+      "output": "Vision consensus validation",
+      "historical_access": false
+    },
+    "RiskAgent-Conservative": {
+      "role": "Conservative risk management",
+      "input": "Picks, market volatility",
+      "output": "Conservative stop-loss, targets",
+      "historical_access": false
+    },
+    "RiskAgent-Aggressive": {
+      "role": "Aggressive risk management",
+      "input": "Picks, market volatility",
+      "output": "Aggressive stop-loss, targets",
+      "historical_access": false
+    },
+    "TargetAgent-Technical": {
+      "role": "Technical target analysis (Fibonacci, S/R)",
+      "input": "Picks, technical levels",
+      "output": "Technical price targets",
+      "historical_access": false
+    },
+    "TargetAgent-Fundamental": {
+      "role": "Fundamental target analysis (valuation)",
+      "input": "Picks, fundamental data",
+      "output": "Fundamental price targets",
+      "historical_access": false
+    },
+    "NewsAgent": {
+      "role": "News filtering and economic events",
+      "input": "News articles, economic calendar",
+      "output": "News sentiment, catalysts",
+      "historical_access": false
+    },
+    "SocialAgent": {
+      "role": "Social sentiment analysis (Reddit, X)",
+      "input": "Social media data",
+      "output": "Social sentiment scores",
+      "historical_access": false
+    },
+    "ArbitratorAgent": {
+      "role": "Final pick selection with learned weights",
+      "input": "All agent outputs, learned criteria",
+      "output": "Final 3+3 picks",
+      "historical_access": true,
+      "data_sources": [
+        "Redis: agent_weights:learned",
+        "Learned selection criteria"
+      ]
+    },
+    "LearnerAgent": {
+      "role": "Pattern discovery and feature analysis",
+      "input": "Historical candidate data, outcomes",
+      "output": "Feature importance, selection criteria",
+      "historical_access": true,
+      "data_sources": [
+        "pick_candidates table",
+        "candidate_price_tracking table"
+      ]
+    },
+    "BrainAgent": {
+      "role": "Learning orchestration and weight updates",
+      "input": "Retrospective analysis, learner insights",
+      "output": "Updated weights, improved prompts",
+      "historical_access": true,
+      "data_sources": [
+        "Candidate tracking service",
+        "Performance metrics"
+      ]
+    }
+  },
+  "historical_access": {
+    "ArbitratorAgent": {
+      "redis_keys": [
+        "agent_weights:learned",
+        "arbitrator_selection_prompt",
+        "recent_arbitrator_performance"
+      ],
+      "database_access": false,
+      "purpose": "Apply learned weights and selection criteria"
+    },
+    "LearnerAgent": {
+      "database_tables": [
+        "pick_candidates",
+        "candidate_price_tracking"
+      ],
+      "lookback_days": 30,
+      "queries": [
+        "Historical candidate data with outcomes",
+        "High-performing picks (>15% gain)",
+        "Feature importance analysis"
+      ],
+      "purpose": "Discover patterns and optimize selection criteria"
+    },
+    "BrainAgent": {
+      "services": [
+        "candidate_tracking_service",
+        "learner_agent"
+      ],
+      "operations": [
+        "run_retrospective_analysis()",
+        "run_feature_importance_analysis()",
+        "update_dynamic_weights()"
+      ],
+      "schedule": "Weekly learning cycles + emergency triggers",
+      "purpose": "Orchestrate learning and update system weights"
+    }
+  },
+  "data_flow": {
+    "Phase_1_KillSwitch": {
+      "input": "Market conditions (SPY, VIX)",
+      "output": "Boolean decision",
+      "next_phase": "Phase_2_PreFilter"
+    },
+    "Phase_2_PreFilter": {
+      "input": "Stock universe (2,000 stocks)",
+      "output": "200 candidates",
+      "next_phase": "Phase_3_Predictors"
+    },
+    "Phase_3_Predictors": {
+      "input": "200 candidates + market data",
+      "agents": 8,
+      "parallel_execution": true,
+      "output": "Predictor picks with confidence scores",
+      "next_phase": "Phase_4_Vision"
+    },
+    "Phase_4_Vision": {
+      "input": "Predictor picks + chart data",
+      "agents": 2,
+      "consensus_required": true,
+      "output": "Vision analysis + targets",
+      "next_phase": "Phase_5_Risk_Target"
+    },
+    "Phase_5_Risk_Target": {
+      "input": "Vision-validated picks",
+      "agents": 4,
+      "output": "Risk management + price targets",
+      "next_phase": "Phase_6_News_Social"
+    },
+    "Phase_6_News_Social": {
+      "input": "Risk-adjusted picks + external data",
+      "agents": 2,
+      "output": "News/social sentiment overlay",
+      "next_phase": "Phase_7_Arbitration"
+    },
+    "Phase_7_Arbitration": {
+      "input": "All agent outputs + learned weights",
+      "agents": 1,
+      "historical_data_required": true,
+      "output": "Final 3+3 picks",
+      "next_phase": "Candidate_Storage"
+    },
+    "Candidate_Storage": {
+      "input": "All predictor candidates + final picks",
+      "purpose": "Store for learning system",
+      "tables": [
+        "all_predictor_candidates",
+        "final_arbitration"
+      ],
+      "next_phase": "Learning_System"
+    },
+    "Learning_System": {
+      "schedule": "Weekly + emergency triggers",
+      "agents": [
+        "LearnerAgent",
+        "BrainAgent"
+      ],
+      "input": "Historical outcomes + performance data",
+      "output": "Updated weights + selection criteria",
+      "feedback_loop": "Updates ArbitratorAgent prompts"
+    }
+  },
+  "learning_integration": {
+    "weekly_learning_cycle": {
+      "trigger": "Every 7 days OR success_rate < 30%",
+      "steps": [
+        "1. Run retrospective analysis (BrainAgent)",
+        "2. Analyze feature importance (LearnerAgent)",
+        "3. Discover winning patterns (LearnerAgent)",
+        "4. Generate selection criteria (LearnerAgent)",
+        "5. Update dynamic weights (BrainAgent)",
+        "6. Update arbitrator prompt (BrainAgent)",
+        "7. Store learning cycle results"
+      ]
+    },
+    "real_time_feedback": {
+      "candidate_tracking": "Store ALL predictor candidates",
+      "outcome_monitoring": "Track target hits for all candidates",
+      "missed_opportunities": "Learn from non-selected candidates that performed well"
+    },
+    "weight_optimization": {
+      "dynamic_weights": [
+        "technical_weight",
+        "fundamental_weight",
+        "sentiment_weight",
+        "social_weight",
+        "vision_weight",
+        "risk_weight"
+      ],
+      "calculation": "Based on success_rate and sample_size",
+      "storage": "Redis: agent_weights:learned (7-day expiration)"
+    }
+  }
+}

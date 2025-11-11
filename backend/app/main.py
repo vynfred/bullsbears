@@ -197,6 +197,14 @@ app.include_router(notifications.router, prefix="/api/v1", tags=["notifications"
 from .api.v1 import statistics
 app.include_router(statistics.router, prefix="/api/v1", tags=["statistics"])
 
+# Import and include analytics router (Analytics Tab Data)
+from .api.v1 import analytics
+app.include_router(analytics.router, prefix="/api/v1", tags=["analytics"])
+
+# Import and include daily scan router (Agent System)
+from .api.v1 import daily_scan
+app.include_router(daily_scan.router, prefix="/api/v1", tags=["daily-scan"])
+
 
 
 

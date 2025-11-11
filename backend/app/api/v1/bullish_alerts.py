@@ -12,8 +12,43 @@ from pydantic import BaseModel
 from ...core.database import get_db
 from ...models.analysis_results import AnalysisResult, AlertType, AlertOutcome
 from ...analyzers.bullish_analyzer import BullishAnalyzer, analyze_bullish_potential
+from ...services.stock_data import StockDataService
 
 router = APIRouter(prefix="/bullish_alerts", tags=["bullish_alerts"])
+
+# Initialize stock data service for real-time pricing
+stock_data_service = StockDataService()
+
+async def enrich_alert_with_prices(alert: AnalysisResult) -> dict:
+    """Enrich alert with real-time price data"""
+    price_data = {
+        'current_price': None,
+        'entry_price': None,
+        'target_price_low': None,
+        'target_price_mid': None,
+        'target_price_high': None
+    }
+
+    try:
+        # Get real-time quote
+        quote_data = await stock_data_service.get_real_time_quote(alert.symbol)
+        if quote_data and 'price' in quote_data:
+            current_price = float(quote_data['price'])
+            price_data['current_price'] = current_price
+
+            # Calculate entry price (slightly below current for bullish)
+            price_data['entry_price'] = current_price * 0.98
+
+            # Calculate target prices for bullish alerts
+            price_data['target_price_low'] = current_price * 1.10   # +10%
+            price_data['target_price_mid'] = current_price * 1.20   # +20%
+            price_data['target_price_high'] = current_price * 1.35  # +35%
+
+    except Exception as e:
+        # Log error but don't fail the request
+        print(f"Warning: Could not fetch real-time price for {alert.symbol}: {e}")
+
+    return price_data
 
 
 class BullishAlertResponse(BaseModel):
@@ -33,6 +68,13 @@ class BullishAlertResponse(BaseModel):
     alert_outcome: Optional[str]
     actual_move_percent: Optional[float]
     days_to_move: Optional[int]
+
+    # Real-time price fields
+    current_price: Optional[float] = None
+    entry_price: Optional[float] = None
+    target_price_low: Optional[float] = None
+    target_price_mid: Optional[float] = None
+    target_price_high: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -100,11 +142,14 @@ async def get_moon_alerts(
         # Order by timestamp (newest first) and apply pagination
         alerts = query.order_by(desc(AnalysisResult.timestamp)).offset(offset).limit(limit).all()
         
-        # Convert to response format
+        # Convert to response format with real-time prices
         response_alerts = []
         for alert in alerts:
             features = alert.features_json or {}
-            
+
+            # Get real-time price data
+            price_data = await enrich_alert_with_prices(alert)
+
             response_alert = BullishAlertResponse(
                 id=alert.id,
                 symbol=alert.symbol,
@@ -120,7 +165,13 @@ async def get_moon_alerts(
                 risk_factors=features.get('risk_factors', []),
                 alert_outcome=alert.alert_outcome.value if alert.alert_outcome else None,
                 actual_move_percent=alert.actual_move_percent,
-                days_to_move=alert.days_to_move
+                days_to_move=alert.days_to_move,
+                # Add real-time price fields
+                current_price=price_data['current_price'],
+                entry_price=price_data['entry_price'],
+                target_price_low=price_data['target_price_low'],
+                target_price_mid=price_data['target_price_mid'],
+                target_price_high=price_data['target_price_high']
             )
             response_alerts.append(response_alert)
         
