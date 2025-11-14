@@ -1,18 +1,28 @@
+// src/app/page.tsx
 "use client";
 
 import { useState } from "react";
-import { Menu, TrendingUp, Eye, LineChart, User, HelpCircle, Settings, FileText, LogOut } from "lucide-react";
-import { PicksTab } from "@/components/PicksTab";
-import { WatchlistTab } from "@/components/WatchlistTab";
-import { AnalyticsTab } from "@/components/AnalyticsTab";
-import { ProfilePage } from "@/components/ProfilePage";
-import { SettingsPage } from "@/components/SettingsPage";
-import { HowItWorksPage } from "@/components/HowItWorksPage";
-import { FAQPage } from "@/components/FAQPage";
-import { TermsPrivacyPage } from "@/components/TermsPrivacyPage";
-import { AnimatedLogo } from "@/components/AnimatedLogo";
-import { CandleBackground } from "@/components/CandleBackground";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { 
+  Menu, TrendingUp, Eye, LineChart, 
+  User, HelpCircle, Settings, FileText, LogOut 
+} from "lucide-react";
+
+// src/app/page.tsx
+import PicksTab from "@/components/private/PicksTab";
+import WatchlistTab from "@/components/private/WatchlistTab";
+import AnalyticsTab from "@/components/private/AnalyticsTab";
+import ProfilePage from "@/components/private/ProfilePage";
+import SettingsPage from "@/components/private/SettingsPage";
+import HowItWorksPage from "@/components/public/HowItWorksPage";
+import FAQPage from "@/components/public/FAQPage";
+import TermsPrivacyPage from "@/components/public/TermsPrivacyPage";
+
+// Named imports
+import { AnimatedLogo } from "@/components/shared/AnimatedLogo";
+import { CandleBackground } from "@/components/shared/CandleBackground";
+import { 
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger 
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Toaster } from "@/components/ui/sonner";
@@ -25,8 +35,6 @@ export default function Home() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [candleFlash, setCandleFlash] = useState<"green" | "red" | null>(null);
 
-  const isMainTab = activePage === "picks" || activePage === "watchlist" || activePage === "analytics";
-
   const handleNavigation = (page: PageType) => {
     setActivePage(page);
     setIsMenuOpen(false);
@@ -35,18 +43,18 @@ export default function Home() {
   const triggerCandleFlash = (type: "bullish" | "bearish") => {
     const color = type === "bullish" ? "green" : "red";
     setCandleFlash(color);
-    setTimeout(() => setCandleFlash(null), 2000); // Flash for 2 seconds
+    setTimeout(() => setCandleFlash(null), 2000);
   };
 
   return (
     <div className="dark min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 pb-20">
       <CandleBackground flashColor={candleFlash} />
       <Toaster />
+
       {/* Header */}
       <header className="border-b border-slate-800 sticky top-0 bg-slate-950/95 backdrop-blur-sm z-20 shadow-lg shadow-black/20">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            {/* Left Side - Menu */}
             <Sheet open={isMenuOpen} onOpenChange={setIsMenuOpen}>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="hover:bg-slate-800 text-slate-100 border border-slate-700">
@@ -60,67 +68,36 @@ export default function Home() {
                   </SheetTitle>
                 </SheetHeader>
                 <div className="mt-8 space-y-2">
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start hover:bg-slate-800 text-slate-200"
-                    onClick={() => handleNavigation("profile")}
-                  >
-                    <User className="w-5 h-5 mr-3" />
-                    Profile
+                  <Button variant="ghost" className="w-full justify-start hover:bg-slate-800 text-slate-200" onClick={() => handleNavigation("profile")}>
+                    <User className="w-5 h-5 mr-3" /> Profile
                   </Button>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start hover:bg-slate-800 text-slate-200"
-                    onClick={() => handleNavigation("howItWorks")}
-                  >
-                    <HelpCircle className="w-5 h-5 mr-3" />
-                    How it Works
+                  <Button variant="ghost" className="w-full justify-start hover:bg-slate-800 text-slate-200" onClick={() => handleNavigation("howItWorks")}>
+                    <HelpCircle className="w-5 h-5 mr-3" /> How it Works
                   </Button>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start hover:bg-slate-800 text-slate-200"
-                    onClick={() => handleNavigation("settings")}
-                  >
-                    <Settings className="w-5 h-5 mr-3" />
-                    Settings
+                  <Button variant="ghost" className="w-full justify-start hover:bg-slate-800 text-slate-200" onClick={() => handleNavigation("settings")}>
+                    <Settings className="w-5 h-5 mr-3" /> Settings
                   </Button>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start hover:bg-slate-800 text-slate-200"
-                    onClick={() => handleNavigation("faq")}
-                  >
-                    <HelpCircle className="w-5 h-5 mr-3" />
-                    FAQ
+                  <Button variant="ghost" className="w-full justify-start hover:bg-slate-800 text-slate-200" onClick={() => handleNavigation("faq")}>
+                    <HelpCircle className="w-5 h-5 mr-3" /> FAQ
                   </Button>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start hover:bg-slate-800 text-slate-200"
-                    onClick={() => handleNavigation("terms")}
-                  >
-                    <FileText className="w-5 h-5 mr-3" />
-                    Terms / Privacy
+                  <Button variant="ghost" className="w-full justify-start hover:bg-slate-800 text-slate-200" onClick={() => handleNavigation("terms")}>
+                    <FileText className="w-5 h-5 mr-3" /> Terms / Privacy
                   </Button>
 
                   <Separator className="my-4 bg-slate-800" />
 
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start hover:bg-slate-800 text-rose-400 hover:text-rose-300"
-                  >
-                    <LogOut className="w-5 h-5 mr-3" />
-                    Logout
+                  <Button variant="ghost" className="w-full justify-start hover:bg-slate-800 text-rose-400 hover:text-rose-300">
+                    <LogOut className="w-5 h-5 mr-3" /> Logout
                   </Button>
                 </div>
               </SheetContent>
             </Sheet>
 
-            {/* Logo */}
             <div className="absolute left-1/2 -translate-x-1/2">
               <AnimatedLogo className="text-3xl font-black" />
             </div>
 
-            {/* Placeholder for balance */}
-            <div className="w-10"></div>
+            <div className="w-10" />
           </div>
         </div>
       </header>
@@ -137,7 +114,7 @@ export default function Home() {
         {activePage === "terms" && <TermsPrivacyPage />}
       </main>
 
-      {/* Bottom Navigation - Always show */}
+      {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 border-t border-slate-800 bg-slate-950/95 backdrop-blur-sm shadow-2xl z-20">
         <div className="grid grid-cols-3 h-20">
           <button
@@ -180,4 +157,3 @@ export default function Home() {
     </div>
   );
 }
-

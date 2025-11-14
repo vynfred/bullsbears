@@ -1,15 +1,25 @@
+#!TASKS /usr/bin/env python3
 """
-Background tasks for automated performance tracking and updates.
+BullsBears Tasks
+
 """
 
-from .performance_updater import performance_updater, run_daily_performance_update, run_hourly_performance_update
-from .scheduler import scheduler, start_scheduler, stop_scheduler
+from .generate_charts import generate_charts
+from .publish_to_firebase import publish_to_firebase
+from .fmp_delta_update import fmp_delta_update
+from .statistics_tasks import (
+    update_statistics_cache,
+    update_badge_data_cache,
+    validate_statistics_accuracy,
+    generate_statistics_report
+)
 
 __all__ = [
-    'performance_updater',
-    'run_daily_performance_update', 
-    'run_hourly_performance_update',
-    'scheduler',
-    'start_scheduler',
-    'stop_scheduler'
+    "generate_charts",
+    "publish_to_firebase",
+    "fmp_delta_update",
+    "update_statistics_cache",
+    "update_badge_data_cache",
+    "validate_statistics_accuracy",
+    "generate_statistics_report",
 ]

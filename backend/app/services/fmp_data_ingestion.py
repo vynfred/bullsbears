@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict
 import os
 
-from ..core.database import get_database
+from ..core.database import get_asyncpg_pool
 
 logger = logging.getLogger("FMP")
 
@@ -121,7 +121,7 @@ class FMPIngestion:
         VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (symbol, date) DO NOTHING
         """
-        db = await get_database()
+        db = await get_asyncpg_pool()
         async with db.acquire() as conn:
             await conn.executemany(query, [
                 (symbol, r["date"], r["open"], r["high"], r["low"], r["close"], int(r["volume"]))
@@ -134,7 +134,7 @@ class FMPIngestion:
         SET close_price = $2, volume = $3
         WHERE symbol = $1 AND date = CURRENT_DATE
         """
-        db = await get_database()
+        db = await get_asyncpg_pool()
         async with db.acquire() as conn:
             await conn.execute(query, symbol, data["price"], data.get("volume", 0))
 
@@ -144,7 +144,7 @@ class FMPIngestion:
 
     async def _get_active_symbols_from_db(self) -> List[str]:
         query = "SELECT symbol FROM active_tickers"
-        db = await get_database()
+        db = await get_asyncpg_pool()
         async with db.acquire() as conn:
             rows = await conn.fetch(query)
             return [row["symbol"] for row in rows]

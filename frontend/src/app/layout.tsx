@@ -1,15 +1,10 @@
+// src/app/layout.tsx
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-});
-
-
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "BullsBears - AI Stock & Options Analysis",
@@ -23,7 +18,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} antialiased`}>
+      <body className={`${inter.className} antialiased`}>
         <ThemeProvider>
           {children}
         </ThemeProvider>

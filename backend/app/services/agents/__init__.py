@@ -1,30 +1,15 @@
+#!/usr/bin/env python3
 """
-BullsBears AI Agents Package
-Optimized 8-agent system for stock analysis and prediction
+BullsBears Agents – FINAL v3.3 (November 12, 2025)
+LEAN. AUTOMATIC. ONLY WHAT WE USE.
 """
 
-from .base_agent import BaseAgent, AgentResponse
-from .predictor_agents import (
-    BullPredictorTechnical,
-    BullPredictorFundamental,
-    BearPredictorTechnical,
-    BearPredictorSentiment
-)
-from .specialized_agents import VisionAgent, ArbitratorAgent, KillSwitchAgent, PreFilterAgent
-from .enhanced_agents import NewsAgent, RiskAgent, BearPredictorFundamental
+from .arbitrator_agent import get_arbitrator_agent
+from .social_agent import get_social_agent
+from .vision_agent import get_vision_agent
 
 __all__ = [
-    'BaseAgent',
-    'AgentResponse',
-    'PreFilterAgent',
-    'BullPredictorTechnical',
-    'BullPredictorFundamental',
-    'BearPredictorTechnical',
-    'BearPredictorSentiment',
-    'BearPredictorFundamental',
-    'NewsAgent',
-    'VisionAgent',
-    'RiskAgent',
-    'ArbitratorAgent',
-    'KillSwitchAgent'
+    "get_arbitrator_agent",
+    "get_social_agent",
+    "get_vision_agent",
 ]

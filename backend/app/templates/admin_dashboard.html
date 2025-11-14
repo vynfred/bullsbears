@@ -1180,11 +1180,12 @@
             }
         }
 
-        // Auto-refresh every 30 seconds
-        setInterval(() => {
-            refreshStatus();
-            refreshCostStatus();
-        }, 30000);
+        // DISABLED AUTO-REFRESH TO PREVENT RUNPOD STARTUP
+        // Auto-refresh every 30 seconds - COMMENTED OUT TO STOP RUNPOD TRIGGERS
+        // setInterval(() => {
+        //     refreshStatus();
+        //     refreshCostStatus();
+        // }, 30000);
 
         // Initial load
         refreshStatus();

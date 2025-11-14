@@ -1,7 +1,8 @@
+// src/hooks/useLivePicks.ts
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { api, BullishAlertResponse, BearishAlertResponse } from '@/lib/api';
+import { api } from '@/lib/api';
 
 export interface LivePick {
   id: string;
@@ -20,110 +21,24 @@ export interface LivePick {
   stopLoss: number;
   aiSummary: string;
   sentiment: 'bullish' | 'bearish';
-  targetHit?: 'low' | 'mid' | 'high';
-  timeToTargetHours?: number;
   timestamp: Date;
 }
 
 interface UseLivePicksOptions {
   bullishLimit?: number;
   bearishLimit?: number;
-  refreshInterval?: number; // in milliseconds
+  refreshInterval?: number;
   enabled?: boolean;
   minConfidence?: number;
 }
 
-interface UseLivePicksReturn {
-  // Data
-  picks: LivePick[];
-  bullishPicks: LivePick[];
-  bearishPicks: LivePick[];
-  
-  // Loading states
-  isLoading: boolean;
-  isRefreshing: boolean;
-  
-  // Error handling
-  error: string | null;
-  
-  // Metadata
-  lastUpdated: Date | null;
-  
-  // Actions
-  refresh: () => Promise<void>;
-  
-  // Stats
-  totalPicks: number;
-  bullishCount: number;
-  bearishCount: number;
-}
-
-// Transform backend response to frontend format
-function transformBullishAlert(alert: BullishAlertResponse): LivePick {
-  const currentPrice = alert.current_price || alert.entry_price || 100; // Fallback
-  const priceAtAlert = alert.entry_price || currentPrice;
-  const change = ((currentPrice - priceAtAlert) / priceAtAlert) * 100;
-  
-  return {
-    id: alert.id.toString(),
-    symbol: alert.symbol,
-    name: alert.company_name || `${alert.symbol} Corporation`,
-    priceAtAlert,
-    currentPrice,
-    change,
-    confidence: Math.round(alert.confidence * 100),
-    reasoning: alert.reasons?.[0] || 'AI-identified bullish pattern',
-    entryPriceMin: priceAtAlert * 0.98,
-    entryPriceMax: priceAtAlert * 1.02,
-    targetPriceLow: priceAtAlert * 1.10,
-    targetPriceMid: priceAtAlert * 1.20,
-    targetPriceHigh: priceAtAlert * 1.35,
-    stopLoss: priceAtAlert * 0.92,
-    aiSummary: `Technical: ${alert.technical_score}/100, Sentiment: ${alert.sentiment_score}/100, Social: ${alert.social_score}/100. ${alert.reasons?.join('. ') || 'Strong bullish signals detected.'}`,
-    sentiment: 'bullish',
-    timestamp: new Date(alert.timestamp),
-    targetHit: alert.alert_outcome === 'WIN' ? 'low' : undefined,
-    timeToTargetHours: alert.days_to_move ? alert.days_to_move * 24 : undefined
-  };
-}
-
-function transformBearishAlert(alert: BearishAlertResponse): LivePick {
-  const currentPrice = alert.current_price || alert.entry_price || 100; // Fallback
-  const priceAtAlert = alert.entry_price || currentPrice;
-  const change = ((currentPrice - priceAtAlert) / priceAtAlert) * 100;
-  
-  return {
-    id: alert.id.toString(),
-    symbol: alert.symbol,
-    name: alert.company_name || `${alert.symbol} Corporation`,
-    priceAtAlert,
-    currentPrice,
-    change,
-    confidence: Math.round(alert.confidence * 100),
-    reasoning: alert.reasons?.[0] || 'AI-identified bearish pattern',
-    entryPriceMin: priceAtAlert * 0.98,
-    entryPriceMax: priceAtAlert * 1.02,
-    targetPriceLow: priceAtAlert * 0.90,
-    targetPriceMid: priceAtAlert * 0.80,
-    targetPriceHigh: priceAtAlert * 0.65,
-    stopLoss: priceAtAlert * 1.08,
-    aiSummary: `Technical: ${alert.technical_score}/100, Sentiment: ${alert.sentiment_score}/100, Social: ${alert.social_score}/100. ${alert.reasons?.join('. ') || 'Strong bearish signals detected.'}`,
-    sentiment: 'bearish',
-    timestamp: new Date(alert.timestamp),
-    targetHit: alert.alert_outcome === 'WIN' ? 'low' : undefined,
-    timeToTargetHours: alert.days_to_move ? alert.days_to_move * 24 : undefined
-  };
-}
-
-export function useLivePicks(options: UseLivePicksOptions = {}): UseLivePicksReturn {
-  const {
-    bullishLimit = 25,
-    bearishLimit = 25,
-    refreshInterval = 5 * 60 * 1000, // 5 minutes default
-    enabled = true,
-    minConfidence = 0.48 // 48% minimum confidence
-  } = options;
-
+export function useLivePicks({
+  bullishLimit = 25,
+  bearishLimit = 25,
+  refreshInterval = 5 * 60 * 1000,
+  enabled = true,
+  minConfidence = 0.48,
+}: UseLivePicksOptions = {}) {
   const [picks, setPicks] = useState<LivePick[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -135,70 +50,68 @@ export function useLivePicks(options: UseLivePicksOptions = {}): UseLivePicksRet
 
     try {
       setError(null);
-      console.log('🔄 Fetching live picks from backend...');
-      
-      // Fetch both bullish and bearish alerts in parallel
+      setIsLoading(true);
+
+      const minConfidencePercent = Math.round(minConfidence * 100);
+
       const [bullishData, bearishData] = await Promise.all([
-        api.getBullishAlerts(bullishLimit, minConfidence).catch(err => {
-          console.warn('Bullish alerts failed, using empty array:', err.message);
-          return [];
-        }),
-        api.getBearishAlerts(bearishLimit, minConfidence).catch(err => {
-          console.warn('Bearish alerts failed, using empty array:', err.message);
-          return [];
-        })
+        api.getLivePicks({ sentiment: 'bullish', limit: bullishLimit, min_confidence: minConfidencePercent }),
+        api.getLivePicks({ sentiment: 'bearish', limit: bearishLimit, min_confidence: minConfidencePercent }),
       ]);
 
-      // Transform and combine data
-      const bullishPicks = bullishData.map(transformBullishAlert);
-      const bearishPicks = bearishData.map(transformBearishAlert);
-      const allPicks = [...bullishPicks, ...bearishPicks];
+      const transform = (alert: any, sentiment: 'bullish' | 'bearish'): LivePick => {
+        const priceAtAlert = alert.entry_price || alert.current_price || 0;
+        const currentPrice = alert.current_price || priceAtAlert;
+        const change = priceAtAlert > 0 ? ((currentPrice - priceAtAlert) / priceAtAlert) * 100 : 0;
 
-      // Sort by confidence descending, then by timestamp descending
-      allPicks.sort((a, b) => {
-        if (b.confidence !== a.confidence) {
-          return b.confidence - a.confidence;
-        }
-        return b.timestamp.getTime() - a.timestamp.getTime();
-      });
+        return {
+          id: alert.id?.toString() || `${alert.symbol}-${Date.now()}`,
+          symbol: alert.symbol,
+          name: alert.company_name || `${alert.symbol} Inc.`,
+          priceAtAlert,
+          currentPrice,
+          change,
+          confidence: Math.round((alert.confidence || 0) * 100),
+          reasoning: alert.reasons?.[0] || 'AI pattern detected',
+          entryPriceMin: priceAtAlert * 0.98,
+          entryPriceMax: priceAtAlert * 1.02,
+          targetPriceLow: alert.target_price_low || priceAtAlert * (sentiment === 'bullish' ? 1.10 : 0.90),
+          targetPriceMid: alert.target_price_mid || priceAtAlert * (sentiment === 'bullish' ? 1.20 : 0.80),
+          targetPriceHigh: alert.target_price_high || priceAtAlert * (sentiment === 'bullish' ? 1.35 : 0.65),
+          stopLoss: alert.stop_loss || priceAtAlert * (sentiment === 'bullish' ? 0.92 : 1.08),
+          aiSummary: `Confidence: ${Math.round((alert.confidence || 0) * 100)}%`,
+          sentiment,
+          timestamp: new Date(alert.timestamp || Date.now()),
+        };
+      };
+
+      const bullishPicks = bullishData.map(a => transform(a, 'bullish'));
+      const bearishPicks = bearishData.map(a => transform(a, 'bearish'));
+      const allPicks = [...bullishPicks, ...bearishPicks].sort((a, b) => b.confidence - a.confidence);
 
       setPicks(allPicks);
       setLastUpdated(new Date());
-      console.log(`✅ Loaded ${allPicks.length} picks (${bullishPicks.length} bullish, ${bearishPicks.length} bearish)`);
-      
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch picks';
-      console.error('❌ Error fetching picks:', errorMessage);
-      setError(errorMessage);
-    }
-  }, [enabled, bullishLimit, bearishLimit, minConfidence]);
-
-  const refresh = useCallback(async () => {
-    setIsRefreshing(true);
-    await fetchPicks();
-    setIsRefreshing(false);
-  }, [fetchPicks]);
-
-  // Initial load
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      await fetchPicks();
+      setError('Failed to load picks');
+    } finally {
       setIsLoading(false);
-    };
-    
-    loadData();
+      setIsRefreshing(false);
+    }
+  }, [bullishLimit, bearishLimit, minConfidence, enabled]);
+
+  const refresh = useCallback(() => {
+    setIsRefreshing(true);
+    return fetchPicks();
   }, [fetchPicks]);
 
-  // Auto-refresh interval
   useEffect(() => {
-    if (!enabled || refreshInterval <= 0) return;
+    fetchPicks();
+    if (refreshInterval > 0) {
+      const id = setInterval(fetchPicks, refreshInterval);
+      return () => clearInterval(id);
+    }
+  }, [fetchPicks, refreshInterval]);
 
-    const interval = setInterval(fetchPicks, refreshInterval);
-    return () => clearInterval(interval);
-  }, [enabled, refreshInterval, fetchPicks]);
-
-  // Computed values
   const bullishPicks = picks.filter(p => p.sentiment === 'bullish');
   const bearishPicks = picks.filter(p => p.sentiment === 'bearish');
 
@@ -213,6 +126,6 @@ export function useLivePicks(options: UseLivePicksOptions = {}): UseLivePicksRet
     refresh,
     totalPicks: picks.length,
     bullishCount: bullishPicks.length,
-    bearishCount: bearishPicks.length
+    bearishCount: bearishPicks.length,
   };
 }

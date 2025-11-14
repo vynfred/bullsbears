@@ -1,6 +1,7 @@
+// src/hooks/useStatistics.ts
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useReducer, useCallback } from 'react';
 import { api } from '@/lib/api';
 
 // Types for statistics data
@@ -58,36 +59,26 @@ export interface BadgeData {
 }
 
 interface UseStatisticsOptions {
-  refreshInterval?: number; // in milliseconds
+  refreshInterval?: number;
   enabled?: boolean;
   autoRefresh?: boolean;
 }
 
 interface UseStatisticsReturn {
-  // Data
   badgeData: BadgeData | null;
   picksStats: PicksStatistics | null;
   watchlistStats: WatchlistStatistics | null;
   analyticsStats: AnalyticsStatistics | null;
   statsBarData: StatsBarData | null;
   profileStats: ProfileStatistics | null;
-  
-  // Loading states
   isLoading: boolean;
   isRefreshing: boolean;
-  
-  // Error handling
   error: string | null;
-  
-  // Metadata
   lastUpdated: Date | null;
-  
-  // Actions
   refresh: () => Promise<void>;
   refreshCache: () => Promise<void>;
 }
 
-// Default/fallback data
 const defaultBadgeData: BadgeData = {
   picks_tab: {
     total_picks_today: 0,
@@ -95,7 +86,7 @@ const defaultBadgeData: BadgeData = {
     bearish_count: 0,
     high_confidence_count: 0,
     avg_confidence: 0,
-    week_win_rate: 0
+    week_win_rate: 0,
   },
   watchlist_tab: {
     total_stocks: 0,
@@ -104,181 +95,175 @@ const defaultBadgeData: BadgeData = {
     avg_performance: 0,
     total_return_dollars: 0,
     best_performer: null,
-    worst_performer: null
+    worst_performer: null,
   },
   analytics_tab: {
-    model_accuracy: 72.4, // Default from design
-    total_predictions: 145,
-    bullish_accuracy: 52,
-    bearish_accuracy: 45,
-    high_confidence_accuracy: 68,
-    precision: 65,
-    recall: 58,
-    f1_score: 61
+    model_accuracy: 0,
+    total_predictions: 0,
+    bullish_accuracy: 0,
+    bearish_accuracy: 0,
+    high_confidence_accuracy: 0,
+    precision: 0,
+    recall: 0,
+    f1_score: 0,
   },
   stats_bar: {
-    daily_scans: 888,
-    alert_rate: 1.0,
-    bullish_win_rate: 52,
-    bearish_win_rate: 45
+    daily_scans: 0,
+    alert_rate: 0,
+    bullish_win_rate: 0,
+    bearish_win_rate: 0,
   },
   profile: {
     total_picks_month: 0,
     win_rate_month: 0,
     avg_days_to_target: 0,
     closed_positions: 0,
-    closed_win_rate: 0
-  }
+    closed_win_rate: 0,
+  },
 };
+
+interface StatisticsState {
+  badgeData: BadgeData | null;
+  isLoading: boolean;
+  isRefreshing: boolean;
+  error: string | null;
+  lastUpdated: Date | null;
+  initialized: boolean;
+}
+
+type StatisticsAction =
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_REFRESHING'; payload: boolean }
+  | { type: 'SET_ERROR'; payload: string | null }
+  | { type: 'SET_BADGE_DATA'; payload: BadgeData }
+  | { type: 'SET_LAST_UPDATED'; payload: Date }
+  | { type: 'SET_INITIALIZED'; payload: boolean }
+  | { type: 'RESET' };
+
+const initialState: StatisticsState = {
+  badgeData: null,
+  isLoading: true,
+  isRefreshing: false,
+  error: null,
+  lastUpdated: null,
+  initialized: false,
+};
+
+function statisticsReducer(state: StatisticsState, action: StatisticsAction): StatisticsState {
+  switch (action.type) {
+    case 'SET_LOADING':
+      return { ...state, isLoading: action.payload };
+    case 'SET_REFRESHING':
+      return { ...state, isRefreshing: action.payload };
+    case 'SET_ERROR':
+      return { ...state, error: action.payload };
+    case 'SET_BADGE_DATA':
+      return { ...state, badgeData: action.payload, isLoading: false, error: null };
+    case 'SET_LAST_UPDATED':
+      return { ...state, lastUpdated: action.payload };
+    case 'SET_INITIALIZED':
+      return { ...state, initialized: action.payload };
+    case 'RESET':
+      return initialState;
+    default:
+      return state;
+  }
+}
 
 export function useStatistics(options: UseStatisticsOptions = {}): UseStatisticsReturn {
   const {
-    refreshInterval = 300000, // 5 minutes default
+    refreshInterval = 300000,
     enabled = true,
-    autoRefresh = true
+    autoRefresh = true,
   } = options;
 
-  // State
-  const [badgeData, setBadgeData] = useState<BadgeData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [state, dispatch] = useReducer(statisticsReducer, initialState);
 
-  // Fetch badge data from API
-  const fetchBadgeData = useCallback(async (isRefresh = false) => {
-    if (!enabled) return;
+  const fetchBadgeData = useCallback(
+    async (isRefresh = false) => {
+      if (!enabled) return;
 
-    try {
-      if (isRefresh) {
-        setIsRefreshing(true);
-      } else {
-        setIsLoading(true);
-      }
-      setError(null);
-
-      // Try to fetch from live API
       try {
-        const response = await api.get('/api/v1/statistics/badge-data');
-        
-        if (response.data?.status === 'success' && response.data?.data) {
-          setBadgeData(response.data.data);
-          setLastUpdated(new Date());
-          console.log('✅ Statistics loaded from live API');
+        if (isRefresh) {
+          dispatch({ type: 'SET_REFRESHING', payload: true });
         } else {
-          throw new Error('Invalid API response format');
+          dispatch({ type: 'SET_LOADING', payload: true });
         }
-      } catch (apiError) {
-        console.warn('⚠️ Live API failed, using default statistics:', apiError);
-        
-        // Use default data with some randomization to simulate live data
-        const randomizedData = {
-          ...defaultBadgeData,
-          picks_tab: {
-            ...defaultBadgeData.picks_tab,
-            total_picks_today: Math.floor(Math.random() * 10) + 5,
-            bullish_count: Math.floor(Math.random() * 6) + 3,
-            bearish_count: Math.floor(Math.random() * 4) + 2,
-            high_confidence_count: Math.floor(Math.random() * 3) + 1,
-            avg_confidence: Math.floor(Math.random() * 20) + 70,
-            week_win_rate: Math.floor(Math.random() * 30) + 50
-          },
-          watchlist_tab: {
-            ...defaultBadgeData.watchlist_tab,
-            total_stocks: Math.floor(Math.random() * 8) + 3,
-            winners: Math.floor(Math.random() * 4) + 2,
-            losers: Math.floor(Math.random() * 3) + 1,
-            avg_performance: (Math.random() - 0.5) * 20, // -10% to +10%
-            total_return_dollars: (Math.random() - 0.5) * 2000 // -$1000 to +$1000
-          }
-        };
-        
-        setBadgeData(randomizedData);
-        setLastUpdated(new Date());
+        dispatch({ type: 'SET_ERROR', payload: null });
+
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/statistics/badge-data`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        if (data?.status === 'success' && data?.data) {
+          dispatch({ type: 'SET_BADGE_DATA', payload: data.data });
+          dispatch({ type: 'SET_LAST_UPDATED', payload: new Date() });
+        } else {
+          throw new Error('Invalid response');
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to fetch';
+        dispatch({ type: 'SET_ERROR', payload: msg });
+        dispatch({ type: 'SET_BADGE_DATA', payload: defaultBadgeData });
+        dispatch({ type: 'SET_LAST_UPDATED', payload: new Date() });
+      } finally {
+        dispatch({ type: 'SET_LOADING', payload: false });
+        dispatch({ type: 'SET_REFRESHING', payload: false });
       }
+    },
+    [enabled]
+  );
 
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch statistics';
-      setError(errorMessage);
-      console.error('Statistics fetch error:', err);
-      
-      // Fallback to default data
-      setBadgeData(defaultBadgeData);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [enabled]);
+  const refresh = useCallback(() => fetchBadgeData(true), [fetchBadgeData]);
 
-  // Manual refresh function
-  const refresh = useCallback(async () => {
-    await fetchBadgeData(true);
-  }, [fetchBadgeData]);
-
-  // Refresh cache function
   const refreshCache = useCallback(async () => {
     try {
-      setIsRefreshing(true);
-      await api.post('/api/v1/statistics/refresh-cache');
-      await fetchBadgeData(true);
-      console.log('✅ Statistics cache refreshed');
+      dispatch({ type: 'SET_REFRESHING', payload: true });
+      await api.refreshStatsCache?.();
+      await refresh();
     } catch (err) {
-      console.error('Failed to refresh statistics cache:', err);
-      setError('Failed to refresh cache');
+      dispatch({ type: 'SET_ERROR', payload: 'Cache refresh failed' });
     } finally {
-      setIsRefreshing(false);
+      dispatch({ type: 'SET_REFRESHING', payload: false });
     }
-  }, [fetchBadgeData]);
+  }, [refresh]);
 
-  // Initial fetch
   useEffect(() => {
-    fetchBadgeData();
-  }, [fetchBadgeData]);
+    if (!state.initialized && enabled) {
+      dispatch({ type: 'SET_INITIALIZED', payload: true });
+      fetchBadgeData();
+    }
+  }, [state.initialized, enabled, fetchBadgeData]);
 
-  // Auto-refresh interval
   useEffect(() => {
-    if (!enabled || !autoRefresh) return;
+    if (!autoRefresh || !enabled || refreshInterval <= 0) return;
+    const id = setInterval(() => fetchBadgeData(true), refreshInterval);
+    return () => clearInterval(id);
+  }, [autoRefresh, enabled, refreshInterval, fetchBadgeData]);
 
-    const interval = setInterval(() => {
-      fetchBadgeData(true);
-    }, refreshInterval);
-
-    return () => clearInterval(interval);
-  }, [enabled, autoRefresh, refreshInterval, fetchBadgeData]);
-
-  // Extract individual statistics from badge data
-  const picksStats = badgeData?.picks_tab || null;
-  const watchlistStats = badgeData?.watchlist_tab || null;
-  const analyticsStats = badgeData?.analytics_tab || null;
-  const statsBarData = badgeData?.stats_bar || null;
-  const profileStats = badgeData?.profile || null;
+  const picksStats = state.badgeData?.picks_tab ?? null;
+  const watchlistStats = state.badgeData?.watchlist_tab ?? null;
+  const analyticsStats = state.badgeData?.analytics_tab ?? null;
+  const statsBarData = state.badgeData?.stats_bar ?? null;
+  const profileStats = state.badgeData?.profile ?? null;
 
   return {
-    // Data
-    badgeData,
+    badgeData: state.badgeData,
     picksStats,
     watchlistStats,
     analyticsStats,
     statsBarData,
     profileStats,
-    
-    // Loading states
-    isLoading,
-    isRefreshing,
-    
-    // Error handling
-    error,
-    
-    // Metadata
-    lastUpdated,
-    
-    // Actions
+    isLoading: state.isLoading,
+    isRefreshing: state.isRefreshing,
+    error: state.error,
+    lastUpdated: state.lastUpdated,
     refresh,
-    refreshCache
+    refreshCache,
   };
 }
 
-// Utility hooks for specific statistics
+// Utility hooks
 export function usePicksStatistics(options?: UseStatisticsOptions) {
   const { picksStats, isLoading, error, refresh } = useStatistics(options);
   return { picksStats, isLoading, error, refresh };
