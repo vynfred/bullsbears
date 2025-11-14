@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Prescreen Agent – FinMA-7b (Production v3 – November 10, 2025)
+Prescreen Agent – Qwen2.5:32b on RunPod (Production v3.3 – November 14, 2025)
 Phase 1: ACTIVE (~1,700) → exactly 75 SHORT_LIST candidates
-Single Ollama call, no batching, no per-stock loops
+Single RunPod call, no batching, no per-stock loops
 """
 
 import asyncio
@@ -12,51 +12,45 @@ import json
 from datetime import datetime, date
 from typing import List, Dict, Any
 
-from .ollama_client import get_ollama_client
-from ..core.database import get_database
+from ..core.runpod_client import get_runpod_client
+from ..core.database import get_asyncpg_pool
 
 logger = logging.getLogger(__name__)
 
 class PrescreenAgent:
     """
-    FinMA-7b Prescreen Agent – ONE CALL TO RULE THEM ALL
-    
+    Qwen2.5:32b Prescreen Agent on RunPod – ONE CALL TO RULE THEM ALL
+
     Responsibilities:
     1. Take ACTIVE tickers + all 127 pre-computed features
-    2. ONE Ollama call → return exactly 75 ranked SHORT_LIST tickers
+    2. ONE RunPod call → return exactly 75 ranked SHORT_LIST tickers
     3. Store full candidate list (75) for LearnerAgent tracking
     4. Hot-reload prompt nightly via BrainAgent
     """
 
     def __init__(self):
         self.model_name = "qwen2.5:32b"
-        self.ollama_client = None
+        self.runpod_client = None
         self.db = None
         self.initialized = False
 
         # Prompt files (hot-reloaded nightly)
         self.prompt_path = os.path.join(
-            os.path.dirname(__file__), "prompts", "finma_prescreen_v3.txt"
+            os.path.dirname(__file__), "agents", "prompts", "finma_prescreen_v3.txt"
         )
         self.weights_path = os.path.join(
-            os.path.dirname(__file__), "prompts", "weights.json"
+            os.path.dirname(__file__), "agents", "prompts", "weights.json"
         )
 
     async def initialize(self):
         if self.initialized:
             return
 
-        self.ollama_client = await get_ollama_client()
-        self.db = await get_database()
-
-        # Verify model
-        models = await self.ollama_client.list_models()
-        model_names = [m['name'] for m in models.get('models', [])]
-        if self.model_name not in model_names:
-            raise RuntimeError(f"{self.model_name} not pulled! Run `ollama pull finma-7b`")
+        self.runpod_client = await get_runpod_client()
+        self.db = await get_asyncpg_pool()
 
         self.initialized = True
-        logger.info(f"PrescreenAgent ready – model: {self.model_name}")
+        logger.info(f"PrescreenAgent ready – model: {self.model_name} on RunPod")
 
     async def screen_active_to_shortlist(self, active_tickers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -95,18 +89,17 @@ class PrescreenAgent:
         full_prompt = f"{prompt}\n\nCONTEXT:\n{json.dumps(context, indent=2)}"
 
         try:
-            response = await self.ollama_client.generate(
-                model=self.model_name,
+            response = await self.runpod_client.run_inference(
                 prompt=full_prompt,
-                options={
-                    "temperature": 0.1,
-                    "top_p": 0.9,
-                    "max_tokens": 2048,
-                    "stop": ["</s>"]
-                }
+                model=self.model_name,
+                temperature=0.1,
+                max_tokens=2048,
+                response_format="json"
             )
 
-            shortlist = self._parse_response(response['response'])
+            # RunPod returns output in 'output' field
+            response_text = response.get('response') or response.get('output', '')
+            shortlist = self._parse_response(response_text)
             await self._store_shortlist(shortlist, context)
 
             logger.info(f"SHORT_LIST created: {len(shortlist)} tickers selected")

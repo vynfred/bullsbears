@@ -14,14 +14,15 @@ celery_app = Celery(
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
     include=[
-        "app.tasks.run_finma_and_brain",
+        "app.tasks.fmp_delta_update",
+        "app.tasks.build_active_symbols",
+        "app.tasks.run_prescreen",
         "app.tasks.generate_charts",
         "app.tasks.run_groq_vision",
         "app.tasks.run_grok_social",
         "app.tasks.run_arbitrator",
         "app.tasks.publish_to_firebase",
-        "app.tasks.fmp_delta_update",
-        "app.tasks.build_active_tickers",
+        "app.tasks.run_learner",
         "app.tasks.statistics_tasks",
     ]
 )

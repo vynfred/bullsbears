@@ -7,7 +7,7 @@ VIX >35 AND SPY <-2% = Block all pick generation
 import logging
 import asyncio
 from typing import Dict, Any, Optional
-from ..core.database import get_database
+from ..core.database import get_asyncpg_pool
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class KillSwitchService:
     async def initialize(self):
         """Initialize database connection"""
         if not self.initialized:
-            self.db = await get_database()
+            self.db = await get_asyncpg_pool()
             self.initialized = True
     
     async def check_market_conditions(self) -> bool:

@@ -16,7 +16,7 @@ import io
 from pathlib import Path
 from typing import List, Dict
 
-from ..core.database import get_database
+from ..core.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,10 @@ class ChartGenerator:
         self.ax1, self.ax2 = self.fig.subplots(2, 1, gridspec_kw={'height_ratios': [3, 1]})
 
     async def initialize(self):
-        self.db = await get_database()
+        # get_db() is a generator, we need to use it differently
+        # For now, we'll use get_asyncpg_pool() for raw queries
+        from ..core.database import get_asyncpg_pool
+        self.db = await get_asyncpg_pool()
 
     async def generate_batch(self, shortlist: List[Dict]) -> List[Dict]:
         """Input: 75 symbols → Output: 75 base64 charts + stored in DB"""

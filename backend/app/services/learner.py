@@ -4,8 +4,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import List, Dict
 
-from app.core.database import db
-from app.services.qwen_client import qwen_client
+from ..core.database import get_asyncpg_pool
+from ..core.runpod_client import get_runpod_client
 
 logger = logging.getLogger(__name__)
 
@@ -35,35 +35,52 @@ OUTPUT JSON:
 async def run_nightly_learning():
     logger.info("Starting nightly learning...")
     try:
+        db = await get_asyncpg_pool()
+        runpod_client = await get_runpod_client()
+
         yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
         candidates = await db.fetch("""
-            SELECT symbol, prescreen_score, social_score, vision_flags, 
+            SELECT symbol, prescreen_score, social_score, vision_flags,
                    final_pick, change_30d, confidence
-            FROM short_list_price_tracking 
-            WHERE date = %s
-        """, (yesterday,))
+            FROM short_list_price_tracking
+            WHERE date = $1
+        """, yesterday)
 
         if not candidates:
             logger.info("No data. Skipping.")
             return
 
-        response = await qwen_client.chat.completions.create(
+        prompt = build_learning_prompt(candidates)
+        response = await runpod_client.run_inference(
+            prompt=prompt,
             model="qwen2.5:32b",
-            messages=[{"role": "user", "content": build_learning_prompt(candidates)}],
-            response_format={"type": "json_object"}
+            temperature=0.0,
+            max_tokens=2048,
+            response_format="json"
         )
 
-        updates = json.loads(response.choices[0].message.content)
+        # Parse response
+        response_text = response.get('response') or response.get('output', '{}')
+        updates = json.loads(response_text)
 
-        # Apply updates
+        # Apply updates to database
         for flag, w in updates.get("vision_updates", {}).items():
-            await db.upsert("model_weights", {"name": f"vision_{flag}"}, {"value": float(w)})
+            await db.execute(
+                "INSERT INTO model_weights (name, value) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET value = $2",
+                f"vision_{flag}", float(w)
+            )
 
         for name, w in updates.get("arbitrator_updates", {}).items():
-            await db.upsert("model_weights", {"name": name}, {"value": float(w)})
+            await db.execute(
+                "INSERT INTO model_weights (name, value) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET value = $2",
+                name, float(w)
+            )
 
         for ex in updates.get("prompt_additions", []):
-            await db.insert("prompt_examples", {"type": "missed_moon", "content": ex})
+            await db.execute(
+                "INSERT INTO prompt_examples (type, content) VALUES ($1, $2)",
+                "missed_moon", ex
+            )
 
         logger.info("Nightly learning complete.")
     except Exception as e:

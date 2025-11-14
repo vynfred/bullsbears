@@ -152,7 +152,14 @@ async def get_chart_generator() -> ChartGenerator:
 def generate_charts():
     """Celery task — runs at 3:15 AM ET"""
     async def _run():
+        from app.services.system_state import SystemState
+
+        # Check if system is ON
+        if not await SystemState.is_system_on():
+            logger.info("⏸️ System is OFF - skipping chart generation")
+            return {"skipped": True, "reason": "system_off"}
+
         async with get_chart_generator() as gen:
             return await gen.generate_all_charts()
-    
+
     return asyncio.run(_run())

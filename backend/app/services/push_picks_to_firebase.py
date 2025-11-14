@@ -55,6 +55,45 @@ class FirebaseService:
             logger.error(f"Firebase push failed: {e}")
             return False
 
+    async def get_data(self, path: str) -> Dict[str, Any]:
+        """Get data from Firebase path"""
+        try:
+            url = f"{DATABASE_URL}{path}.json"
+
+            async with self.session.get(url) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data
+                else:
+                    logger.error(f"Firebase GET error {resp.status}: {path}")
+                    return None
+
+        except Exception as e:
+            logger.error(f"Firebase GET failed: {e}")
+            return None
+
+    async def update_data(self, path: str, data: Dict[str, Any]) -> bool:
+        """Update data at Firebase path"""
+        try:
+            url = f"{DATABASE_URL}{path}.json"
+
+            async with self.session.put(url, json=data) as resp:
+                if resp.status == 200:
+                    logger.debug(f"Firebase update successful: {path}")
+                    return True
+                else:
+                    text = await resp.text()
+                    logger.error(f"Firebase update error {resp.status}: {text}")
+                    return False
+
+        except Exception as e:
+            logger.error(f"Firebase update failed: {e}")
+            return False
+
+    async def get_latest_picks(self) -> Dict[str, Any]:
+        """Get latest picks from Firebase"""
+        return await self.get_data("/picks/latest")
+
 
 # Convenience function — used in tasks
 async def push_picks_to_firebase(picks: List[Dict[str, Any]]) -> bool:
