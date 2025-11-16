@@ -132,7 +132,7 @@ export default function AnalyticsTab({ onNavigateToPicks }: AnalyticsTabProps) {
         <CardContent className="px-0 pb-4">
           <ChartContainer className="h-[300px] w-full relative">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData.map(point => ({
+              <LineChart data={(trendData || []).map(point => ({
                 date: new Date(point.date).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }),
                 accuracy: point.accuracy,
                 picks: point.total_picks,
@@ -164,7 +164,7 @@ export default function AnalyticsTab({ onNavigateToPicks }: AnalyticsTabProps) {
         return [value, name];
       }}
       labelFormatter={(label) => {
-        const dataPoint = trendData.find(d =>
+        const dataPoint = (trendData || []).find(d =>
           new Date(d.date).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }) === label
         );
         const picks = dataPoint?.total_picks || 0;
@@ -182,7 +182,7 @@ export default function AnalyticsTab({ onNavigateToPicks }: AnalyticsTabProps) {
                   strokeWidth={3}
                   dot={(props: any) => {
                     const { cx, cy, payload, index } = props;
-                    const chartData = trendData.map(point => ({
+                    const chartData = (trendData || []).map(point => ({
                       date: new Date(point.date).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }),
                       accuracy: point.accuracy,
                       picks: point.total_picks,
@@ -350,8 +350,8 @@ export default function AnalyticsTab({ onNavigateToPicks }: AnalyticsTabProps) {
                             </span>
                           </div>
                           <p className="text-slate-400">in {outcome.days_to_outcome}d</p>
-                          {outcome.outcome === 'win' && outcome.change_percent > 20 && <p className="text-emerald-400">MOON</p>}
-                          {outcome.outcome === 'loss' && outcome.change_percent < -20 && <p className="text-rose-400">RUG</p>}
+                          {outcome.outcome === 'win' && outcome.change_percent > 20 && <p className="text-emerald-400">BULLISH</p>}
+                          {outcome.outcome === 'loss' && outcome.change_percent < -20 && <p className="text-rose-400">BEARISH</p>}
                         </div>
                       </CardContent>
                     </Card>

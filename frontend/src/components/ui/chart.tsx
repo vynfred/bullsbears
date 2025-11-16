@@ -31,7 +31,7 @@ export function ChartContainer({
 
 // Chart Tooltip - Recharts default, but we replace it with ChartTooltipContent
 export function ChartTooltip({ content }: { content?: React.ReactNode }) {
-  return <Tooltip content={content} />;
+  return <Tooltip content={content as any} />;
 }
 
 // Chart Tooltip Content - YOUR EXACT DESIGN

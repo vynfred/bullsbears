@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build Active Symbols Task - NASDAQ ALL → ACTIVE Tier
-Called daily at 3:05 AM ET after FMP delta update
+
 """
 
 from celery import current_task

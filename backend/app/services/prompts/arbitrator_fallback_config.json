@@ -1,0 +1,136 @@
+{
+  "_DESCRIPTION": "Arbitrator fallback configuration - defines retry logic and fallback chains",
+  "_LAST_UPDATED": "2025-11-14T10:00:00-05:00",
+  "_AUTO_UPDATED_BY": "Learner Agent based on model performance",
+  
+  "fallback_strategy": {
+    "max_retries_per_model": 2,
+    "timeout_seconds": 30,
+    "retry_delay_seconds": 5,
+    "always_fallback_to_runpod": true
+  },
+  
+  "model_priority": {
+    "_NOTE": "Higher priority = tried first in fallback chain",
+    "deepseek-v3": 100,
+    "gemini-2.5-pro": 95,
+    "grok-4": 90,
+    "claude-sonnet-4": 85,
+    "gpt-5-o3": 80,
+    "qwen2.5:32b": 1000
+  },
+  
+  "model_health": {
+    "_NOTE": "Updated by monitoring system, 0-100 score",
+    "deepseek-v3": {
+      "status": "healthy",
+      "uptime_7d": 99.5,
+      "avg_response_time_ms": 2500,
+      "last_success": "2025-11-14T08:20:00-05:00",
+      "last_failure": null,
+      "consecutive_failures": 0
+    },
+    "gemini-2.5-pro": {
+      "status": "not_implemented",
+      "uptime_7d": 0,
+      "avg_response_time_ms": null,
+      "last_success": null,
+      "last_failure": null,
+      "consecutive_failures": 0
+    },
+    "grok-4": {
+      "status": "not_implemented",
+      "uptime_7d": 0,
+      "avg_response_time_ms": null,
+      "last_success": null,
+      "last_failure": null,
+      "consecutive_failures": 0
+    },
+    "claude-sonnet-4": {
+      "status": "not_implemented",
+      "uptime_7d": 0,
+      "avg_response_time_ms": null,
+      "last_success": null,
+      "last_failure": null,
+      "consecutive_failures": 0
+    },
+    "gpt-5-o3": {
+      "status": "not_implemented",
+      "uptime_7d": 0,
+      "avg_response_time_ms": null,
+      "last_success": null,
+      "last_failure": null,
+      "consecutive_failures": 0
+    },
+    "qwen2.5:32b": {
+      "status": "healthy",
+      "uptime_7d": 99.9,
+      "avg_response_time_ms": 1800,
+      "last_success": "2025-11-14T08:20:00-05:00",
+      "last_failure": null,
+      "consecutive_failures": 0,
+      "_NOTE": "Guaranteed fallback - always available on RunPod"
+    }
+  },
+  
+  "performance_tracking": {
+    "_NOTE": "Win rates by model - updated nightly by Learner Agent",
+    "deepseek-v3": {
+      "picks_made": 0,
+      "wins": 0,
+      "partials": 0,
+      "losses": 0,
+      "win_rate": 0.0,
+      "avg_confidence": 0.0
+    },
+    "gemini-2.5-pro": {
+      "picks_made": 0,
+      "wins": 0,
+      "partials": 0,
+      "losses": 0,
+      "win_rate": 0.0,
+      "avg_confidence": 0.0
+    },
+    "grok-4": {
+      "picks_made": 0,
+      "wins": 0,
+      "partials": 0,
+      "losses": 0,
+      "win_rate": 0.0,
+      "avg_confidence": 0.0
+    },
+    "claude-sonnet-4": {
+      "picks_made": 0,
+      "wins": 0,
+      "partials": 0,
+      "losses": 0,
+      "win_rate": 0.0,
+      "avg_confidence": 0.0
+    },
+    "gpt-5-o3": {
+      "picks_made": 0,
+      "wins": 0,
+      "partials": 0,
+      "losses": 0,
+      "win_rate": 0.0,
+      "avg_confidence": 0.0
+    },
+    "qwen2.5:32b": {
+      "picks_made": 0,
+      "wins": 0,
+      "partials": 0,
+      "losses": 0,
+      "win_rate": 0.0,
+      "avg_confidence": 0.0
+    }
+  },
+  
+  "circuit_breaker": {
+    "_NOTE": "Temporarily disable models with too many failures",
+    "enabled": true,
+    "failure_threshold": 5,
+    "recovery_time_minutes": 60,
+    "disabled_models": []
+  }
+}
+

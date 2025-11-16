@@ -50,8 +50,8 @@ export function useStockPicks() {
         fetchApi<StockPick[]>('/api/v1/bearish_alerts')
       ]);
 
-      setBullishPicks(bullishResponse);
-      setBearishPicks(bearishResponse);
+      setBullishPicks(bullishResponse || []);
+      setBearishPicks(bearishResponse || []);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch picks';
       setError(errorMessage);
@@ -87,7 +87,7 @@ export function useWatchlist() {
       setError(null);
 
       const data = await fetchApi<WatchlistStock[]>('/api/v1/watchlist');
-      setWatchlist(data);
+      setWatchlist(data || []);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch watchlist';
       setError(errorMessage);
@@ -156,7 +156,7 @@ export function useRecentOutcomes() {
       setError(null);
 
       const data = await fetchApi<RecentPickOutcome[]>('/api/v1/analytics/recent-outcomes');
-      setOutcomes(data);
+      setOutcomes(data || []);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch recent outcomes';
       setError(errorMessage);
@@ -193,7 +193,7 @@ export function useAccuracyTrend(period: '7d' | '30d' | '90d' = '30d') {
       setError(null);
 
       const data = await fetchApi<AccuracyTrendPoint[]>(`/api/v1/analytics/accuracy-trend?period=${period}`);
-      setTrendData(data);
+      setTrendData(data || []);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch accuracy trend';
       setError(errorMessage);

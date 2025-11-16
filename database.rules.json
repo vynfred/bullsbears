@@ -1,0 +1,45 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    
+    "picks": {
+      ".read": true,
+      ".write": "auth != null && auth.token.admin == true",
+      ".indexOn": ["timestamp", "direction", "confidence"]
+    },
+    
+    "analytics": {
+      ".read": true,
+      ".write": "auth != null && auth.token.admin == true"
+    },
+    
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid",
+        
+        "watchlist": {
+          ".indexOn": ["symbol", "added_at"],
+          "$symbol": {
+            ".validate": "newData.hasChildren(['symbol', 'entry_price', 'added_at'])"
+          }
+        },
+        
+        "profile": {
+          ".validate": "newData.hasChildren(['display_name', 'created_at'])"
+        },
+        
+        "settings": {
+          ".validate": "newData.hasChildren(['notifications_enabled'])"
+        }
+      }
+    },
+    
+    "pulse": {
+      ".read": true,
+      ".write": "auth != null && auth.token.admin == true"
+    }
+  }
+}
+

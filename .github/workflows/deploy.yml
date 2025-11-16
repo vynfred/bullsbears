@@ -1,0 +1,46 @@
+name: Deploy BullsBears Backend
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+    
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - name: Deploy to Cloud Run
+      run: |
+        gcloud run deploy bullsbears-backend \
+          --source ./backend \
+          --platform managed \
+          --region us-central1 \
+          --project bullsbears \
+          --allow-unauthenticated \
+          --set-env-vars DB_HOST=${{ vars.DB_HOST }},DB_USER=postgres,DB_NAME=postgres,DB_PORT=5432,ENVIRONMENT=production,FIREBASE_PROJECT_ID=bullsbears-xyz,FIREBASE_DATABASE_URL=https://bullsbears-xyz-default-rtdb.firebaseio.com,RUNPOD_ENDPOINT_ID=3fjac9v4neycka,RUNPOD_BASE_URL=https://api.runpod.ai/v2,ALPHA_VANTAGE_API_KEY=${{ secrets.ALPHA_VANTAGE_API_KEY }},FMP_API_KEY=${{ secrets.FMP_API_KEY }} \
+          --set-secrets DB_PASSWORD=bullsbears-db-password:latest,FIREBASE_API_KEY=firebase-api-key:latest,RUNPOD_API_KEY=runpod-api-key:latest,SECRET_KEY=app-secret-key:latest \
+          --memory 2Gi \
+          --cpu 2 \
+          --timeout 300 \
+          --min-instances 0 \
+          --max-instances 10
+    
+    - name: Output URL
+      run: |
+        echo "🚀 Deployment complete!"
+        gcloud run services describe bullsbears-backend \
+          --region us-central1 \
+          --project bullsbears \
+          --format="value(status.url)"

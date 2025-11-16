@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#Core !/usr/bin/env python3
 """
 BullsBears Core – FINAL v3.3
 """

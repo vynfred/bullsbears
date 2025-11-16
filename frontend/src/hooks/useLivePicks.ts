@@ -1,7 +1,7 @@
 // src/hooks/useLivePicks.ts
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/lib/api';
 
 export interface LivePick {
@@ -30,6 +30,13 @@ interface UseLivePicksOptions {
   refreshInterval?: number;
   enabled?: boolean;
   minConfidence?: number;
+  enableSSE?: boolean;
+  cacheTimeout?: number;
+}
+
+interface CacheEntry {
+  data: LivePick[];
+  timestamp: number;
 }
 
 export function useLivePicks({
@@ -38,20 +45,93 @@ export function useLivePicks({
   refreshInterval = 5 * 60 * 1000,
   enabled = true,
   minConfidence = 0.48,
+  enableSSE = true,
+  cacheTimeout = 30 * 1000, // 30 seconds
 }: UseLivePicksOptions = {}) {
   const [picks, setPicks] = useState<LivePick[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [isRealTime, setIsRealTime] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
 
-  const fetchPicks = useCallback(async () => {
-    if (!enabled) return;
+  // Refs for cleanup
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const cacheRef = useRef<CacheEntry | null>(null);
+
+  // Cache management
+  const getCachedData = useCallback((): LivePick[] | null => {
+    if (!cacheRef.current) return null;
+    
+    const isExpired = Date.now() - cacheRef.current.timestamp > cacheTimeout;
+    if (isExpired) {
+      cacheRef.current = null;
+      return null;
+    }
+    
+    return cacheRef.current.data;
+  }, [cacheTimeout]);
+
+  const setCachedData = useCallback((data: LivePick[]) => {
+    cacheRef.current = {
+      data,
+      timestamp: Date.now()
+    };
+  }, []);
+
+  const clearCache = useCallback(() => {
+    cacheRef.current = null;
+  }, []);
+
+  // Transform API data to LivePick format
+  const transformData = useCallback((alert: any, sentiment: 'bullish' | 'bearish'): LivePick => {
+    const priceAtAlert = alert.entry_price || alert.current_price || 0;
+    const currentPrice = alert.current_price || priceAtAlert;
+    const change = priceAtAlert > 0 ? ((currentPrice - priceAtAlert) / priceAtAlert) * 100 : 0;
+
+    // Dynamic entry ranges based on volatility and confidence
+    const volatilityMultiplier = alert.volatility || 0.02; // Default 2%
+    const confidenceAdjustment = (alert.confidence || 0.5) > 0.8 ? 0.5 : 1.0; // Tighter range for high confidence
+
+    const entryRange = volatilityMultiplier * confidenceAdjustment;
+
+    return {
+      id: alert.id?.toString() || `${alert.symbol}-${Date.now()}`,
+      symbol: alert.symbol,
+      name: alert.company_name || `${alert.symbol} Inc.`,
+      priceAtAlert,
+      currentPrice,
+      change,
+      confidence: Math.round((alert.confidence || 0) * 100),
+      reasoning: alert.reasons?.[0] || 'AI pattern detected',
+      entryPriceMin: priceAtAlert * (1 - entryRange),
+      entryPriceMax: priceAtAlert * (1 + entryRange),
+      targetPriceLow: alert.target_price_low || priceAtAlert * (sentiment === 'bullish' ? 1.10 : 0.90),
+      targetPriceMid: alert.target_price_mid || priceAtAlert * (sentiment === 'bullish' ? 1.20 : 0.80),
+      targetPriceHigh: alert.target_price_high || priceAtAlert * (sentiment === 'bullish' ? 1.35 : 0.65),
+      stopLoss: alert.stop_loss || priceAtAlert * (sentiment === 'bullish' ? 0.92 : 1.08),
+      aiSummary: `Confidence: ${Math.round((alert.confidence || 0) * 100)}%`,
+      sentiment,
+      timestamp: new Date(alert.timestamp || Date.now()),
+    };
+  }, []);
+
+  // Fetch picks from API
+  const fetchPicks = useCallback(async (useCache = true): Promise<LivePick[]> => {
+    if (!enabled) return [];
+
+    // Check cache first
+    if (useCache) {
+      const cached = getCachedData();
+      if (cached) {
+        console.log('🔥 Using cached picks data');
+        return cached;
+      }
+    }
 
     try {
-      setError(null);
-      setIsLoading(true);
-
       const minConfidencePercent = Math.round(minConfidence * 100);
 
       const [bullishData, bearishData] = await Promise.all([
@@ -59,58 +139,165 @@ export function useLivePicks({
         api.getLivePicks({ sentiment: 'bearish', limit: bearishLimit, min_confidence: minConfidencePercent }),
       ]);
 
-      const transform = (alert: any, sentiment: 'bullish' | 'bearish'): LivePick => {
-        const priceAtAlert = alert.entry_price || alert.current_price || 0;
-        const currentPrice = alert.current_price || priceAtAlert;
-        const change = priceAtAlert > 0 ? ((currentPrice - priceAtAlert) / priceAtAlert) * 100 : 0;
-
-        return {
-          id: alert.id?.toString() || `${alert.symbol}-${Date.now()}`,
-          symbol: alert.symbol,
-          name: alert.company_name || `${alert.symbol} Inc.`,
-          priceAtAlert,
-          currentPrice,
-          change,
-          confidence: Math.round((alert.confidence || 0) * 100),
-          reasoning: alert.reasons?.[0] || 'AI pattern detected',
-          entryPriceMin: priceAtAlert * 0.98,
-          entryPriceMax: priceAtAlert * 1.02,
-          targetPriceLow: alert.target_price_low || priceAtAlert * (sentiment === 'bullish' ? 1.10 : 0.90),
-          targetPriceMid: alert.target_price_mid || priceAtAlert * (sentiment === 'bullish' ? 1.20 : 0.80),
-          targetPriceHigh: alert.target_price_high || priceAtAlert * (sentiment === 'bullish' ? 1.35 : 0.65),
-          stopLoss: alert.stop_loss || priceAtAlert * (sentiment === 'bullish' ? 0.92 : 1.08),
-          aiSummary: `Confidence: ${Math.round((alert.confidence || 0) * 100)}%`,
-          sentiment,
-          timestamp: new Date(alert.timestamp || Date.now()),
-        };
-      };
-
-      const bullishPicks = bullishData.map(a => transform(a, 'bullish'));
-      const bearishPicks = bearishData.map(a => transform(a, 'bearish'));
+      const bullishPicks = bullishData.map(a => transformData(a, 'bullish'));
+      const bearishPicks = bearishData.map(a => transformData(a, 'bearish'));
       const allPicks = [...bullishPicks, ...bearishPicks].sort((a, b) => b.confidence - a.confidence);
 
-      setPicks(allPicks);
-      setLastUpdated(new Date());
+      // Cache the result
+      setCachedData(allPicks);
+      
+      return allPicks;
     } catch (err) {
-      setError('Failed to load picks');
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      console.error('Failed to fetch picks:', err);
+      throw err;
     }
-  }, [bullishLimit, bearishLimit, minConfidence, enabled]);
+  }, [bullishLimit, bearishLimit, minConfidence, enabled, getCachedData, setCachedData, transformData]);
 
-  const refresh = useCallback(() => {
-    setIsRefreshing(true);
-    return fetchPicks();
-  }, [fetchPicks]);
+  // Setup Server-Sent Events
+  const setupSSE = useCallback(() => {
+    if (!enableSSE || !enabled) return;
 
-  useEffect(() => {
-    fetchPicks();
+    try {
+      console.log('🔥 Setting up SSE connection...');
+      setConnectionStatus('connecting');
+      
+      const eventSource = new EventSource(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/picks/live/stream`);
+      eventSourceRef.current = eventSource;
+
+      eventSource.onopen = () => {
+        console.log('🔥 SSE connection established');
+        setConnectionStatus('connected');
+        setIsRealTime(true);
+        setError(null);
+      };
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('🔥 Real-time update received:', data);
+          
+          if (data.picks && Array.isArray(data.picks)) {
+            const transformedPicks = data.picks.map((pick: any) => 
+              transformData(pick, pick.sentiment || 'bullish')
+            );
+            
+            setPicks(transformedPicks);
+            setCachedData(transformedPicks);
+            setLastUpdated(new Date());
+            setError(null);
+          }
+        } catch (error) {
+          console.error('Error parsing SSE data:', error);
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.warn('SSE connection failed, falling back to polling:', error);
+        setConnectionStatus('disconnected');
+        setIsRealTime(false);
+        eventSource.close();
+        startPolling();
+      };
+
+    } catch (error) {
+      console.warn('SSE not supported, using polling:', error);
+      setConnectionStatus('disconnected');
+      startPolling();
+    }
+  }, [enableSSE, enabled, transformData, setCachedData]);
+
+  // Setup polling fallback
+  const startPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+    }
+
+    console.log('🔄 Starting polling mode...');
+    setIsRealTime(false);
+    setConnectionStatus('disconnected');
+
+    const poll = async () => {
+      try {
+        const data = await fetchPicks(true);
+        setPicks(data);
+        setLastUpdated(new Date());
+        setError(null);
+      } catch (err) {
+        setError('Failed to load picks');
+      }
+    };
+
+    // Initial fetch
+    poll();
+
+    // Setup interval
     if (refreshInterval > 0) {
-      const id = setInterval(fetchPicks, refreshInterval);
-      return () => clearInterval(id);
+      pollIntervalRef.current = setInterval(poll, refreshInterval);
     }
   }, [fetchPicks, refreshInterval]);
+
+  // Manual refresh
+  const refresh = useCallback(async () => {
+    setIsRefreshing(true);
+    clearCache();
+    
+    try {
+      const data = await fetchPicks(false);
+      setPicks(data);
+      setLastUpdated(new Date());
+      setError(null);
+    } catch (err) {
+      setError('Failed to refresh picks');
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [fetchPicks, clearCache]);
+
+  // Test connection
+  const testConnection = useCallback(async () => {
+    try {
+      await api.get('/health');
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // Initialize
+  useEffect(() => {
+    if (!enabled) return;
+
+    setIsLoading(true);
+    
+    // Try SSE first, fallback to polling
+    if (enableSSE) {
+      setupSSE();
+    } else {
+      startPolling();
+    }
+
+    // Initial data load
+    fetchPicks(true).then(data => {
+      setPicks(data);
+      setLastUpdated(new Date());
+      setIsLoading(false);
+    }).catch(err => {
+      setError('Failed to load initial picks');
+      setIsLoading(false);
+    });
+
+    // Cleanup
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, [enabled, enableSSE, setupSSE, startPolling, fetchPicks]);
 
   const bullishPicks = picks.filter(p => p.sentiment === 'bullish');
   const bearishPicks = picks.filter(p => p.sentiment === 'bearish');
@@ -127,5 +314,11 @@ export function useLivePicks({
     totalPicks: picks.length,
     bullishCount: bullishPicks.length,
     bearishCount: bearishPicks.length,
+    
+    // Advanced features
+    isRealTime,
+    connectionStatus,
+    clearCache,
+    testConnection,
   };
 }

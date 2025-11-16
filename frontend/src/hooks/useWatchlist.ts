@@ -35,7 +35,7 @@ export function useWatchlist(): UseWatchlistReturn {
     }
   }, []);
 
-  const addToWatchlist = useCallback(async (request) => {
+  const addToWatchlist = useCallback(async (request: any) => {
     try {
       setIsAdding(true);
       setError(null);

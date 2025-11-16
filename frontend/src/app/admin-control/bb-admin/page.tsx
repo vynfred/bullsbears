@@ -136,6 +136,60 @@ export default function AdminControlPanel() {
     }
   };
 
+  const toggleSystem = async (turnOn: boolean) => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/system/${turnOn ? 'on' : 'off'}`, {
+        method: 'POST',
+        headers: { "Authorization": `Bearer ${adminToken}` },
+      });
+      if (response.ok) {
+        setIsSystemOn(turnOn);
+        toast.success(`System turned ${turnOn ? 'ON' : 'OFF'}`);
+      } else {
+        toast.error(`Failed to turn system ${turnOn ? 'on' : 'off'}`);
+      }
+    } catch (error) {
+      toast.error("Failed to toggle system");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const primeData = async () => {
+    setIsPriming(true);
+    setPrimeProgress({ status: 'starting', current_batch: 0, total_batches: 7 });
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/prime-data`, {
+        method: 'POST',
+        headers: { "Authorization": `Bearer ${adminToken}` },
+      });
+      if (response.ok) {
+        toast.success("Data priming started!");
+      } else {
+        toast.error("Failed to start data priming");
+        setIsPriming(false);
+      }
+    } catch (error) {
+      toast.error("Failed to prime data");
+      setIsPriming(false);
+    }
+  };
+
+  const StatusBadge = ({ status }: { status: boolean }) => (
+    <Badge className={status ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/50" : "bg-red-500/20 text-red-400 border-red-500/50"}>
+      {status ? "Connected" : "Disconnected"}
+    </Badge>
+  );
+
+  // Auto-refresh system status (MUST be before conditional return)
+  useEffect(() => {
+    if (isAuthenticated) {
+      const interval = setInterval(checkSystemStatus, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated, adminToken]);
+
   // If not authenticated, show login form
   if (!isAuthenticated) {
     return (
@@ -196,60 +250,6 @@ export default function AdminControlPanel() {
       </div>
     );
   }
-
-  const toggleSystem = async (turnOn: boolean) => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/system/${turnOn ? 'on' : 'off'}`, {
-        method: 'POST',
-        headers: { "Authorization": `Bearer ${adminToken}` },
-      });
-      if (response.ok) {
-        setIsSystemOn(turnOn);
-        toast.success(`System turned ${turnOn ? 'ON' : 'OFF'}`);
-      } else {
-        toast.error(`Failed to turn system ${turnOn ? 'on' : 'off'}`);
-      }
-    } catch (error) {
-      toast.error("Failed to toggle system");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const primeData = async () => {
-    setIsPriming(true);
-    setPrimeProgress({ status: 'starting', current_batch: 0, total_batches: 7 });
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/prime-data`, {
-        method: 'POST',
-        headers: { "Authorization": `Bearer ${adminToken}` },
-      });
-      if (response.ok) {
-        toast.success("Data priming started!");
-      } else {
-        toast.error("Failed to start data priming");
-        setIsPriming(false);
-      }
-    } catch (error) {
-      toast.error("Failed to prime data");
-      setIsPriming(false);
-    }
-  };
-
-  const StatusBadge = ({ status }: { status: boolean }) => (
-    <Badge className={status ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/50" : "bg-red-500/20 text-red-400 border-red-500/50"}>
-      {status ? "Connected" : "Disconnected"}
-    </Badge>
-  );
-
-  // Auto-refresh system status
-  useEffect(() => {
-    if (isAuthenticated) {
-      const interval = setInterval(checkSystemStatus, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [isAuthenticated, adminToken]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6">

@@ -3,6 +3,33 @@ import { HistoryEntry, WatchlistNotification } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+// AI vs Watchlist Performance type
+export interface AIVsWatchlistPerformance {
+  ai_performance: {
+    average_return_percent: number;
+    win_rate: number;
+    total_picks: number;
+    best_pick_return: number;
+    worst_pick_return: number;
+  };
+  watchlist_performance: {
+    average_return_percent: number;
+    win_rate: number;
+    total_picks: number;
+    closed_entries: number;
+    best_pick_return: number;
+    worst_pick_return: number;
+  };
+  comparison: {
+    better_performer: 'ai' | 'watchlist' | 'tie';
+    performance_advantage_percent: number;
+  };
+  comparison_period_days: number;
+  ai_picks_count: number;
+  watchlist_picks_count: number;
+  period: string;
+}
+
 const fetchWithError = async (url: string, options: RequestInit = {}) => {
   try {
     const res = await fetch(`${API_BASE}${url}`, {
@@ -94,5 +121,19 @@ export const api = {
   // CACHE REFRESH
   refreshStatsCache: async () => {
     await fetchWithError('/api/v1/statistics/refresh-cache', { method: 'POST' });
+  },
+
+  // AI VS WATCHLIST PERFORMANCE
+  getAIVsWatchlistPerformance: async (days: number = 30): Promise<AIVsWatchlistPerformance> => {
+    return fetchWithError(`/api/v1/analytics/ai-vs-watchlist?days=${days}`);
+  },
+
+  // LIVE ALERTS
+  getBullishAlerts: async (limit: number = 10) => {
+    return fetchWithError(`/api/v1/alerts/bullish?limit=${limit}`);
+  },
+
+  getBearishAlerts: async (limit: number = 10) => {
+    return fetchWithError(`/api/v1/alerts/bearish?limit=${limit}`);
   },
 };
