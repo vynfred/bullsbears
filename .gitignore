@@ -120,3 +120,37 @@ pids
 
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test
+
+# Firebase
+.firebase/
+*-firebase-adminsdk-*.json
+firebase-debug.log
+firestore-debug.log
+
+# Secrets and credentials
+*.pem
+*.key
+*.p12
+*service-account*.json
+*credentials*.json
+
+# Database dumps
+*.sql
+bullsbears_production.sql
+
+# Documentation (too large for git)
+*_COMPLETE.md
+*_SUMMARY.md
+*_REPORT.md
+*_DESIGN.md
+*_AUDIT.md
+*_CHECKLIST.md
+*_GUIDE.md
+*_SETUP.md
+*_STATUS.md
+*_READY.md
+*_VERIFIED.md
+*_REVIEW.md
+*_IMPLEMENTATION.md
+*_ARCHITECTURE.md
+*_SYSTEM.md

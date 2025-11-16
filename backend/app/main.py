@@ -148,6 +148,95 @@ async def get_latest_picks():
         return data or {"picks": []}
 
 # ============================================
+# ADMIN AUTHENTICATION
+# ============================================
+
+import secrets
+import hashlib
+from datetime import datetime, timedelta
+from typing import Optional
+from fastapi import Header, HTTPException
+
+# Admin credentials (stored securely - in production, use environment variables)
+ADMIN_EMAIL = settings.admin_email if hasattr(settings, 'admin_email') else "admin@bullsbears.xyz"
+ADMIN_PASSWORD_HASH = settings.admin_password_hash if hasattr(settings, 'admin_password_hash') else hashlib.sha256("admin".encode()).hexdigest()
+
+# In-memory token storage (in production, use Redis)
+admin_tokens = {}
+
+def hash_password(password: str) -> str:
+    """Hash password using SHA-256"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def generate_admin_token() -> str:
+    """Generate secure admin token"""
+    return secrets.token_urlsafe(32)
+
+def verify_admin_token(authorization: Optional[str] = Header(None)) -> bool:
+    """Verify admin token from Authorization header"""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized: No token provided")
+
+    token = authorization.replace("Bearer ", "")
+
+    if token not in admin_tokens:
+        raise HTTPException(status_code=401, detail="Unauthorized: Invalid token")
+
+    # Check if token is expired (24 hour expiry)
+    token_data = admin_tokens[token]
+    if datetime.now() > token_data["expires_at"]:
+        del admin_tokens[token]
+        raise HTTPException(status_code=401, detail="Unauthorized: Token expired")
+
+    return True
+
+@app.post("/api/v1/admin/auth/login")
+async def admin_login(credentials: dict):
+    """
+    Admin login endpoint - separate from regular user authentication
+    Returns JWT token for admin API access
+    """
+    email = credentials.get("email")
+    password = credentials.get("password")
+
+    if not email or not password:
+        return {"success": False, "error": "Email and password required"}
+
+    # Verify admin credentials
+    password_hash = hash_password(password)
+
+    if email == ADMIN_EMAIL and password_hash == ADMIN_PASSWORD_HASH:
+        # Generate token
+        token = generate_admin_token()
+        admin_tokens[token] = {
+            "email": email,
+            "created_at": datetime.now(),
+            "expires_at": datetime.now() + timedelta(hours=24)
+        }
+
+        logger.info(f"🔐 Admin login successful: {email}")
+
+        return {
+            "success": True,
+            "token": token,
+            "expires_in": 86400  # 24 hours in seconds
+        }
+    else:
+        logger.warning(f"🚫 Failed admin login attempt: {email}")
+        return {"success": False, "error": "Invalid credentials"}
+
+@app.post("/api/v1/admin/auth/logout")
+async def admin_logout(authorization: Optional[str] = Header(None)):
+    """Admin logout - invalidate token"""
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.replace("Bearer ", "")
+        if token in admin_tokens:
+            del admin_tokens[token]
+            logger.info("🔐 Admin logged out")
+
+    return {"success": True}
+
+# ============================================
 # ADMIN ENDPOINTS - System Control
 # ============================================
 
