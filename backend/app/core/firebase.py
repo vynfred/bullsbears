@@ -119,11 +119,11 @@ async def update_pulse_feed(pulse_data: Dict[str, Any]) -> bool:
         # Structure the pulse data for frontend consumption
         formatted_data = {
             "timestamp": pulse_data.get("timestamp", datetime.now().isoformat()),
-            "bullish_picks": pulse_data.get("moon", []),
-            "bearish_picks": pulse_data.get("rug", []),
+            "bullish_picks": pulse_data.get("bullish", []),
+            "bearish_picks": pulse_data.get("bearish", []),
             "hit_rate_7d": pulse_data.get("hit_rate_7d", 68.0),
             "market_condition": pulse_data.get("market_condition", "normal"),
-            "total_picks": len(pulse_data.get("moon", [])) + len(pulse_data.get("rug", [])),
+            "total_picks": len(pulse_data.get("bullish", [])) + len(pulse_data.get("bearish", [])),
             "scan_completed": True,
             "next_scan": "tomorrow_0830"
         }
@@ -156,8 +156,8 @@ async def update_historical_picks(pulse_data: Dict[str, Any]) -> bool:
         historical_data = {
             "date": datetime.now().strftime("%Y-%m-%d"),
             "timestamp": pulse_data.get("timestamp", datetime.now().isoformat()),
-            "bullish_picks": pulse_data.get("moon", []),
-            "bearish_picks": pulse_data.get("rug", []),
+            "bullish_picks": pulse_data.get("bullish", []),
+            "bearish_picks": pulse_data.get("bearish", []),
             "market_condition": pulse_data.get("market_condition", "normal"),
             "outcomes": {}  # Will be updated later when outcomes are determined
         }

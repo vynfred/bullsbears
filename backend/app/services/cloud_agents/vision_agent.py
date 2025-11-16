@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Vision Agent – Groq Llama-3.2-11B-Vision (Phase 3)
-75 parallel API calls → 6 boolean pattern flags per ticker
+75 parallel API calls → 6 boolean pattern flags per symbol
 No local models. No parsing. Pure JSON.
 """
 
@@ -11,8 +11,10 @@ import json
 import os
 from pathlib import Path
 from typing import List, Dict, Any
+from datetime import date
 
 import httpx
+from app.core.database import get_asyncpg_pool
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +23,8 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 MODEL = "llama-3.2-11b-vision-preview"
 
-# Hot-reloaded prompt
-PROMPT_PATH = Path("/workspace/bullsbears/backend/app/services/agents/prompts/vision_prompt.txt")
+# Hot-reloaded prompt (relative to services/)
+PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "vision_prompt.txt"
 
 class VisionAgent:
     """One job: 75 charts → 6 boolean flags each. Nothing else."""
@@ -71,6 +73,10 @@ class VisionAgent:
                 valid.append(result)
 
         logger.info(f"VisionAgent: {len(valid)}/75 charts processed successfully")
+
+        # Store vision results in database
+        await self._store_vision_results(valid)
+
         return valid
 
     async def _analyze_one(self, item: Dict[str, Any]) -> Dict[str, Any]:
@@ -126,6 +132,28 @@ class VisionAgent:
         except Exception as e:
             logger.error(f"JSON parse failed for {symbol}: {e} | Raw: {raw[:200]}")
             raise
+
+    async def _store_vision_results(self, results: List[Dict[str, Any]]):
+        """Store vision analysis results in shortlist_candidates table"""
+        try:
+            db = await get_asyncpg_pool()
+            today = date.today()
+
+            for result in results:
+                symbol = result['symbol']
+                vision_flags = result['vision_flags']
+
+                # Update the shortlist_candidates record with vision data
+                await db.execute("""
+                    UPDATE shortlist_candidates
+                    SET vision_flags = $1,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE date = $2 AND symbol = $3
+                """, json.dumps(vision_flags), today, symbol)
+
+            logger.info(f"✅ Stored vision results for {len(results)} candidates")
+        except Exception as e:
+            logger.error(f"❌ Failed to store vision results: {e}", exc_info=True)
 
     async def close(self):
         await self.client.aclose()

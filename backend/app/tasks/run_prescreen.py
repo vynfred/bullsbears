@@ -8,7 +8,7 @@ import asyncio
 import logging
 from datetime import datetime
 from app.core.celery import celery_app
-from app.services.prescreen import PrescreenAgent
+from app.services.runpod_agents.screen_agent import PrescreenAgent
 from app.services.system_state import SystemState
 
 logger = logging.getLogger(__name__)

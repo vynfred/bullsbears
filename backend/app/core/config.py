@@ -4,7 +4,7 @@ Based on ARCHITECTURE_GUIDE.md and PROJECT_ROADMAP.md
 
 Architecture:
 - Google Cloud SQL: Prime DB + 30-day candidate tracking + learning history
-- RunPod: FinMA-7b prescreen + Learner/BrainAgent (single RTX 4090 serverless endpoint)
+- RunPod: Qwen2.5:3B for Screener_Agent + Learner_Agent (single RTX 4090 serverless endpoint)
 - Cloud APIs: Groq Vision + Grok Social + Rotating Arbitrator
 - Firebase: Real-time picks & user experience
 """
@@ -68,12 +68,12 @@ class Settings(BaseSettings):
     fmp_monthly_limit: int = 20  # GB per month
 
     # ============================================================================
-    # RUNPOD - FinMA-7b prescreen + Learner/BrainAgent (RTX 4090 serverless)
+    # RUNPOD - Qwen2.5-Coder-32B-Instructprescreen + Learner (RTX 4090 serverless)
     # ============================================================================
     runpod_api_key: Optional[str] = Field(None, env="RUNPOD_API_KEY")
     runpod_endpoint_id: Optional[str] = Field(None, env="RUNPOD_ENDPOINT_ID")
     runpod_base_url: str = "https://api.runpod.ai/v2"
-    runpod_endpoint_name: str = "finma-learner-v3"
+    runpod_endpoint_name: str = "Qwen2.5-Coder-32B-Instruct-prescreen"
     runpod_gpu_type: str = "RTX 4090"
     runpod_workers: int = 1
     runpod_volume_size: int = 120  # GB
@@ -92,22 +92,40 @@ class Settings(BaseSettings):
     grok_base_url: str = "https://api.x.ai/v1"
     grok_model: str = "grok-beta"
 
-    # Rotating Arbitrator Models (7-day cycle)
+    # Rotating Arbitrator Models - API Keys
     deepseek_api_key: Optional[str] = Field(None, env="DEEPSEEK_API_KEY")
     gemini_api_key: Optional[str] = Field(None, env="GEMINI_2.5_PRO_API_KEY")
     claude_api_key: Optional[str] = Field(None, env="CLAUDE_ANTHROPIC_API_KEY")
     openai_api_key: Optional[str] = Field(None, env="OPENAI_API_KEY")
 
-    # Arbitrator rotation schedule (by weekday)
-    arbitrator_rotation: Dict[int, str] = {
-        0: "deepseek-v3",      # Monday
-        1: "gemini-2.5-pro",   # Tuesday
-        2: "grok-4",           # Wednesday
-        3: "claude-sonnet-4",  # Thursday
-        4: "gpt-5-o3",         # Friday
-        5: "deepseek-v3",      # Saturday
-        6: "gemini-2.5-pro"    # Sunday
-    }
+    # ============================================================================
+    # WEEKLY ARBITRATOR ROTATION (6-week cycle)
+    # ============================================================================
+    # Strategy: Each model gets 1 full week (Mon-Fri = 5 trading days)
+    # Why: 15-30 picks per model = statistically significant performance data
+    #
+    # How it works:
+    # - ISO week number determines which model to use
+    # - Week 1 (Jan 1-7): Qwen2.5:32b
+    # - Week 2 (Jan 8-14): DeepSeek-V3
+    # - Week 3 (Jan 15-21): Gemini 2.5 Pro
+    # - etc.
+    # - After Week 6, cycle repeats
+    #
+    # Saturday: SYSTEM OFF (no market, arbitrator returns None)
+    # Sunday: Pre-market prep (uses current week's model)
+    #
+    # Fallback: If primary model fails, falls back through other models,
+    #           always ending with Qwen2.5:32b on RunPod (guaranteed)
+    # ============================================================================
+    arbitrator_weekly_rotation: List[str] = [
+        "qwen2.5:32b",      # Week 1 (RunPod baseline - always available)
+        "deepseek-v3",      # Week 2 (RunPod or DeepSeek API)
+        "gemini-2.5-pro",   # Week 3 (Google AI API)
+        "grok-4",           # Week 4 (X.AI API)
+        "claude-sonnet-4",  # Week 5 (Anthropic API)
+        "gpt-5-o3"          # Week 6 (OpenAI API)
+    ]
 
     # ============================================================================
     # FIREBASE - Real-time picks & user experience
@@ -127,8 +145,8 @@ class Settings(BaseSettings):
     # ============================================================================
     # 4-Tier Pipeline: ALL → ACTIVE → SHORT_LIST → PICKS
     tier_all_count: int = 3800  # Complete NASDAQ stock universe
-    tier_active_count: int = 1700  # Daily filtered high-potential tickers
-    tier_short_list_count: int = 75  # FinMA-7b pre-screened explosive candidates
+    tier_active_count: int = 1700  # Daily filtered high-potential symbols
+    tier_short_list_count: int = 75  # Qwen2.5-Coder-32B-Instruct pre-screened explosive candidates
     tier_picks_count_min: int = 3  # Minimum final picks
     tier_picks_count_max: int = 6  # Maximum final picks
 
@@ -149,7 +167,7 @@ class Settings(BaseSettings):
     # ============================================================================
     pipeline_data_update_time: str = "03:00"  # FMP Premium daily delta update
     pipeline_active_filter_time: str = "03:05"  # Logic filter → ACTIVE
-    pipeline_prescreen_time: str = "03:10"  # RunPod FinMA-7b → SHORT_LIST
+    pipeline_prescreen_time: str = "03:10"  # RunPod Qwen2.5-Coder-32B-Instruct → SHORT_LIST
     pipeline_chart_generation_time: str = "03:15"  # Matplotlib charts
     pipeline_vision_analysis_time: str = "03:16"  # Groq Vision
     pipeline_social_context_time: str = "03:17"  # Grok API
@@ -177,15 +195,18 @@ class Settings(BaseSettings):
     # ============================================================================
     # SOCIAL CONTEXT SCORING
     # ============================================================================
-    social_score_min: int = -5  # Extreme bearish panic / rug setup
-    social_score_max: int = 5   # Extreme FOMO / moon chatter
-    social_score_neutral: int = 0
+    social_score_min: float = -5.0  # Extreme bearish panic / bearish setup
+    social_score_max: float = 5.0   # Extreme FOMO / bullish chatter
+    social_score_neutral: float = 0.0
 
     # ============================================================================
-    # TARGET ANALYSIS FRAMEWORK
+    # TARGET ANALYSIS FRAMEWORK (DB-DRIVEN, LEARNER-UPDATED)
     # ============================================================================
-    # Dynamic target ranges (Arbitrator decides)
-    target_bullish_low: float = 0.15    # +15% low target
+    # NOTE: These are DEFAULT values only. Actual values loaded from feature_weights table.
+    # Learner Agent updates these based on historical performance and market conditions.
+
+    # Base target ranges (static defaults, overridden by DB)
+    target_bullish_low: float = 0.15    # +15% low target (default)
     target_bullish_high_min: float = 0.30  # +30% high target minimum
     target_bullish_high_max: float = 0.50  # +50% high target maximum
     target_bearish_low_min: float = -0.15  # -15% bearish low
@@ -193,34 +214,51 @@ class Settings(BaseSettings):
     target_bearish_high_min: float = -0.35 # -35% bearish high
     target_bearish_high_max: float = -0.45 # -45% bearish high
 
-    # Stop loss and support levels
-    stop_loss_bullish_min: float = -0.05  # -5% stop loss minimum
-    stop_loss_bullish_max: float = -0.10  # -10% stop loss maximum
-    min_risk_reward_ratio: float = 2.5     # Minimum 2.5:1 risk/reward
+    # Adaptive target calculation (loaded from feature_weights)
+    # target_actual = target_bullish_base * (1 + volatility * target_volatility_multiplier) * target_momentum_factor
+    target_bullish_base: float = 0.20  # Base 20% target
+    target_volatility_multiplier: float = 1.5  # Multiply by stock volatility
+    target_momentum_factor: float = 0.8  # Momentum adjustment
 
-    # Timeframe settings
+    # Stop loss and risk/reward (DB-driven, Learner-optimized)
+    stop_loss_bullish_min: float = -0.05  # -5% stop loss minimum (default)
+    stop_loss_bullish_max: float = -0.10  # -10% stop loss maximum (default)
+    stop_loss_bullish: float = -0.07  # Adaptive stop loss (loaded from DB)
+    min_risk_reward_ratio: float = 2.5  # Minimum 2.5:1 risk/reward (loaded from DB)
+
+    # Timeframe settings (DB-driven)
     target_timeframe_min_days: int = 1     # Minimum 1 trading day
     target_timeframe_max_days: int = 5     # Maximum 5 trading days
+    target_timeframe_days: int = 3         # Default target timeframe (loaded from DB)
     tracking_period_days: int = 30         # 30-day tracking for learning
+
+    # Confidence calculation factors
+    confidence_agreement_weight: float = 0.3  # Weight for agent agreement
+    confidence_trust_weight: float = 0.4      # Weight for agent trust scores
+    confidence_volatility_weight: float = 0.2  # Weight for volatility adjustment
+    confidence_social_weight: float = 0.1     # Weight for social alignment
 
     # ============================================================================
     # LEARNING SYSTEM CONFIGURATION
     # ============================================================================
     learning_enabled: bool = True
-    learning_history_path: str = "prompts/learning_history"
+    learning_history_path: str = "backend/app/services/prompts/learning_history"
 
-    # Prompt files that get hot-reloaded nightly
+    # Prompt files that get hot-reloaded nightly (relative to backend/app/services/)
+    # All agents load these directly via Path(__file__).parent.parent / "prompts"
     prompt_files: Dict[str, str] = {
-        "finma_prescreen": "prompts/finma_prescreen_v3.txt",
-        "vision_prompt": "prompts/vision_prompt.txt",
-        "social_context": "prompts/social_context_prompt.txt",
-        "arbitrator": "prompts/arbitrator_prompt.txt"
+        "screen": "backend/app/services/prompts/screen_prompt.txt",
+        "learner": "backend/app/services/prompts/learner_prompt.txt",
+        "vision": "backend/app/services/prompts/vision_prompt.txt",
+        "social": "backend/app/services/prompts/social_prompt.txt",
+        "arbitrator": "backend/app/services/prompts/arbitrator_prompt.txt"
     }
 
-    # Weight files for learning system
+    # Weight and bias files for learning system (relative to backend/app/services/)
     weight_files: Dict[str, str] = {
-        "arbitrator_weights": "arbitrator/weights.json",
-        "vision_flag_weights": "vision/flag_weights.json"
+        "weights": "backend/app/services/prompts/weights.json",
+        "arbitrator_bias": "backend/app/services/prompts/arbitrator_bias.json",
+        "fallback_config": "backend/app/services/prompts/arbitrator_fallback_config.json"
     }
 
     # ============================================================================
@@ -310,16 +348,11 @@ class Settings(BaseSettings):
 
     # RunPod local models
     runpod_models: Dict[str, Dict[str, str]] = {
-        "finma-7b": {
-            "name": "finma-7b",
-            "size": "4.2GB",
-            "purpose": "Prescreen agent (Phase 1)"
+        "Qwen2.5-Coder-32B-Instruct": {
+            "name": "Qwen2.5-Coder-32B-Instruct",
+            "size": "19GB",
+            "purpose": "Prescreen agent"
         },
-        "deepseek-r1-8b": {
-            "name": "deepseek-r1:8b",
-            "size": "8GB",
-            "purpose": "LearnerAgent (nightly)"
-        }
     }
     
     # ============================================================================
@@ -342,18 +375,43 @@ class Settings(BaseSettings):
             return ["*"]
         return [header.strip() for header in self.allowed_headers.split(",")]
 
-    def get_current_arbitrator(self) -> str:
-        """Get current arbitrator model based on weekday rotation."""
+    def get_current_arbitrator(self) -> Optional[str]:
+        """
+        Get current arbitrator model based on weekly rotation.
+        Returns None on Saturdays (market closed).
+        Each model gets 1 full week (5 trading days) for meaningful performance data.
+        """
         from datetime import datetime
-        weekday = datetime.now().weekday()
-        return self.arbitrator_rotation.get(weekday, "deepseek-v3")
+
+        now = datetime.now()
+        weekday = now.weekday()
+
+        # Saturday = market closed, no arbitrator needed
+        if weekday == 5:
+            return None
+
+        # Calculate which week of the year (0-51)
+        week_of_year = now.isocalendar()[1]
+
+        # Rotate through models every week
+        model_index = week_of_year % len(self.arbitrator_weekly_rotation)
+        return self.arbitrator_weekly_rotation[model_index]
 
     def get_database_url(self) -> str:
         """Get complete database URL for connection."""
         if self.database_url:
             return self.database_url
 
-        # Construct from components if DATABASE_URL not provided
+        # Check if using Cloud SQL Unix socket (starts with /cloudsql/)
+        if self.database_host.startswith("/cloudsql/"):
+            # For Cloud SQL Unix socket, use host parameter format
+            # asyncpg format: postgresql://user:pass@/dbname?host=/cloudsql/instance
+            if self.database_user and self.database_password:
+                return (f"postgresql://{self.database_user}:{self.database_password}"
+                       f"@/{self.database_name}?host={self.database_host}")
+            return f"postgresql:///{self.database_name}?host={self.database_host}"
+
+        # Standard TCP connection
         if self.database_user and self.database_password:
             return (f"postgresql://{self.database_user}:{self.database_password}"
                    f"@{self.database_host}:{self.database_port}/{self.database_name}")
@@ -384,20 +442,28 @@ class Settings(BaseSettings):
         return market_open <= now <= market_close
 
     def get_prompt_file_path(self, prompt_type: str) -> str:
-        """Get absolute path to prompt file."""
+        """
+        Get absolute path to prompt file.
+        Prompt files are stored in backend/app/services/prompts/
+        """
         if prompt_type not in self.prompt_files:
-            raise ValueError(f"Unknown prompt type: {prompt_type}")
+            raise ValueError(f"Unknown prompt type: {prompt_type}. Available: {list(self.prompt_files.keys())}")
 
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        return os.path.join(project_root, "services", "agents", self.prompt_files[prompt_type])
+        # Paths in config are already relative to project root
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        return os.path.join(project_root, self.prompt_files[prompt_type])
 
     def get_weight_file_path(self, weight_type: str) -> str:
-        """Get absolute path to weight file."""
+        """
+        Get absolute path to weight/bias file.
+        Weight files are stored in backend/app/services/prompts/
+        """
         if weight_type not in self.weight_files:
-            raise ValueError(f"Unknown weight type: {weight_type}")
+            raise ValueError(f"Unknown weight type: {weight_type}. Available: {list(self.weight_files.keys())}")
 
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        return os.path.join(project_root, "services", "agents", self.weight_files[weight_type])
+        # Paths in config are already relative to project root
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        return os.path.join(project_root, self.weight_files[weight_type])
 
     @property
     def MODEL_DIR(self) -> str:
@@ -410,9 +476,12 @@ class Settings(BaseSettings):
 
     @property
     def LEARNING_HISTORY_DIR(self) -> str:
-        """Get absolute path to learning history directory."""
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        return os.path.join(project_root, "services", "agents", self.learning_history_path)
+        """
+        Get absolute path to learning history directory.
+        Learning history is stored in backend/app/services/prompts/learning_history/
+        """
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        return os.path.join(project_root, self.learning_history_path)
 
     def validate_required_apis(self) -> Dict[str, bool]:
         """Validate that required API keys are present for production."""
@@ -480,7 +549,7 @@ def validate_configuration() -> Dict[str, bool]:
             settings.tier_picks_count_max >= settings.tier_picks_count_min
         ),
         "vision_flags_configured": len(settings.vision_flags) == 6,
-        "arbitrator_rotation_complete": len(settings.arbitrator_rotation) == 7
+        "arbitrator_weekly_rotation_complete": len(settings.arbitrator_weekly_rotation) == 6
     })
 
     return validation_results

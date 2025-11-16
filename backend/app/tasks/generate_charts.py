@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Generate 75 × 256×256 PNG charts → base64 → PostgreSQL
-Runs at 3:15 AM ET → CPU only → $0 cost
+Runs at 8:15 AM ET → CPU only → $0 cost
 """
 
 import asyncio
@@ -10,11 +10,14 @@ import io
 import base64
 from pathlib import Path
 from typing import List, Dict
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend for RunPod
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import pandas as pd
 
-from app.core.database import get_database
+from app.core.database import get_asyncpg_pool
+from app.core.celery import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +37,7 @@ class ChartGenerator:
         self.fig = plt.figure(figsize=(2.56, 2.56), dpi=100)
 
     async def initialize(self):
-        self.db = await get_database()
+        self.db = await get_asyncpg_pool()
 
     async def generate_all_charts(self) -> List[Dict]:
         """Generate charts for today's SHORT_LIST → store base64 in DB"""
@@ -73,18 +76,18 @@ class ChartGenerator:
     async def _fetch_90d(self, symbol: str) -> pd.DataFrame:
         """Pull 90-day OHLCV from Prime DB"""
         query = """
-        SELECT date, open_price, high_price, low_price, close_price, volume
-        FROM prime_ohlc_90d 
-        WHERE symbol = $1 
-        ORDER BY date DESC 
+        SELECT date, open_price, high_price, low_price, close_price, adj_close, volume, vwap
+        FROM prime_ohlc_90d
+        WHERE symbol = $1
+        ORDER BY date DESC
         LIMIT 90
         """
         async with self.db.acquire() as conn:
             rows = await conn.fetch(query, symbol)
-        
+
         if not rows:
             return pd.DataFrame()
-        
+
         df = pd.DataFrame(rows)
         df["date"] = pd.to_datetime(df["date"])
         df = df.sort_values("date").set_index("date")
@@ -150,7 +153,7 @@ async def get_chart_generator() -> ChartGenerator:
 # Celery task
 @celery_app.task(name="tasks.generate_charts")
 def generate_charts():
-    """Celery task — runs at 3:15 AM ET"""
+    """Celery task — runs at 8:15 AM ET"""
     async def _run():
         from app.services.system_state import SystemState
 
@@ -159,7 +162,7 @@ def generate_charts():
             logger.info("⏸️ System is OFF - skipping chart generation")
             return {"skipped": True, "reason": "system_off"}
 
-        async with get_chart_generator() as gen:
-            return await gen.generate_all_charts()
+        gen = await get_chart_generator()
+        return await gen.generate_all_charts()
 
     return asyncio.run(_run())

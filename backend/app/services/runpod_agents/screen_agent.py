@@ -12,8 +12,8 @@ import json
 from datetime import datetime, date
 from typing import List, Dict, Any
 
-from ..core.runpod_client import get_runpod_client
-from ..core.database import get_asyncpg_pool
+from ...core.runpod_client import get_runpod_client
+from ...core.database import get_asyncpg_pool
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +34,10 @@ class PrescreenAgent:
         self.db = None
         self.initialized = False
 
-        # Prompt files (hot-reloaded nightly)
-        self.prompt_path = os.path.join(
-            os.path.dirname(__file__), "agents", "prompts", "finma_prescreen_v3.txt"
-        )
-        self.weights_path = os.path.join(
-            os.path.dirname(__file__), "agents", "prompts", "weights.json"
-        )
+        # Prompt files (hot-reloaded nightly, relative to services/)
+        services_dir = os.path.dirname(os.path.dirname(__file__))
+        self.prompt_path = os.path.join(services_dir, "prompts", "screen_prompt.txt")
+        self.weights_path = os.path.join(services_dir, "prompts", "weights.json")
 
     async def initialize(self):
         if self.initialized:
@@ -150,15 +147,65 @@ class PrescreenAgent:
             return []
 
     async def _store_shortlist(self, shortlist: List[Dict], context: Dict):
-        """Store full 75-candidate list for LearnerAgent"""
+        """Store full 75-candidate list in shortlist_candidates table for learning"""
         try:
-            await self.db.execute("TRUNCATE candidate_shortlist RESTART IDENTITY")
+            today = date.today()
+
+            # Store each candidate with complete context
             for item in shortlist:
+                symbol = item['symbol']
+                rank = item.get('rank', 0)
+
+                # Get ticker data from context
+                ticker_data = next((t for t in context.get('tickers', []) if t['symbol'] == symbol), {})
+
+                # Build technical snapshot
+                technical_snapshot = {
+                    'price': ticker_data.get('price', 0.0),
+                    'volume_5d_avg': ticker_data.get('volume', 0),
+                    'volatility_annualized': ticker_data.get('volatility', 0.0),
+                    'beta': ticker_data.get('beta', 1.0),
+                    'rsi_14': ticker_data.get('rsi_14', 50),
+                    'gap_today': ticker_data.get('gap_percent', 0.0),
+                    # Add more technical indicators as available
+                }
+
+                # Build fundamental snapshot
+                fundamental_snapshot = {
+                    'market_cap': ticker_data.get('market_cap', 0),
+                    'sector': ticker_data.get('sector', ''),
+                    'industry': ticker_data.get('industry', ''),
+                    # Add more fundamental data as available
+                }
+
+                # Insert or update candidate
                 await self.db.execute("""
-                    INSERT INTO candidate_shortlist (
-                        symbol, rank, prescreen_reason, screening_date, context_snapshot
-                    ) VALUES ($1, $2, $3, $4, $5)
-                """, item['symbol'], item['rank'], item['prescreen_reason'], date.today(), json.dumps(context))
-            logger.info("SHORT_LIST stored for 30-day tracking")
+                    INSERT INTO shortlist_candidates (
+                        date, symbol, rank,
+                        prescreen_score, prescreen_reasoning,
+                        price_at_selection,
+                        technical_snapshot, fundamental_snapshot,
+                        created_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+                    ON CONFLICT (date, symbol) DO UPDATE SET
+                        rank = EXCLUDED.rank,
+                        prescreen_score = EXCLUDED.prescreen_score,
+                        prescreen_reasoning = EXCLUDED.prescreen_reasoning,
+                        price_at_selection = EXCLUDED.price_at_selection,
+                        technical_snapshot = EXCLUDED.technical_snapshot,
+                        fundamental_snapshot = EXCLUDED.fundamental_snapshot,
+                        updated_at = CURRENT_TIMESTAMP
+                """,
+                    today,
+                    symbol,
+                    rank,
+                    item.get('prescreen_score', 0.0),
+                    item.get('prescreen_reason', ''),
+                    ticker_data.get('price', 0.0),
+                    json.dumps(technical_snapshot),
+                    json.dumps(fundamental_snapshot)
+                )
+
+            logger.info(f"✅ Stored {len(shortlist)} candidates in shortlist_candidates table")
         except Exception as e:
-            logger.error(f"Store failed: {e}")
+            logger.error(f"❌ Failed to store shortlist: {e}", exc_info=True)

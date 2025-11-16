@@ -27,8 +27,8 @@ sync_engine = create_engine(
     pool_pre_ping=True,
     pool_recycle=300,
     echo=settings.debug,
-    pool_size=10,
-    max_overflow=20,
+    pool_size=3,
+    max_overflow=5,
 )
 
 SyncSessionLocal = sessionmaker(bind=sync_engine, autoflush=False, autocommit=False)
@@ -55,6 +55,8 @@ async_engine = create_async_engine(
     pool_recycle=300,
     echo=settings.debug,
     future=True,
+    pool_size=5,
+    max_overflow=10,
 )
 
 AsyncSessionLocal = sessionmaker(
@@ -79,16 +81,66 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 _async_pool = None
 
 async def get_asyncpg_pool() -> asyncpg.Pool:
+    """
+    Get or create asyncpg connection pool with retry logic for Cloud Run startup.
+    Supports both Cloud SQL Unix socket and TCP connections.
+    """
     global _async_pool
-    if _async_pool is None:
+    if _async_pool is not None:
+        return _async_pool
+
+    import asyncio
+
+    max_retries = 10
+    base_delay = 2  # seconds
+
+    # Check if using Cloud SQL Unix socket
+    is_unix_socket = settings.database_host.startswith("/cloudsql/")
+
+    if is_unix_socket:
+        logger.info(f"🔌 Connecting to Cloud SQL via Unix socket: {settings.database_host}")
+        connection_params = {
+            "host": settings.database_host,
+            "database": settings.database_name,
+            "user": settings.database_user,
+            "password": settings.database_password,
+            "min_size": 1,
+            "max_size": 10,
+            "command_timeout": 60,
+            "timeout": 30,
+        }
+    else:
         database_url = settings.get_database_url()
-        _async_pool = await asyncpg.create_pool(
-            dsn=database_url.replace("+asyncpg", ""),
-            min_size=5,
-            max_size=30,
-            command_timeout=30,
-        )
-        logger.info("asyncpg pool created")
+        logger.info(f"🔌 Connecting to PostgreSQL via TCP: {database_url.split('@')[0] if '@' in database_url else 'localhost'}@...")
+        connection_params = {
+            "dsn": database_url.replace("+asyncpg", ""),
+            "min_size": 1,
+            "max_size": 10,
+            "command_timeout": 60,
+            "timeout": 30,
+        }
+
+    # Retry loop with exponential backoff
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.info(f"📡 Database connection attempt {attempt}/{max_retries}...")
+            _async_pool = await asyncpg.create_pool(**connection_params)
+            logger.info(f"✅ Database pool created successfully after {attempt} attempt(s)")
+            return _async_pool
+        except Exception as e:
+            error_msg = str(e)
+            logger.warning(f"⚠️ Connection attempt {attempt}/{max_retries} failed: {error_msg[:100]}")
+
+            if attempt == max_retries:
+                logger.error(f"❌ Failed to connect to database after {max_retries} attempts")
+                logger.error(f"Connection params: host={settings.database_host}, db={settings.database_name}, user={settings.database_user}")
+                raise
+
+            # Exponential backoff: 2s, 4s, 6s, 8s, 10s, 12s...
+            delay = min(base_delay * attempt, 15)
+            logger.info(f"⏳ Retrying in {delay} seconds...")
+            await asyncio.sleep(delay)
+
     return _async_pool
 
 async def close_asyncpg_pool():
@@ -100,10 +152,17 @@ async def close_asyncpg_pool():
 
 # === DB INIT & CLOSE ===
 async def init_db():
-    from ..models import Base  # Import here to avoid circular imports
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("All tables created")
+    """
+    Initialize database connection.
+    Note: Tables are already created via migrations, so we just verify connection.
+    """
+    try:
+        # Test connection by getting a pool
+        await get_asyncpg_pool()
+        logger.info("Database connection verified")
+    except Exception as e:
+        logger.error(f"Database connection failed: {e}")
+        raise
 
 async def close_db():
     await async_engine.dispose()

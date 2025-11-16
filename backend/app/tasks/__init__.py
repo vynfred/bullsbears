@@ -11,7 +11,7 @@ from .run_groq_vision import run_groq_vision
 from .run_grok_social import run_grok_social
 from .run_arbitrator import run_arbitrator
 from .publish_to_firebase import publish_to_firebase
-from .run_learner import trigger_learner
+from .run_learner import run_weekly_learner
 from .statistics_tasks import (
     update_statistics_cache,
     update_badge_data_cache,
@@ -30,8 +30,8 @@ __all__ = [
     "run_arbitrator",              # 8:20 AM - Final pick selection (RunPod)
     "publish_to_firebase",         # 8:25 AM - Publish picks to Firebase
 
-    # Nightly learning (4:00 AM)
-    "trigger_learner",             # 4:01 AM & 4:15 AM - Review outcomes & update weights
+    # Weekly learning (Saturday 4:00 AM)
+    "run_weekly_learner",          # Saturday 4:00 AM - Review outcomes & update weights
 
     # Continuous tasks
     "update_statistics_cache",     # Every 5 min

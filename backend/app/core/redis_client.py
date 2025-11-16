@@ -24,6 +24,11 @@ class RedisClient:
     async def connect(self):
         """Initialize Redis connection pool."""
         try:
+            # Skip Redis in production if not configured
+            if settings.environment == "production" and settings.redis_url == "redis://localhost:6379/0":
+                logger.warning("Redis not configured for production - skipping connection")
+                return
+
             self.pool = ConnectionPool.from_url(
                 settings.redis_url,
                 max_connections=20,

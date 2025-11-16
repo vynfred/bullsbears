@@ -82,11 +82,19 @@ def validate_statistics_accuracy():
 @celery_app.task(name="tasks.generate_statistics_report")
 def generate_statistics_report():
     """Daily — monitoring report"""
-    logger.info("Generating daily statistics report")
-    try:
-        report = asyncio.run(stats_service.generate_daily_report())
+    async def _run():
+        # Check if system is ON
+        if not await SystemState.is_system_on():
+            logger.info("⏸️ System is OFF - skipping statistics report")
+            return {"skipped": True, "reason": "system_off"}
+
+        logger.info("Generating daily statistics report")
+        report = await stats_service.generate_daily_report()
         logger.info("Daily report generated")
         return report
+
+    try:
+        return asyncio.run(_run())
     except Exception as e:
         logger.error(f"Report failed: {e}")
         raise

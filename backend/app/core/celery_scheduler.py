@@ -1,30 +1,27 @@
 #!/usr/bin/env python3
 """
-BullsBears Celery Beat – FINAL v3.3 (November 14, 2025)
+BullsBears Celery Beat – FINAL v3.4 (January 15, 2025)
 FULLY AUTOMATIC – ZERO manual runs – $0 RunPod idle cost
+
+INFRASTRUCTURE:
+- RunPod Agents: Prescreen (Qwen2.5:32b), Learner (Qwen2.5:32b Saturday only)
+- Cloud APIs: Vision (Groq), Social (Grok), Arbitrator (ROTATING: DeepSeek/Gemini/Grok/Claude/GPT + RunPod fallback)
 """
 
 from celery.schedules import crontab
 from .celery import celery_app
 
 # =============================================================================
-# NIGHTLY LEARNING – 4:00 AM (BEFORE DAILY PIPELINE)
+#  LEARNING – Saturday's 4:00 AM
 # =============================================================================
 # Learner reviews yesterday's outcomes and updates weights/prompts
 # This runs BEFORE the daily pipeline so updated weights are used at 8:10 AM
 
 celery_app.conf.beat_schedule = {
-    # Nightly learning - Part 1: Review outcomes
-    "nightly-learner-review": {
-        "task": "tasks.trigger_learner",
-        "schedule": crontab(hour=4, minute=1, day_of_week="*"),  # 4:01 AM
-        "options": {"queue": "runpod"},
-    },
-    # Nightly learning - Part 2: Update weights/prompts
-    "nightly-learner-update": {
-        "task": "tasks.trigger_learner",
-        "schedule": crontab(hour=4, minute=15, day_of_week="*"),  # 4:15 AM
-        "options": {"queue": "runpod"},
+    "weekly-learner": {
+    "task": "tasks.run_weekly_learner",  # ← Correct task name
+    "schedule": crontab(hour=4, minute=0, day_of_week=6),  # ← Saturday only (0=Mon, 6=Sat)
+    "options": {"queue": "runpod"},
     },
 
     # =============================================================================
@@ -73,7 +70,8 @@ celery_app.conf.beat_schedule = {
         "options": {"queue": "social"},
     },
 
-    # 8:20 AM - Final arbitrator: Select 3-6 picks using RunPod
+    # 8:20 AM - Final arbitrator: Select 3-6 picks using ROTATING cloud models
+    # (DeepSeek-V3, Gemini, Grok, Claude, GPT-5 with RunPod Qwen fallback)
     "final-arbitration": {
         "task": "tasks.run_arbitrator",
         "schedule": crontab(hour=8, minute=20, day_of_week="*"),
@@ -123,7 +121,7 @@ celery_app.conf.beat_schedule = {
 # =============================================================================
 # TASK ROUTES
 # =============================================================================
-celery_app.conf.task_routes.update({
+celery_app.conf.task_routes = {
     "tasks.fmp_delta_update": {"queue": "data"},
     "tasks.build_active_symbols": {"queue": "data"},
     "tasks.run_prescreen": {"queue": "runpod"},
@@ -132,16 +130,19 @@ celery_app.conf.task_routes.update({
     "tasks.run_grok_social": {"queue": "social"},
     "tasks.run_arbitrator": {"queue": "arbitrator"},
     "tasks.publish_to_firebase": {"queue": "publish"},
-    "tasks.trigger_learner": {"queue": "runpod"},
-})
+    "tasks.run_weekly_learner": {"queue": "runpod"},
+}
 
 # =============================================================================
 # COST CONTROL - Maximum task execution times
 # =============================================================================
 celery_app.conf.task_time_limit = {
-    "tasks.run_prescreen": 900,        # 15 min max - RunPod prescreen
-    "tasks.run_arbitrator": 600,       # 10 min max - RunPod arbitrator
-    "tasks.trigger_learner": 900,      # 15 min max - RunPod learning
-    "tasks.run_groq_vision": 300,      # 5 min max - Groq API (75 parallel calls)
-    "tasks.run_grok_social": 300,      # 5 min max - Grok API (75 parallel calls)
+    # RunPod tasks (GPU-based, cost per minute)
+    "tasks.run_prescreen": 900,           # 15 min max - Qwen2.5:32b prescreen (ACTIVE → SHORT_LIST)
+    "tasks.run_weekly_learner": 900,      # 15 min max - Qwen2.5:32b learning (Saturday only)
+
+    # Cloud API tasks (pay per call, not time-based, but prevent hangs)
+    "tasks.run_arbitrator": 600,          # 10 min max - ROTATING cloud models (DeepSeek/Gemini/Grok/Claude/GPT + RunPod fallback)
+    "tasks.run_groq_vision": 300,         # 5 min max - Groq Llama-3.2-11B-Vision (75 parallel calls)
+    "tasks.run_grok_social": 300,         # 5 min max - Grok Social API (75 parallel calls)
 }

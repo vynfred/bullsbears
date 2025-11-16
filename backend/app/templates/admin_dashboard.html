@@ -288,21 +288,23 @@
         </div>
 
         <!-- 🚨 CRITICAL COST CONTROL -->
-        <div class="cost-control-section">
-            <h2>🛡️ RunPod Cost Control</h2>
-            <div class="cost-status" id="costStatus">
-                <p id="costStatusText">Loading cost status...</p>
-            </div>
-            <div class="emergency-controls">
-                <button class="btn btn-critical" id="emergencyShutdownBtn" onclick="emergencyShutdown()">
-                    🚨 EMERGENCY SHUTDOWN RUNPOD
-                </button>
-                <button class="btn btn-info" id="refreshCostBtn" onclick="refreshCostStatus()">
-                    💰 Refresh Cost Status
-                </button>
-                <button class="btn btn-warning" id="clearKillBtn" onclick="clearEmergencyKill()" style="display: none;">
-                    🔓 Clear Emergency Kill
-                </button>
+        <div style="margin-top: 30px;">
+            <h2 style="text-align: center; margin-bottom: 20px; color: #ffd700;">🛡️ RunPod Cost Control</h2>
+            <div class="status-card" style="max-width: 100%;">
+                <div id="runpodStatus">
+                    <div class="connection-item">
+                        <span>Loading RunPod status...</span>
+                        <span class="status-indicator status-warning">Checking</span>
+                    </div>
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                    <button class="btn btn-critical" onclick="emergencyShutdownRunPod()">
+                        🚨 EMERGENCY SHUTDOWN
+                    </button>
+                    <button class="btn btn-info" onclick="refreshRunPodStatus()">
+                        🔄 Refresh Status
+                    </button>
+                </div>
             </div>
         </div>
         
@@ -374,6 +376,31 @@
                     <button class="btn btn-warning" onclick="editSchedule()" style="width: 100%; font-size: 0.9em;">
                         ✏️ Edit Schedule
                     </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Database Health Section -->
+        <div style="margin-top: 30px;">
+            <h2 style="text-align: center; margin-bottom: 20px; color: #ffd700;">🗄️ Database Health</h2>
+            <div class="status-card" style="max-width: 100%;">
+                <div id="databaseHealth">
+                    <div class="connection-item">
+                        <span>Loading database health...</span>
+                        <span class="status-indicator status-warning">Checking</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Weekly Learner Insights Section -->
+        <div style="margin-top: 30px;">
+            <h2 style="text-align: center; margin-bottom: 20px; color: #ffd700;">🧠 Weekly Learner Insights</h2>
+            <div class="status-card" style="max-width: 100%;">
+                <div id="learnerInsights">
+                    <div class="connection-item">
+                        <span>Loading learner reports...</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -455,6 +482,70 @@
                 </div>
             </div>
         </div>
+
+        <!-- Manual Task Triggers Section -->
+        <div style="margin-top: 30px;">
+            <h2 style="text-align: center; margin-bottom: 20px; color: #ffd700;">🔧 Manual Task Triggers</h2>
+            <div class="status-card" style="max-width: 100%;">
+                <p style="text-align: center; margin-bottom: 20px; opacity: 0.8;">
+                    ⚠️ System must be ON to trigger tasks. These buttons manually execute pipeline tasks.
+                </p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+                    <button class="btn btn-primary" onclick="triggerTask('prescreen')">
+                        🔍 Run Prescreen
+                    </button>
+                    <button class="btn btn-primary" onclick="triggerTask('arbitrator')">
+                        🎯 Run Arbitrator
+                    </button>
+                    <button class="btn btn-primary" onclick="triggerTask('learner')">
+                        🧠 Run Learner
+                    </button>
+                    <button class="btn btn-primary" onclick="triggerTask('sync_firebase')">
+                        🔄 Sync Firebase
+                    </button>
+                    <button class="btn btn-primary" onclick="triggerTask('fmp_update')">
+                        📊 FMP Update
+                    </button>
+                    <button class="btn btn-primary" onclick="triggerTask('build_active')">
+                        📈 Build ACTIVE Tier
+                    </button>
+                    <button class="btn btn-primary" onclick="triggerTask('generate_charts')">
+                        📉 Generate Charts
+                    </button>
+                    <button class="btn btn-primary" onclick="triggerTask('vision')">
+                        👁️ Run Vision
+                    </button>
+                    <button class="btn btn-primary" onclick="triggerTask('social')">
+                        🌐 Run Social
+                    </button>
+                </div>
+                <div id="taskTriggerResult" style="margin-top: 15px; text-align: center;"></div>
+            </div>
+        </div>
+
+        <!-- System Logs Section -->
+        <div style="margin-top: 30px; margin-bottom: 30px;">
+            <h2 style="text-align: center; margin-bottom: 20px; color: #ffd700;">📝 System Logs</h2>
+            <div class="status-card" style="max-width: 100%;">
+                <div style="display: flex; gap: 10px; margin-bottom: 15px; justify-content: center; flex-wrap: wrap;">
+                    <button class="btn btn-info" onclick="loadLogs('INFO')">
+                        ℹ️ INFO
+                    </button>
+                    <button class="btn btn-warning" onclick="loadLogs('WARNING')">
+                        ⚠️ WARNING
+                    </button>
+                    <button class="btn btn-danger" onclick="loadLogs('ERROR')">
+                        ❌ ERROR
+                    </button>
+                    <button class="btn btn-primary" onclick="loadLogs('INFO')">
+                        🔄 Refresh
+                    </button>
+                </div>
+                <div id="systemLogs" style="max-height: 400px; overflow-y: auto; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 5px; font-family: monospace; font-size: 0.85em;">
+                    <div style="opacity: 0.6;">Click a button above to load logs...</div>
+                </div>
+            </div>
+        </div>
     </div>
     
     <script>
@@ -486,6 +577,12 @@
                 apiUsage = await apiUsageResponse.json();
 
                 updateUI();
+
+                // Load new dashboard sections
+                refreshRunPodStatus();
+                loadDatabaseHealth();
+                loadAPIUsage();
+                loadLearnerReports();
             } catch (error) {
                 console.error('Failed to fetch status:', error);
             }
@@ -997,98 +1094,24 @@
             }
         }
 
-        async function emergencyShutdown() {
-            if (!confirm('🚨 EMERGENCY SHUTDOWN: This will immediately terminate all RunPod activity. Continue?')) {
-                return;
-            }
+        // OLD emergencyShutdown() - Now using emergencyShutdownRunPod()
+        // Keeping alias for backward compatibility
+        const emergencyShutdown = emergencyShutdownRunPod;
 
-            try {
-                const response = await fetch('/api/v1/admin/runpod/emergency-shutdown', { method: 'POST' });
-                const result = await response.json();
+        // OLD refreshCostStatus() REMOVED - Now using refreshRunPodStatus()
+        // OLD clearEmergencyKill() REMOVED - Now using emergencyShutdownRunPod()
 
-                if (result.success) {
-                    alert('🚨 EMERGENCY SHUTDOWN COMPLETE: ' + result.message);
-                } else {
-                    alert('❌ Emergency shutdown failed: ' + result.message);
-                }
-
-                refreshStatus();
-                refreshCostStatus();
-            } catch (error) {
-                alert('❌ Emergency shutdown error: ' + error.message);
-            }
+        async function oldFunctionPlaceholder() {
+            // These functions have been replaced by:
+            // - refreshRunPodStatus() for status checking
+            // - emergencyShutdownRunPod() for emergency shutdown
+            // Keeping this placeholder to prevent errors if old code references these
+            console.warn('Old cost status functions have been replaced');
         }
 
-        async function refreshCostStatus() {
-            try {
-                const response = await fetch('/api/v1/admin/runpod/cost-status');
-                const result = await response.json();
-
-                const costStatusEl = document.getElementById('costStatusText');
-                const clearKillBtn = document.getElementById('clearKillBtn');
-
-                if (result.success) {
-                    const cost = result.cost_status;
-                    const kill = result.kill_status;
-
-                    let statusText = '';
-
-                    // Check for emergency kill first
-                    if (kill && kill.kill_active) {
-                        statusText = '🚨 EMERGENCY KILL ACTIVE - RunPod operations blocked';
-                        costStatusEl.style.color = '#ef4444';
-                        clearKillBtn.style.display = 'inline-block';
-                    } else {
-                        statusText = `💰 Current: $${cost.current_spend_per_hour || 0}/hour`;
-
-                        if (cost.session_runtime && cost.session_runtime !== 'Not running') {
-                            statusText += ` | Runtime: ${cost.session_runtime}`;
-                        }
-
-                        if (cost.alerts && cost.alerts.length > 0) {
-                            statusText += ` | ⚠️ ${cost.alerts.join(', ')}`;
-                        }
-
-                        if (cost.api_accessible === false) {
-                            statusText += ' | ⚠️ API unavailable';
-                        }
-
-                        costStatusEl.style.color = cost.alerts && cost.alerts.length > 0 ? '#f59e0b' : '#10b981';
-                        clearKillBtn.style.display = 'none';
-                    }
-
-                    costStatusEl.textContent = statusText;
-                } else {
-                    costStatusEl.textContent = '❌ Cost status unavailable: ' + result.error;
-                    costStatusEl.style.color = '#ef4444';
-                    clearKillBtn.style.display = 'none';
-                }
-            } catch (error) {
-                document.getElementById('costStatusText').textContent = '❌ Cost check failed: ' + error.message;
-                document.getElementById('clearKillBtn').style.display = 'none';
-            }
-        }
-
-        async function clearEmergencyKill() {
-            if (!confirm('Clear emergency kill file? This will allow RunPod operations to resume.')) {
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/v1/admin/runpod/clear-emergency-kill', { method: 'POST' });
-                const result = await response.json();
-
-                if (result.success) {
-                    alert('✅ Emergency kill cleared: ' + result.message);
-                } else {
-                    alert('❌ Failed to clear emergency kill: ' + result.message);
-                }
-
-                refreshCostStatus();
-            } catch (error) {
-                alert('❌ Error clearing emergency kill: ' + error.message);
-            }
-        }
+        // Alias old function names to prevent errors
+        const refreshCostStatus = refreshRunPodStatus;
+        const clearEmergencyKill = oldFunctionPlaceholder;
         
         async function runPipelineOnce() {
             if (!confirm('Run pipeline once for testing? This will take several minutes.')) {
@@ -1180,6 +1203,437 @@
             }
         }
 
+        // Load learner reports
+        async function loadLearnerReports() {
+            try {
+                const response = await fetch('/api/v1/admin/learner/reports');
+                const data = await response.json();
+
+                const container = document.getElementById('learnerInsights');
+
+                if (!data.reports || data.reports.length === 0) {
+                    container.innerHTML = `
+                        <div class="connection-item">
+                            <span>No learner reports yet</span>
+                            <span class="status-indicator status-warning">Waiting</span>
+                        </div>
+                        <p style="margin-top: 10px; font-size: 0.9em; opacity: 0.8;">
+                            Learner runs every Saturday at 4:00 AM to analyze the previous week's performance.
+                        </p>
+                    `;
+                    return;
+                }
+
+                // Show latest report
+                const latest = data.reports[0];
+                const reportResponse = await fetch(`/api/v1/admin/learner/reports/${latest.date}`);
+                const report = await reportResponse.json();
+
+                let html = `
+                    <div style="margin-bottom: 20px;">
+                        <h4 style="color: #ffd700; margin-bottom: 10px;">📅 Latest Report: ${latest.cycle_start} to ${latest.cycle_end}</h4>
+                        <div class="connection-item">
+                            <span>Total Candidates</span>
+                            <span class="status-indicator" style="background: #2196F3;">${report.total_candidates}</span>
+                        </div>
+                        <div class="connection-item">
+                            <span>Final Picks</span>
+                            <span class="status-indicator" style="background: #4CAF50;">${report.final_picks}</span>
+                        </div>
+                        <div class="connection-item">
+                            <span>Arbitrator Model</span>
+                            <span class="status-indicator" style="background: #9C27B0;">${report.arbitrator_model}</span>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 20px;">
+                        <h4 style="color: #ffd700; margin-bottom: 10px;">💡 Learning Insights</h4>
+                `;
+
+                if (report.insights && report.insights.length > 0) {
+                    report.insights.forEach(insight => {
+                        html += `<div style="padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">• ${insight}</div>`;
+                    });
+                } else {
+                    html += `<div style="padding: 8px 0; opacity: 0.6;">No insights generated yet</div>`;
+                }
+
+                html += `</div>`;
+
+                // Weight changes
+                if (report.weight_changes && Object.keys(report.weight_changes).length > 0) {
+                    html += `
+                        <div style="margin-bottom: 20px;">
+                            <h4 style="color: #ffd700; margin-bottom: 10px;">⚖️ Weight Updates</h4>
+                    `;
+
+                    for (const [key, value] of Object.entries(report.weight_changes)) {
+                        const color = value > 0.7 ? '#4CAF50' : value > 0.5 ? '#ff9800' : '#f44336';
+                        html += `
+                            <div class="connection-item">
+                                <span>${key}</span>
+                                <span class="status-indicator" style="background: ${color};">${value.toFixed(2)}</span>
+                            </div>
+                        `;
+                    }
+
+                    html += `</div>`;
+                }
+
+                // All reports dropdown
+                html += `
+                    <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid rgba(255,255,255,0.2);">
+                        <h4 style="color: #ffd700; margin-bottom: 10px;">📚 All Reports (${data.count})</h4>
+                        <select onchange="loadSpecificReport(this.value)" style="width: 100%; padding: 10px; border-radius: 5px; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.3);">
+                            <option value="">Select a report...</option>
+                `;
+
+                data.reports.forEach(r => {
+                    html += `<option value="${r.date}">${r.cycle_start} to ${r.cycle_end} (${r.final_picks} picks)</option>`;
+                });
+
+                html += `
+                        </select>
+                    </div>
+                `;
+
+                container.innerHTML = html;
+
+            } catch (error) {
+                console.error('Error loading learner reports:', error);
+                document.getElementById('learnerInsights').innerHTML = `
+                    <div class="connection-item">
+                        <span>Error loading reports</span>
+                        <span class="status-indicator status-error">Error</span>
+                    </div>
+                `;
+            }
+        }
+
+        async function loadSpecificReport(date) {
+            if (!date) return;
+
+            try {
+                const response = await fetch(`/api/v1/admin/learner/reports/${date}`);
+                const report = await response.json();
+
+                // Show in modal or alert for now
+                alert(`Report for ${date}:\n\nCandidates: ${report.total_candidates}\nPicks: ${report.final_picks}\n\nInsights:\n${report.insights.join('\n')}`);
+            } catch (error) {
+                alert('Error loading report: ' + error.message);
+            }
+        }
+
+        // ============================================
+        // NEW FUNCTIONS - RunPod, Database, API Usage, Tasks, Logs
+        // ============================================
+
+        async function refreshRunPodStatus() {
+            try {
+                const response = await fetch('/api/v1/admin/runpod/status');
+                const data = await response.json();
+
+                const container = document.getElementById('runpodStatus');
+
+                if (data.error) {
+                    container.innerHTML = `
+                        <div class="connection-item">
+                            <span>RunPod Status</span>
+                            <span class="status-indicator status-error">Error</span>
+                        </div>
+                        <div style="margin-top: 10px; opacity: 0.8; font-size: 0.9em;">${data.error}</div>
+                    `;
+                    return;
+                }
+
+                const statusClass = data.workers_active === 0 ? 'status-connected' : 'status-warning';
+                const statusText = data.workers_active === 0 ? 'Idle (No Cost)' : `${data.workers_active} Active`;
+
+                container.innerHTML = `
+                    <div class="connection-item">
+                        <span>Workers Active</span>
+                        <span class="status-indicator ${statusClass}">${statusText}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Workers Idle</span>
+                        <span class="status-indicator">${data.workers_idle || 0}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Jobs Queued</span>
+                        <span class="status-indicator">${data.jobs_queued || 0}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Jobs Running</span>
+                        <span class="status-indicator">${data.jobs_running || 0}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Cost Per Hour</span>
+                        <span class="status-indicator" style="background: #2196F3;">$${data.cost_per_hour.toFixed(2)}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Est. Daily Cost</span>
+                        <span class="status-indicator" style="background: ${data.estimated_daily_cost > 10 ? '#f44336' : '#4CAF50'};">$${data.estimated_daily_cost.toFixed(2)}</span>
+                    </div>
+                    <div style="margin-top: 10px; opacity: 0.8; font-size: 0.85em;">
+                        Last checked: ${new Date(data.last_checked).toLocaleTimeString()}
+                    </div>
+                `;
+
+                // Show warning if workers active
+                if (data.workers_active > 0) {
+                    container.innerHTML += `
+                        <div style="margin-top: 15px; padding: 10px; background: rgba(255,152,0,0.2); border-radius: 5px; border: 1px solid #ff9800;">
+                            ⚠️ <strong>WARNING:</strong> ${data.workers_active} worker(s) running! Costing $${(data.workers_active * 2).toFixed(2)}/hour
+                        </div>
+                    `;
+                }
+
+            } catch (error) {
+                console.error('Error loading RunPod status:', error);
+                document.getElementById('runpodStatus').innerHTML = `
+                    <div class="connection-item">
+                        <span>Error loading RunPod status</span>
+                        <span class="status-indicator status-error">Error</span>
+                    </div>
+                `;
+            }
+        }
+
+        async function emergencyShutdownRunPod() {
+            if (!confirm('🚨 EMERGENCY SHUTDOWN\n\nThis will immediately terminate ALL RunPod workers and cancel all running jobs.\n\nAre you absolutely sure?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/v1/admin/runpod/emergency-shutdown', { method: 'POST' });
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('✅ Emergency shutdown successful!\n\nAll RunPod workers have been terminated.');
+                    refreshRunPodStatus();
+                } else {
+                    alert('❌ Emergency shutdown failed:\n\n' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('❌ Error during emergency shutdown:\n\n' + error.message);
+            }
+        }
+
+        async function loadDatabaseHealth() {
+            try {
+                const response = await fetch('/api/v1/admin/database/health');
+                const data = await response.json();
+
+                const container = document.getElementById('databaseHealth');
+
+                if (!data.connected) {
+                    container.innerHTML = `
+                        <div class="connection-item">
+                            <span>Database Connection</span>
+                            <span class="status-indicator status-error">Disconnected</span>
+                        </div>
+                        <div style="margin-top: 10px; opacity: 0.8;">${data.error || 'Unknown error'}</div>
+                    `;
+                    return;
+                }
+
+                let html = `
+                    <div class="connection-item">
+                        <span>Database Connection</span>
+                        <span class="status-indicator status-connected">Connected</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Database Size</span>
+                        <span class="status-indicator" style="background: #2196F3;">${data.database_size_mb} MB</span>
+                    </div>
+                `;
+
+                // Table counts
+                html += `<div style="margin-top: 15px;"><h4 style="color: #ffd700; margin-bottom: 10px;">📊 Table Record Counts</h4>`;
+                for (const [table, count] of Object.entries(data.table_counts)) {
+                    html += `
+                        <div class="connection-item">
+                            <span>${table}</span>
+                            <span class="status-indicator">${typeof count === 'number' ? count.toLocaleString() : count}</span>
+                        </div>
+                    `;
+                }
+                html += `</div>`;
+
+                // Last updates
+                html += `<div style="margin-top: 15px;"><h4 style="color: #ffd700; margin-bottom: 10px;">🕐 Last Updates</h4>`;
+                for (const [key, value] of Object.entries(data.last_updates)) {
+                    const displayKey = key.replace('last_', '').replace('_', ' ');
+                    html += `
+                        <div class="connection-item">
+                            <span>${displayKey}</span>
+                            <span class="status-indicator" style="font-size: 0.75em;">${value === 'never' ? 'Never' : new Date(value).toLocaleString()}</span>
+                        </div>
+                    `;
+                }
+                html += `</div>`;
+
+                container.innerHTML = html;
+
+            } catch (error) {
+                console.error('Error loading database health:', error);
+                document.getElementById('databaseHealth').innerHTML = `
+                    <div class="connection-item">
+                        <span>Error loading database health</span>
+                        <span class="status-indicator status-error">Error</span>
+                    </div>
+                `;
+            }
+        }
+
+        async function loadAPIUsage() {
+            try {
+                const response = await fetch('/api/v1/admin/api-usage');
+                const data = await response.json();
+
+                if (data.error) {
+                    console.error('API usage error:', data.error);
+                    return;
+                }
+
+                // FMP Usage
+                const fmpContainer = document.getElementById('fmpUsage');
+                const fmpPercentage = data.fmp.percentage;
+                const fmpColor = fmpPercentage > 80 ? '#f44336' : fmpPercentage > 60 ? '#ff9800' : '#4CAF50';
+                fmpContainer.innerHTML = `
+                    <div class="connection-item">
+                        <span>Calls Today</span>
+                        <span class="status-indicator">${data.fmp.calls_today.toLocaleString()}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Daily Limit</span>
+                        <span class="status-indicator">${data.fmp.limit_daily.toLocaleString()}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Usage</span>
+                        <span class="status-indicator" style="background: ${fmpColor};">${fmpPercentage.toFixed(1)}%</span>
+                    </div>
+                `;
+
+                // Groq Usage
+                const groqContainer = document.getElementById('groqUsage');
+                const groqPercentage = data.groq.percentage;
+                const groqColor = groqPercentage > 80 ? '#f44336' : groqPercentage > 60 ? '#ff9800' : '#4CAF50';
+                groqContainer.innerHTML = `
+                    <div class="connection-item">
+                        <span>Calls Today</span>
+                        <span class="status-indicator">${data.groq.calls_today.toLocaleString()}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Daily Limit</span>
+                        <span class="status-indicator">${data.groq.limit_daily.toLocaleString()}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Usage</span>
+                        <span class="status-indicator" style="background: ${groqColor};">${groqPercentage.toFixed(1)}%</span>
+                    </div>
+                `;
+
+                // Grok Usage
+                const grokContainer = document.getElementById('grokUsage');
+                const grokPercentage = data.grok.percentage;
+                const grokColor = grokPercentage > 80 ? '#f44336' : grokPercentage > 60 ? '#ff9800' : '#4CAF50';
+                grokContainer.innerHTML = `
+                    <div class="connection-item">
+                        <span>Calls Today</span>
+                        <span class="status-indicator">${data.grok.calls_today.toLocaleString()}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Daily Limit</span>
+                        <span class="status-indicator">${data.grok.limit_daily.toLocaleString()}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Usage</span>
+                        <span class="status-indicator" style="background: ${grokColor};">${grokPercentage.toFixed(1)}%</span>
+                    </div>
+                `;
+
+                // RunPod Usage (from API usage endpoint)
+                const runpodUsageContainer = document.getElementById('runpodUsage');
+                runpodUsageContainer.innerHTML = `
+                    <div class="connection-item">
+                        <span>GPU Hours Today</span>
+                        <span class="status-indicator">${data.runpod.gpu_hours_today.toFixed(2)}</span>
+                    </div>
+                    <div class="connection-item">
+                        <span>Est. Cost Today</span>
+                        <span class="status-indicator" style="background: #2196F3;">$${data.runpod.estimated_cost_today.toFixed(2)}</span>
+                    </div>
+                `;
+
+            } catch (error) {
+                console.error('Error loading API usage:', error);
+            }
+        }
+
+        async function triggerTask(taskName) {
+            const resultDiv = document.getElementById('taskTriggerResult');
+            resultDiv.innerHTML = `<span style="color: #ff9800;">⏳ Triggering ${taskName}...</span>`;
+
+            try {
+                const response = await fetch(`/api/v1/admin/tasks/trigger/${taskName}`, { method: 'POST' });
+                const result = await response.json();
+
+                if (result.success) {
+                    resultDiv.innerHTML = `<span style="color: #4CAF50;">✅ ${result.message} (Task ID: ${result.task_id})</span>`;
+                } else {
+                    resultDiv.innerHTML = `<span style="color: #f44336;">❌ ${result.error}</span>`;
+                }
+
+                // Clear message after 5 seconds
+                setTimeout(() => {
+                    resultDiv.innerHTML = '';
+                }, 5000);
+
+            } catch (error) {
+                resultDiv.innerHTML = `<span style="color: #f44336;">❌ Error: ${error.message}</span>`;
+            }
+        }
+
+        async function loadLogs(level = 'INFO', limit = 100) {
+            const container = document.getElementById('systemLogs');
+            container.innerHTML = `<div style="opacity: 0.6;">Loading ${level} logs...</div>`;
+
+            try {
+                const response = await fetch(`/api/v1/admin/logs?level=${level}&limit=${limit}`);
+                const data = await response.json();
+
+                if (data.error) {
+                    container.innerHTML = `<div style="color: #f44336;">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                if (data.message) {
+                    container.innerHTML = `
+                        <div style="opacity: 0.8;">${data.message}</div>
+                        ${data.cloud_logging_url ? `<div style="margin-top: 10px;"><a href="${data.cloud_logging_url}" target="_blank" style="color: #ffd700;">View in Cloud Logging →</a></div>` : ''}
+                    `;
+                    return;
+                }
+
+                if (!data.logs || data.logs.length === 0) {
+                    container.innerHTML = `<div style="opacity: 0.6;">No ${level} logs found</div>`;
+                    return;
+                }
+
+                let html = `<div style="margin-bottom: 10px; opacity: 0.8;">Showing ${data.count} ${level} logs (of ${data.total_lines} total)</div>`;
+                data.logs.forEach(log => {
+                    const logColor = log.includes('ERROR') ? '#f44336' : log.includes('WARNING') ? '#ff9800' : '#4CAF50';
+                    html += `<div style="padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.1); color: ${logColor};">${log}</div>`;
+                });
+
+                container.innerHTML = html;
+
+            } catch (error) {
+                container.innerHTML = `<div style="color: #f44336;">Error loading logs: ${error.message}</div>`;
+            }
+        }
+
         // DISABLED AUTO-REFRESH TO PREVENT RUNPOD STARTUP
         // Auto-refresh every 30 seconds - COMMENTED OUT TO STOP RUNPOD TRIGGERS
         // setInterval(() => {
@@ -1190,6 +1644,10 @@
         // Initial load
         refreshStatus();
         refreshCostStatus();
+        loadLearnerReports();
+        refreshRunPodStatus();
+        loadDatabaseHealth();
+        loadAPIUsage();
     </script>
 </body>
 </html>

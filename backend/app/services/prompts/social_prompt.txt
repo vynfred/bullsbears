@@ -8,20 +8,24 @@ Return ONLY this valid JSON – no extra text, no markdown:
   "social_score": -5 to +5,
   "headlines": ["headline 1", "headline 2", "headline 3"],
   "events": ["Fed decision Dec 10 – Polymarket 69% for 25 bps cut"],
-  "polymarket_prob": 0.69 or null
+  "polymarket_prob": 0.69 or null,
+  "mention_velocity": 2.5,
+  "platform_consensus": 0.85
 }
 
 Scoring:
--5 = extreme bearish panic, rug calls, viral hate
+-5 = extreme bearish panic, bearish calls, viral hate
 -3 = strong bearish, short squeeze fear, sell-off talk
 -1 = mild caution, profit taking
  0 = neutral, balanced chatter
 +1 = mild interest
-+3 = strong bullish, FOMO, moon calls
++3 = strong bullish, FOMO, bullish calls
 +5 = extreme FOMO, viral hype, rocket emojis
 
 Headlines: top 3 most impactful from last 24h
 Events: any upcoming catalyst in next 48h + current Polymarket % if exists
 polymarket_prob: exact decimal or null
+mention_velocity: mentions/hour ratio vs 7-day average (1.0 = normal, 2.5 = surge)
+platform_consensus: 0.0-1.0 cross-platform agreement (1.0 = all platforms align)
 
 No decimals in social_score. No explanation. Just JSON.

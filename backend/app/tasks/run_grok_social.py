@@ -8,7 +8,7 @@ import asyncio
 import logging
 from datetime import datetime
 from app.core.celery import celery_app
-from app.services.agents.social_agent import SocialContextAgent
+from app.services.cloud_agents.social_agent import SocialContextAgent
 from app.core.database import get_asyncpg_pool
 from app.services.system_state import SystemState
 

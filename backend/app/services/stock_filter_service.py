@@ -170,19 +170,19 @@ class StockFilterService:
             sc.daily_volume,
             sc.market_cap,
             sc.updated_at as classification_updated,
-            hd.close_price,
-            hd.volume,
-            hd.high_price,
-            hd.low_price,
-            hd.date as price_date,
-            hd.updated_at as price_updated
+            pod.close_price,
+            pod.volume,
+            pod.high_price,
+            pod.low_price,
+            pod.date as price_date,
+            pod.updated_at as price_updated
         FROM stock_classifications sc
-        LEFT JOIN historical_data hd ON sc.symbol = hd.symbol 
-            AND hd.date = (
+        LEFT JOIN prime_ohlc_90d pod ON sc.symbol = pod.symbol 
+            AND pod.date = (
                 SELECT MAX(date) 
-                FROM historical_data hd2 
-                WHERE hd2.symbol = sc.symbol
-                AND hd2.date >= CURRENT_DATE - INTERVAL '7 days'
+                FROM prime_ohlc_90d pod2 
+                WHERE pod2.symbol = sc.symbol
+                AND pod2.date >= CURRENT_DATE - INTERVAL '7 days'
             )
         WHERE sc.exchange = 'NASDAQ'
         ORDER BY sc.market_cap DESC NULLS LAST
