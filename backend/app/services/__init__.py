@@ -10,7 +10,7 @@ from .stock_filter_service import get_stock_filter_service
 
 # Core Services
 from .cloud_agents.prescreen_agent import PrescreenAgent
-from .kill_switch_service import KillSwitchService
+from .kill_switch_service import is_kill_switch_active
 
 # FIREWORKS.AI
 from .cloud_agents.learner_agent import run_weekly_learner
@@ -28,7 +28,7 @@ __all__ = [
     "get_fmp_ingestion",
     "get_stock_filter_service",
     "PrescreenAgent",
-    "KillSwitchService",
+    "is_kill_switch_active",
     "run_weekly_learner",
     "push_picks_to_firebase",
     "FirebaseService",
