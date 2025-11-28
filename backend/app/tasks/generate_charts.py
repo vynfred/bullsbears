@@ -11,7 +11,7 @@ import base64
 from pathlib import Path
 from typing import List, Dict
 import matplotlib
-matplotlib.use('Agg')  # Non-interactive backend for RunPod
+matplotlib.use('Agg')  # Non-interactive backend for Render worker
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import pandas as pd
@@ -30,7 +30,7 @@ BEAR = "#ff4444"
 VOL = "#666666"
 
 class ChartGenerator:
-    """75 charts in < 7 seconds — CPU only — perfect for RunPod worker"""
+    """75 charts in < 7 seconds — CPU only — perfect for Render worker"""
 
     def __init__(self):
         self.db = None

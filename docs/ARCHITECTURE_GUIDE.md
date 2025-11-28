@@ -28,7 +28,7 @@ BULLSBEARS_ARCHITECTURE = {
 |---------------------|--------------------------------|------------------------------------------------------------------|------------|
 | Prescreen           | qwen2.5-72b-instruct          | accounts/fireworks/models/qwen2.5-72b-instruct                   | ~$0.16 |
 | Final Arbitrator    | qwen2.5-72b-instruct          | same model                                                       | ~$0.012 |
-| Nightly Learner     | qwen2.5-72b-instruct          | same model – hot-reloads weights.json & bias every night         | ~$0.04 |
+| Weekly Learner      | qwen2.5-72b-instruct          | same model – analyzes weekly outcomes, updates weights Saturday 4 AM | ~$0.04/week |
 
 ### CLOUD APIs (unchanged but cheaper)
 | Service      | Model / Endpoint                                 | Daily cost |
@@ -53,7 +53,7 @@ BULLSBEARS_ARCHITECTURE = {
 | 8:17 AM     | Render Worker → Grok API | run_grok_social → sentiment –5 to +5 + headlines                             |
 | 8:20 AM     | Render Worker → Fireworks | run_arbitrator → 3–6 final picks with targets & reasoning                 |
 | 8:22 AM     | Render Worker             | publish_to_firebase → users see picks instantly                               |
-| 4:01 AM next day | Render Cron Job     | run_learner → qwen2.5-72b updates weights.json & bias → hot-reloaded next run |
+| 4:00 AM Saturday | Render Cron Job → Fireworks | run_weekly_learner → qwen2.5-72b analyzes week's outcomes → updates weights.json & bias |
 
 Result → Users get real-time alpha. Bot gets smarter every single night.  
 Total monthly cost (25 trading days): **$8–$18** (Render $0–$7 + Fireworks/Groq/Grok ≈ $12–$14)
@@ -81,7 +81,7 @@ backend/
 │   ├── core/(config.py, database.py, firebase.py)
 │   ├── tasks/(all 10 task files)
 │   ├── api/v1/(analytics.py, stocks.py, watchlist.py, internal.py)
-│   ├── services/cloud_agents/(vision_agent.py, social_agent.py, arbitrator_agent.py)
+│   ├── services/cloud_agents/(prescreen_agent.py, vision_agent.py, social_agent.py, arbitrator_agent.py, learner_agent.py)
 │   ├── services/prompts/(all prompts + weights + bias)
 │   └── models/
 ├── celery_worker.py

@@ -1,9 +1,9 @@
-# render.yaml — BEST PRACTICES VERSION (repo root)
+# render.yaml 
 services:
   - type: web
     name: bullsbears-api
     env: python
-    region: oregon
+    region: virginia
     plan: free
     repo: https://github.com/vynfred/bullsbears
     rootDir: backend
@@ -15,7 +15,7 @@ services:
   - type: worker
     name: bullsbears-worker
     env: python
-    region: oregon
+    region: virginia
     repo: https://github.com/vynfred/bullsbears
     rootDir: backend
     buildCommand: pip install -r requirements.txt
@@ -24,9 +24,15 @@ services:
   - type: cron
     name: bullsbears-daily-pipeline
     env: python
-    region: oregon
+    region: virginia
     repo: https://github.com/vynfred/bullsbears
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     schedule: "0 8 * * 1-5"
     startCommand: python -c "from app.tasks.fmp_delta_update import fmp_delta_update; fmp_delta_update.delay()"
+
+# render.yaml
+cronJobs:
+  - name: weekly-learner
+    schedule: "10 4 * * 1"    # Every Monday 04:10 ET
+    command: celery -A app.core.celery_app call app.tasks.run_learner.run_learner

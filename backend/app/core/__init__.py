@@ -8,7 +8,6 @@ from .config import settings
 from .database import get_db, close_db
 from .celery_app import celery_app
 from .firebase import database_ref as firebase_db
-from .system_state import SystemState
 
 __all__ = [
     "settings",
@@ -16,5 +15,4 @@ __all__ = [
     "close_db",
     "celery_app",
     "firebase_db",
-    "SystemState",
 ]

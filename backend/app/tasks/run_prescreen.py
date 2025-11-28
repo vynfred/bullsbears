@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
 Prescreen Task - ACTIVE → SHORT_LIST (~75 stocks)
-Runs at 8:10 AM ET using Qwen2.5:32b on RunPod
+Runs at 8:10 AM ET using Fireworks.ai qwen2.5-72b-instruct
 """
 
 import asyncio
 import logging
 from datetime import datetime
 from app.core.celery_app import celery_app
-from app.services.runpod_agents.screen_agent import PrescreenAgent
+from backend.app.services.cloud_agents.prescreen_agent import PrescreenAgent
 from app.services.system_state import SystemState
 
 logger = logging.getLogger(__name__)
@@ -16,10 +16,12 @@ logger = logging.getLogger(__name__)
 @celery_app.task(name="tasks.run_prescreen")
 def run_prescreen():
     """
-    Celery task - runs at 8:10 AM ET
+    Celery task - runs at 8:10 AM ET via Render cron
     Filters ACTIVE tier (~1,700 stocks) → SHORT_LIST (exactly 75 stocks)
-    Uses Qwen2.5:32b on RunPod serverless
+    Uses qwen2.5-72b-instruct on Fireworks.ai
     """
+    
+    # Run prescreen - single Fireworks API call
     async def _run():
         # Check if system is ON
         if not await SystemState.is_system_on():
@@ -34,7 +36,7 @@ def run_prescreen():
             agent = PrescreenAgent()
             await agent.initialize()
             
-            # Run prescreen - single RunPod call
+            # Run prescreen - single Fireworks API call
             result = await agent.run_prescreen()
             
             elapsed = (datetime.now() - start_time).total_seconds()

@@ -9,11 +9,11 @@ from .fmp_data_ingestion import get_fmp_ingestion
 from .stock_filter_service import get_stock_filter_service
 
 # Core Services
-from .runpod_agents.screen_agent import PrescreenAgent
+from .cloud_agents.prescreen_agent import PrescreenAgent
 from .kill_switch_service import KillSwitchService
 
-# RUNPOD
-from .runpod_agents.learner_agent import run_weekly_learner_cycle
+# FIREWORKS.AI
+from .cloud_agents.learner_agent import run_weekly_learner
 
 # Output
 from .push_picks_to_firebase import push_picks_to_firebase, FirebaseService
@@ -29,7 +29,7 @@ __all__ = [
     "get_stock_filter_service",
     "PrescreenAgent",
     "KillSwitchService",
-    "run_weekly_learner_cycle",
+    "run_weekly_learner",
     "push_picks_to_firebase",
     "FirebaseService",
     "SystemState",

@@ -9,6 +9,8 @@ import os
 import logging
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+import asyncpg
+from asyncpg import Pool
 
 logger = logging.getLogger(__name__)
 
@@ -54,5 +56,36 @@ async def get_db() -> AsyncSession:
 
 # Optional: close engine on shutdown (Render handles this, but safe to have)
 async def close_db():
+    """Close database connections"""
     await engine.dispose()
-    logger.info("Database engine disposed")
+    await close_asyncpg_pool()
+
+_asyncpg_pool: Pool = None
+
+async def get_asyncpg_pool() -> Pool:
+    """Get asyncpg connection pool for raw SQL queries"""
+    global _asyncpg_pool
+    
+    if _asyncpg_pool is None:
+        # Extract connection details from DATABASE_URL
+        import urllib.parse
+        parsed = urllib.parse.urlparse(DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://"))
+        
+        _asyncpg_pool = await asyncpg.create_pool(
+            host=parsed.hostname,
+            port=parsed.port or 5432,
+            user=parsed.username,
+            password=parsed.password,
+            database=parsed.path.lstrip('/'),
+            min_size=1,
+            max_size=10
+        )
+    
+    return _asyncpg_pool
+
+async def close_asyncpg_pool():
+    """Close asyncpg pool"""
+    global _asyncpg_pool
+    if _asyncpg_pool:
+        await _asyncpg_pool.close()
+        _asyncpg_pool = None

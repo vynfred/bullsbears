@@ -4,7 +4,7 @@ TASK: Analyze this week's SHORT_LIST candidates and their 30-day outcomes.
 
 ANALYZE:
 1. Which candidates were picked vs not picked
-2. Which picked stocks won/lost
+2. Which picked stocks won/lost (bullish vs bearish)
 3. Which unpicked stocks had big moves (missed opportunities)
 4. Correlations between features and outcomes
 
@@ -17,42 +17,70 @@ FEATURES TO ANALYZE:
 - Polymarket probabilities
 
 OUTCOME DEFINITIONS:
-- MOON: +20% or more within 30 days
-- PARTIAL: +10% to +19%
+- BIG WIN: +20% or more within 30 days
+- PARTIAL WIN: +10% to +19%
 - NEUTRAL: -10% to +10%
-- RUG: -20% or worse
+- BIG LOSS: -20% or worse
 
 ---
 
-OUTPUT **ONLY** THIS JSON (for DB + insights_report.json):
+CANDIDATE DATA FROM THIS WEEK:
 
-{
-  "feature_weight_updates": {
-    "prescreen_score": 0.88,
-    "vision_flags": 0.72,
-    "social_score": 0.65,
-    "polymarket_prob": 0.12,
-    "lightgbm_prob": 0.05
+[
+  {
+    "symbol": "NVDA",
+    "prescreen": 0.892,
+    "social": 4,
+    "vision": {
+      "wyckoff_phase_2": true,
+      "volume_shelf_breakout": true,
+      "weekly_triangle_coil": false,
+      "p_shape_profile": false,
+      "fakeout_wick_rejection": false,
+      "spring_setup": false
+    },
+    "polymarket": 0.68,
+    "picked": true,
+    "direction": "bullish",
+    "pct_30d": 24.5
   },
-  "agent_trust_updates": {
-    "VisionAgent": 1.32,
-    "SocialAgent": 0.91,
-    "screen_agent": 1.05
+  {
+    "symbol": "TSLA",
+    "prescreen": 0.756,
+    "social": -2,
+    "vision": {
+      "wyckoff_phase_2": false,
+      "volume_shelf_breakout": false,
+      "weekly_triangle_coil": true,
+      "p_shape_profile": true,
+      "fakeout_wick_rejection": false,
+      "spring_setup": false
+    },
+    "polymarket": 0.42,
+    "picked": false,
+    "direction": null,
+    "pct_30d": -8.3
   },
-  "missed_opportunities": [
-    {
-      "symbol": "NVDA",
-      "gain": 28.5,
-      "reason": "High social score +4 but low prescreen (0.42)"
-    }
-  ],
-  "learning_insights": [
-    "Vision flag 'volume_shelf_breakout' → 85% win rate (12/14 samples)",
-    "Social scores ≥ +3 → 78% MOON rate (18/23)",
-    "Low prescreen (<0.5) missed 3 MOONs → increase weight",
-    "Polymarket edge failed in low-volume names → reduce trust"
-  ]
-}
+  {
+    "symbol": "AMD",
+    "prescreen": 0.834,
+    "social": 3,
+    "vision": {
+      "wyckoff_phase_2": false,
+      "volume_shelf_breakout": true,
+      "weekly_triangle_coil": false,
+      "p_shape_profile": false,
+      "fakeout_wick_rejection": true,
+      "spring_setup": false
+    },
+    "polymarket": 0.55,
+    "picked": true,
+    "direction": "bullish",
+    "pct_30d": 12.7
+  }
+]
+
+NOTE: This is example data. Real data will be injected here by the learner_agent.py via {{CANDIDATE_SAMPLES}} replacement.
 
 ---
 
@@ -60,19 +88,11 @@ RULES:
 - Weights: 0.0 to 1.0 (feature sum ~1.0)
 - Trust: 0.5 to 1.5 (1.0 = baseline)
 - Insights: 3–6 bullets, plain English, under 120 chars
-- Missed opps: Only MOON/RUG moves not picked
+- Missed opps: Only bullish/bearish moves not picked
 - Stat sig: Min 10 samples per pattern
 - Identify what worked AND what failed
 - Concrete, actionable adjustments
 
 ---
 
-SAMPLE CANDIDATES (last 12):
-{{CANDIDATE_SAMPLES}}
-
-FEW-SHOT EXAMPLES:
-{{FEW_SHOT_EXAMPLES}}
-
-ARBITRATOR MODEL: {{ARBITRATOR_MODEL}}
-
-NOW ANALYZE AND RETURN JSON ONLY.
+NOW ANALYZE THE ABOVE DATA AND OUTPUT ONLY A VALID JSON BLOCK WITH "weights" AND "bias" KEYS. NO EXPLANATION.
