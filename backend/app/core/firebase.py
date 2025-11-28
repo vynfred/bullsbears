@@ -8,7 +8,6 @@ import json
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
-import aiohttp
 
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -280,7 +279,7 @@ async def close_firebase():
 def update_firebase_sync(path: str, data: Dict[str, Any]):
     """Sync wrapper for your existing async functions — used by Celery tasks"""
     try:
-        ref = db.child(path)
+        ref = database_ref.child(path)
         ref.set(data)
         logger.info(f"Firebase sync update: {path}")
     except Exception as e:

@@ -1,14 +1,14 @@
 # backend/app/services/push_picks_to_firebase.py
 import logging
 from datetime import datetime
-from app.core.firebase import db
+from app.core.firebase import database_ref
 
 logger = logging.getLogger(__name__)
 
 def publish_picks_to_firebase(picks_data: dict):
     """Sync publish — used by run_arbitrator task"""
     try:
-        db.child("pulse/latest").set({
+        database_ref.child("pulse/latest").set({
             "timestamp": datetime.now().isoformat(),
             "bullish_picks": picks_data.get("bullish", []),
             "bearish_picks": picks_data.get("bearish", []),

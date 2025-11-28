@@ -7,7 +7,7 @@ Clean. Minimal. Bulletproof.
 from .config import settings
 from .database import get_db, close_db
 from .celery_app import celery_app
-from .firebase import db as firebase_db  # Realtime Database reference
+from .firebase import database_ref as firebase_db
 from .system_state import SystemState
 
 __all__ = [
