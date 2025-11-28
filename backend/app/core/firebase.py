@@ -1,18 +1,27 @@
 """
-Firebase Integration for BullsBears
-Handles real-time updates to Firebase for the frontend
+Firebase Integration for BullsBears v5 – November 2025
+Uses Firebase Admin SDK (service account) — NOT Realtime Database REST API
 """
 
-import asyncio
-import logging
-import json
 import os
+import json
+import logging
+from typing import Dict, Any
 from datetime import datetime
-from typing import Dict, Any, Optional
-import aiohttp
+
+import firebase_admin
+from firebase_admin import credentials, firestore, database
 
 logger = logging.getLogger(__name__)
 
+# Initialize Firebase Admin SDK once using service account from env
+if not firebase_admin._apps:
+    service_account_info = json.loads(os.environ["FIREBASE_SERVICE_ACCOUNT"])
+    cred = credentials.Certificate(service_account_info)
+    firebase_admin.initialize_app(cred)
+
+# Use Realtime Database (not Firestore)
+db = database.reference()
 
 class FirebaseClient:
     """Firebase Realtime Database client for BullsBears"""
@@ -248,3 +257,16 @@ async def close_firebase():
     if _firebase_client:
         await _firebase_client.close()
         _firebase_client = None
+
+# Add this at the very bottom of the file
+def update_firebase_sync(path: str, data: Dict[str, Any]):
+    """Sync wrapper for your existing async functions — used by Celery tasks"""
+    try:
+        ref = db.child(path)
+        ref.set(data)
+        logger.info(f"Firebase sync update: {path}")
+    except Exception as e:
+        logger.error(f"Firebase sync update failed: {e}")
+
+# Keep your existing async versions for future use
+# Or just call update_firebase_sync() from tasks if you want zero async hassle

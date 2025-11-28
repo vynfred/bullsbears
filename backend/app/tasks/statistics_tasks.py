@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 import asyncio
 
-from ..core.celery import celery_app
+from ..core.celery_app import celery_app
 from ..services.statistics_service import StatisticsService
 from ..services.system_state import SystemState
 

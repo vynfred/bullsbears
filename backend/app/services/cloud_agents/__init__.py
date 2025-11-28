@@ -1,15 +1,15 @@
-#!/usr/bin/env python3
+# backend/app/services/cloud_agents/__init__.py
 """
-BullsBears Cloud Agents (November 12, 2025)
+Cloud Agents – BullsBears v5
+Function-based only. No classes.
 """
 
-# Agent classes - instantiated directly in tasks
-from .arbitrator_agent import ArbitratorAgent
-from .social_agent import get_social_agent
-from .vision_agent import get_vision_agent
+from .arbitrator_agent import get_final_picks
+from .social_agent import run_social_analysis
+from .vision_agent import run_vision_analysis
 
 __all__ = [
-    "ArbitratorAgent",
-    "get_social_agent",
-    "get_vision_agent",
+    "get_final_picks",
+    "run_social_analysis",
+    "run_vision_analysis",
 ]

@@ -5,7 +5,7 @@ Build Active Symbols Task - NASDAQ ALL → ACTIVE Tier
 """
 
 from celery import current_task
-from ..core.celery import celery_app
+from ..core.celery_app import celery_app
 from ..services.stock_filter_service import get_stock_filter_service
 from ..services.system_state import SystemState
 import logging

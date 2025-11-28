@@ -8,7 +8,7 @@ import asyncio
 import logging
 from app.services import get_fmp_ingestion
 from app.services.system_state import SystemState
-from app.core.celery import celery_app
+from backend.app.core.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 

@@ -17,7 +17,7 @@ import matplotlib.dates as mdates
 import pandas as pd
 
 from app.core.database import get_asyncpg_pool
-from app.core.celery import celery_app
+from backend.app.core.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 

@@ -1,0 +1,30 @@
+# render.yaml — FINAL WORKING VERSION (November 2025)
+services:
+  - type: web
+    name: bullsbears-api
+    env: python
+    region: oregon
+    plan: free
+    repo: https://github.com/vynfred/bullsbears
+    rootDir: backend
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      ENVIRONMENT: production
+
+  - type: worker
+    name: bullsbears-worker
+    env: python
+    region: oregon
+    rootDir: backend
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: python celery_worker.py
+
+  - type: cron
+    name: bullsbears-daily-pipeline
+    env: python
+    region: oregon
+    rootDir: backend
+    buildCommand: cd backend && pip install -r requirements.txt
+    schedule: "0 8 * * 1-5"
+    startCommand: python -c "from app.tasks.fmp_delta_update import fmp_delta_update; fmp_delta_update.delay()"

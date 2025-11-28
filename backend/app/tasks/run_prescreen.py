@@ -7,7 +7,7 @@ Runs at 8:10 AM ET using Qwen2.5:32b on RunPod
 import asyncio
 import logging
 from datetime import datetime
-from app.core.celery import celery_app
+from backend.app.core.celery_app import celery_app
 from app.services.runpod_agents.screen_agent import PrescreenAgent
 from app.services.system_state import SystemState
 
