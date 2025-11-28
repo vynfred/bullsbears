@@ -6,22 +6,40 @@ Uses Firebase Admin SDK (service account) — NOT Realtime Database REST API
 import os
 import json
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime
+import aiohttp
 
 import firebase_admin
-from firebase_admin import credentials, firestore, database
+from firebase_admin import credentials, firestore
+from firebase_admin import db
 
 logger = logging.getLogger(__name__)
 
-# Initialize Firebase Admin SDK once using service account from env
-if not firebase_admin._apps:
-    service_account_info = json.loads(os.environ["FIREBASE_SERVICE_ACCOUNT"])
-    cred = credentials.Certificate(service_account_info)
-    firebase_admin.initialize_app(cred)
-
-# Use Realtime Database (not Firestore)
-db = database.reference()
+# Initialize Firebase Admin SDK
+try:
+    # Get service account from environment variable
+    service_account_json = os.getenv("FIREBASE_SERVICE_ACCOUNT")
+    if not service_account_json:
+        raise ValueError("FIREBASE_SERVICE_ACCOUNT environment variable not set")
+    
+    # Parse JSON string
+    service_account_dict = json.loads(service_account_json)
+    
+    # Initialize with credentials
+    cred = credentials.Certificate(service_account_dict)
+    firebase_admin.initialize_app(cred, {
+        'databaseURL': 'https://bullsbears-xyz-default-rtdb.firebaseio.com/'
+    })
+    
+    # Get database reference
+    database_ref = db.reference()
+    
+    logger.info("Firebase initialized successfully")
+    
+except Exception as e:
+    logger.error(f"Firebase initialization failed: {e}")
+    database_ref = None
 
 class FirebaseClient:
     """Firebase Realtime Database client for BullsBears"""

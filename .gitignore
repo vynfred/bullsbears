@@ -6,6 +6,12 @@ backend/*.db
 backend/*.sqlite
 backend/logs/
 
+# Environment files - NEVER commit these
+.env
+backend/.env
+*.env
+!.env.example
+
 # Frontend Node.js  
 frontend/node_modules/
 frontend/.next/
