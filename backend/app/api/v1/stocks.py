@@ -1,3 +1,8 @@
+from fastapi import APIRouter, HTTPException
+from app.services.system_state import SystemState
+
+router = APIRouter()
+
 # Only keep this endpoint — it’s perfect for admin panel
 @router.post("/trigger-pipeline")
 async def manual_trigger_pipeline():
