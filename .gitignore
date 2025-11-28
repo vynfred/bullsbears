@@ -1,156 +1,28 @@
-# Dependencies
-node_modules/
-*/node_modules/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.log
-.git
-.mypy_cache
-.pytest_cache
-.hypothesis
+# Backend Python
+backend/__pycache__/
+backend/*.pyc
+backend/.env
+backend/*.db
+backend/*.sqlite
+backend/logs/
 
-# IDEs
+# Frontend Node.js  
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Root level node_modules (if any)
+node_modules/
+
+# Shared
+.DS_Store
+*.log
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
 
-# OS
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Build outputs
-dist/
-build/
-*.egg-info/
-.next/
-out/
-
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# Logs
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Optional npm cache directory
-.npm
-
-# Optional eslint cache
-.eslintcache
-
-# Microbundle cache
-.rpt2_cache/
-.rts2_cache_cjs/
-.rts2_cache_es/
-.rts2_cache_umd/
-
-# Optional REPL history
-.node_repl_history
-
-# Output of 'npm pack'
-*.tgz
-
-# Yarn Integrity file
-.yarn-integrity
-
-# parcel-bundler cache (https://parceljs.org/)
-.cache
-.parcel-cache
-
-# next.js build output
-.next
-
-# nuxt.js build output
-.nuxt
-
-# vuepress build output
-.vuepress/dist
-
-# Serverless directories
-.serverless
-
-# FuseBox cache
-.fusebox/
-
-# DynamoDB Local files
-.dynamodb/
-
-# TernJS port file
-.tern-port
-
-# Stores VSCode versions used for testing VSCode extensions
-.vscode-test
-
-# Firebase
-.firebase/
-*-firebase-adminsdk-*.json
-firebase-debug.log
-firestore-debug.log
-
-# Secrets and credentials
-*.pem
-*.key
-*.p12
-*service-account*.json
-*credentials*.json
-
-# Database dumps
-*.sql
-bullsbears_production.sql
-
-# Documentation (too large for git)
-*_COMPLETE.md
-*_SUMMARY.md
-*_REPORT.md
-*_DESIGN.md
-*_AUDIT.md
-*_CHECKLIST.md
-*_GUIDE.md
-*_SETUP.md
-*_STATUS.md
-*_READY.md
-*_VERIFIED.md
-*_REVIEW.md
-*_IMPLEMENTATION.md
-*_ARCHITECTURE.md
-*_SYSTEM.md
+# Deployment
+render.yaml.backup

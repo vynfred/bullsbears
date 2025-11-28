@@ -1,4 +1,4 @@
-# backend/requirements.txt — FINAL FIXED VERSION
+# requirements.txt — FINAL FIXED VERSION
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 sqlalchemy==2.0.35
@@ -13,4 +13,4 @@ pydantic==2.9.2
 pydantic-settings==2.5.2
 python-multipart==0.0.9
 structlog==24.4.0
-pandas==2.2.3  # ← FIXED: Python 3.13 compatible
+pandas==2.2.3

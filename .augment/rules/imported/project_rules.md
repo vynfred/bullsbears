@@ -6,23 +6,15 @@ type: "always_apply"
 
 ## MANDATORY AI AGENT WORKFLOW RULES
 
-### Rule 1: AGENT_TASKS.MD Update After Each Task ⚠️ REQUIRED
-At the end of every AI agent task:
-- Mark completed tasks as ✅ COMPLETED with timestamps
-- Update progress percentages and current phase status
-- Add new tasks discovered during development
-- Document blockers, dependencies, or technical discoveries
-- Update success metrics and milestone completion
 
-### Rule 2: Confirmation Questions Before New Tasks ⚠️ REQUIRED
+### Rule    : Confirmation Questions Before New Tasks ⚠️ REQUIRED
 Before starting new work, AI agent MUST ask clarifying questions:
 - Priority confirmation based on updated roadmap
 - Approach options for upcoming features
-- Timeline adjustments based on discoveries
 - Technical constraint clarifications
 - Requirement refinements or changes
 
-### Rule 3: NO WORK WITHOUT CONFIRMATION – REQUIRED
+### Rule 2: NO WORK WITHOUT CONFIRMATION – REQUIRED
 Before writing a single line of new code, you MUST ask:
 
 "Is this the highest priority right now?"
@@ -30,21 +22,20 @@ Before writing a single line of new code, you MUST ask:
 "Any hard deadlines or constraints I should know?"
 "Confirm: delete old code or keep for reference?"
 
-## PROJECT BUILD RULES
-
 
 
 ### Architecture Requirements
 
-**Backend**: Python/FastAPI with async endpoints, PostgreSQL, Redis caching, Celery for background tasks
-**Frontend**: Next.js 15 with App Router, Tailwind CSS, mobile-first design
-**AI Integration**: 8-Agent Multi-AI System with RunPod GPU infrastructure
-**Data Sources**: FMP, AI Agents
-**Deployment**: Serverless RunPod GPUs, Firebase hosting, Google SQL, Firebase RealTime db. 
-**Libraries**: TA-Lib for technical indicators, scikit-learn for ML, NLTK/VADER as sentiment fallback
+BULLSBEARS_ARCHITECTURE = {
+    "Render.com": "FastAPI web service + Background Workers + Postgres + Redis + Cron Jobs",
+    "Fireworks.ai": "qwen2.5-72b-instruct → prescreen (75) + arbitrator (3–6 picks) + nightly learner",
+    "Groq": "Llama-3.2-11B-Vision → 75 charts → 6 boolean flags (instant, <1 min total)",
+    "xAI Grok API": "Grok-4 → social score –5 to +5 + headlines + Polymarket odds",
+    "Firebase Hosting": "Next.js 15 frontend (edge global CDN)",
+    "Firebase Realtime Database / Firestore": "Instant picks push + user watchlists + live stats",
+    "Integration": "Each service does ONE job perfectly – no local code, no Dockerfiles, no .env"
 
 DOs and DON'Ts – NON-NEGOTIABLE
-
 DO keep all API keys in .env only
 DO use os.getenv() – never hardcode
 DO hot-reload prompts/*.txt and weights.json nightly
@@ -59,6 +50,4 @@ DON'T assume paths – ask
 DON'T say "yes" to anything that breaks the lean pipeline
 DON'T update without confirming priority
 
-If it’s not in AGENT_TASKS.MD → it doesn’t exist.
 If you didn’t ask → you don’t build.
-If it’s not on the RunPod worker → it’s not running.

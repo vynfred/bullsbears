@@ -9,7 +9,7 @@ import asyncio
 import logging
 import json
 from datetime import date
-from backend.app.core.celery_app import celery_app
+from app.core.celery_app import celery_app
 from app.core.config import settings
 from app.services.cloud_agents.arbitrator_agent import get_final_picks
 from app.core.database import get_asyncpg_pool

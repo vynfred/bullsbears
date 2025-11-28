@@ -7,7 +7,7 @@ from app.core.runpod_client import get_runpod_client
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from backend.app.core.celery_app import celery_app
+from app.core.celery_app import celery_app
 from app.services.runpod_agents.learner_agent import build_learning_prompt
 from app.services.system_state import SystemState
 
