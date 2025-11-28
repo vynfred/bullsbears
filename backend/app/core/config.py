@@ -329,6 +329,15 @@ class Settings(BaseSettings):
     log_backup_count: int = Field(default=5, env="LOG_BACKUP_COUNT")
 
     # ============================================================================
+    # ADMIN AUTHENTICATION
+    # ============================================================================
+    admin_email: str = Field(default="hellovynfred@gmail.com", env="ADMIN_EMAIL")
+    admin_password_hash: str = Field(
+        default="692eb0e8bb02e3f11acef0699acc6a66c70ef29145d679fc3d8b68957c94fe24",
+        env="ADMIN_PASSWORD_HASH"
+    )
+
+    # ============================================================================
     # SECURITY & LEGAL
     # ============================================================================
     disclaimer_enabled: bool = True

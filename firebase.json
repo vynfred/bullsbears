@@ -11,6 +11,10 @@
     ],
     "rewrites": [
       {
+        "source": "/admin-control/bb-admin",
+        "destination": "/admin-control-bb-admin.html"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

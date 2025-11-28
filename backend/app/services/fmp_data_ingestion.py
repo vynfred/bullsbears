@@ -78,6 +78,12 @@ class FMPIngestion:
         batch_size = 550
         total_batches = 7
 
+        # STEP 1: Insert all symbols into stock_classifications with tier='ALL'
+        logger.info(f"STEP 1: Inserting {len(symbols)} stocks into stock_classifications table...")
+        await self._insert_all_stocks(symbols)
+        logger.info(f"✅ All {len(symbols)} stocks inserted into stock_classifications with tier='ALL'")
+
+        # STEP 2: Load 90 days of OHLC data for all stocks
         async with FirebaseService() as fb:
             for week in range(total_batches):
                 batch = symbols[week * batch_size:(week + 1) * batch_size]
@@ -116,6 +122,41 @@ class FMPIngestion:
         DAILY_DATA_MB = self.daily_mb
         logger.info(f"DAILY DELTA DONE – {len(active)} symbols – {self.daily_mb:.3f} GB")
 
+    async def catchup_7days(self):
+        """Catch up last 7 days for all stocks already in database"""
+        from .push_picks_to_firebase import FirebaseService
+
+        logger.info("FMP 7-DAY CATCHUP START")
+
+        # Get all symbols from stock_classifications (stocks we already have)
+        symbols = await self._get_all_symbols_from_db()
+
+        if not symbols:
+            logger.warning("No stocks found in database - run bootstrap_prime_db first")
+            return
+
+        logger.info(f"Catching up {len(symbols)} stocks with last 7 days of data")
+
+        async with FirebaseService() as fb:
+            # Update progress in Firebase
+            await fb.update_data("/system/catchup_progress", {
+                "total_stocks": len(symbols),
+                "data_mb": 0,
+                "status": "in_progress"
+            })
+
+            # Fetch 7 days for all stocks
+            await self._fetch_7d_batch(symbols)
+
+            # Mark as complete
+            await fb.update_data("/system/catchup_progress", {
+                "total_stocks": len(symbols),
+                "data_mb": round(self.daily_mb, 2),
+                "status": "complete"
+            })
+
+        logger.info(f"7-DAY CATCHUP COMPLETE – {len(symbols)} symbols – {self.daily_mb:.2f} GB")
+
     async def _fetch_90d_batch(self, symbols: List[str]):
         """Fetch 90 days of data in smaller chunks to avoid connection pool exhaustion"""
         chunk_size = 50  # Process 50 stocks at a time
@@ -129,6 +170,16 @@ class FMPIngestion:
     async def _fetch_1d_batch(self, symbols: List[str]):
         tasks = [self._fetch_1d(s) for s in symbols]
         await asyncio.gather(*tasks)
+
+    async def _fetch_7d_batch(self, symbols: List[str]):
+        """Fetch 7 days of data in smaller chunks to avoid connection pool exhaustion"""
+        chunk_size = 50  # Process 50 stocks at a time
+        for i in range(0, len(symbols), chunk_size):
+            chunk = symbols[i:i + chunk_size]
+            tasks = [self._fetch_7d(s) for s in chunk]
+            await asyncio.gather(*tasks)
+            logger.info(f"  Processed {min(i + chunk_size, len(symbols))}/{len(symbols)} stocks")
+            await asyncio.sleep(0.5)  # Small delay between chunks
 
     async def _fetch_90d(self, symbol: str):
         end = datetime.now().date()
@@ -144,6 +195,17 @@ class FMPIngestion:
         data = await self._get(f"quote-short/{symbol}")
         if data and data[0].get("price"):
             await self._store_1d(symbol, data[0])
+
+    async def _fetch_7d(self, symbol: str):
+        """Fetch last 7 days of data for a symbol"""
+        end = datetime.now().date()
+        start = end - timedelta(days=7)
+        data = await self._get(
+            f"historical-price-full/{symbol}",
+            {"from": start.isoformat(), "to": end.isoformat()}
+        )
+        if "historical" in data:
+            await self._store_90d(symbol, data["historical"])  # Reuse same storage method
 
     async def _store_90d(self, symbol: str, records: List[Dict]):
         from datetime import datetime as dt
@@ -191,11 +253,44 @@ class FMPIngestion:
         return [s["symbol"] for s in data if s.get("exchange") == "NASDAQ" and len(s.get("symbol", "")) <= 5]
 
     async def _get_active_symbols_from_db(self) -> List[str]:
-        query = "SELECT symbol FROM active_symbols"
+        query = "SELECT symbol FROM stock_classifications WHERE current_tier IN ('ACTIVE', 'SHORT_LIST', 'PICKS')"
         db = await get_asyncpg_pool()
         async with db.acquire() as conn:
             rows = await conn.fetch(query)
             return [row["symbol"] for row in rows]
+
+    async def _get_all_symbols_from_db(self) -> List[str]:
+        """Get all symbols from stock_classifications table"""
+        query = "SELECT DISTINCT symbol FROM stock_classifications ORDER BY symbol"
+        db = await get_asyncpg_pool()
+        async with db.acquire() as conn:
+            rows = await conn.fetch(query)
+            return [row["symbol"] for row in rows]
+
+    async def _insert_all_stocks(self, symbols: List[str]):
+        """Insert all NASDAQ stocks into stock_classifications with tier='ALL'"""
+        from datetime import datetime
+        db = await get_asyncpg_pool()
+
+        # Batch insert for efficiency
+        query = """
+            INSERT INTO stock_classifications (symbol, exchange, current_tier, created_at, updated_at)
+            VALUES ($1, 'NASDAQ', 'ALL', $2, $2)
+            ON CONFLICT (symbol) DO UPDATE SET
+                current_tier = EXCLUDED.current_tier,
+                updated_at = EXCLUDED.updated_at
+        """
+
+        now = datetime.utcnow()
+        async with db.acquire() as conn:
+            # Insert in batches of 100
+            for i in range(0, len(symbols), 100):
+                batch = symbols[i:i + 100]
+                await conn.executemany(query, [(s, now) for s in batch])
+                if (i + 100) % 1000 == 0:
+                    logger.info(f"  Inserted {i + 100}/{len(symbols)} stocks...")
+
+        logger.info(f"✅ Inserted {len(symbols)} stocks into stock_classifications")
 
     async def close(self):
         if self.session:

@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Control Panel - BullsBears</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: linear-gradient(to bottom right, #020617, #0f172a, #020617);
+      min-height: 100vh;
+      color: white;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+    .status-online {
+      background-color: rgba(16, 185, 129, 0.1);
+      color: #10b981;
+    }
+    .status-offline {
+      background-color: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+    }
+  </style>
+</head>
+<body class="p-8">
+  <div id="app" class="max-w-6xl mx-auto">
+    <!-- Login Form -->
+    <div id="loginForm" class="max-w-md mx-auto mt-20">
+      <div class="bg-slate-900 border border-slate-700 rounded-lg p-8">
+        <h1 class="text-3xl font-bold text-center mb-8">
+          <span class="text-emerald-400">Bulls</span><span class="text-red-400">Bears</span>
+          <span class="block text-lg text-gray-400 mt-2">Admin Control Panel</span>
+        </h1>
+        
+        <form id="loginFormElement" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Email</label>
+            <input 
+              type="email" 
+              id="emailInput"
+              class="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+              placeholder="admin@bullsbears.xyz"
+              required
+            />
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Password</label>
+            <input 
+              type="password" 
+              id="passwordInput"
+              class="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          
+          <div id="errorMessage" class="hidden text-red-400 text-sm"></div>
+          
+          <button 
+            type="submit"
+            class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 rounded-lg font-semibold transition-colors"
+          >
+            Login
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Admin Dashboard (hidden by default) -->
+    <div id="adminDashboard" class="hidden">
+      <div class="flex justify-between items-center mb-8">
+        <h1 class="text-3xl font-bold">
+          <span class="text-emerald-400">Bulls</span><span class="text-red-400">Bears</span>
+          <span class="text-gray-400 text-xl ml-4">Admin Control</span>
+        </h1>
+        <button 
+          id="logoutBtn"
+          class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-semibold transition-colors"
+        >
+          Logout
+        </button>
+      </div>
+
+      <!-- System Controls -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="bg-slate-900 border border-slate-700 rounded-lg p-6">
+          <h3 class="text-lg font-semibold mb-4">System Control</h3>
+          <div class="space-y-3">
+            <button 
+              id="systemOnBtn"
+              class="w-full py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg font-semibold transition-colors"
+            >
+              Turn System ON
+            </button>
+            <button 
+              id="systemOffBtn"
+              class="w-full py-2 bg-red-600 hover:bg-red-700 rounded-lg font-semibold transition-colors"
+            >
+              Turn System OFF
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-700 rounded-lg p-6">
+          <h3 class="text-lg font-semibold mb-4">Data Management</h3>
+          <button 
+            id="primeDataBtn"
+            class="w-full py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors"
+          >
+            Prime Historical Data
+          </button>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-700 rounded-lg p-6">
+          <h3 class="text-lg font-semibold mb-4">System Status</h3>
+          <div id="systemStatus" class="space-y-2 text-sm">
+            <div class="flex justify-between">
+              <span>System:</span>
+              <span id="statusSystem" class="status-badge status-offline">● Offline</span>
+            </div>
+            <div class="flex justify-between">
+              <span>RunPod:</span>
+              <span id="statusRunpod" class="status-badge status-offline">● Offline</span>
+            </div>
+            <div class="flex justify-between">
+              <span>Database:</span>
+              <span id="statusDatabase" class="status-badge status-offline">● Offline</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Statistics Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="bg-slate-900 border border-slate-700 rounded-lg p-6">
+          <div class="text-gray-400 text-sm mb-2">Total Users</div>
+          <div id="statUsers" class="text-3xl font-bold">0</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-700 rounded-lg p-6">
+          <div class="text-gray-400 text-sm mb-2">Active Picks</div>
+          <div id="statPicks" class="text-3xl font-bold">0</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-700 rounded-lg p-6">
+          <div class="text-gray-400 text-sm mb-2">Watchlist Items</div>
+          <div id="statWatchlist" class="text-3xl font-bold">0</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-700 rounded-lg p-6">
+          <div class="text-gray-400 text-sm mb-2">API Calls Today</div>
+          <div id="statApiCalls" class="text-3xl font-bold">0</div>
+        </div>
+      </div>
+
+      <!-- Recent Activity -->
+      <div class="bg-slate-900 border border-slate-700 rounded-lg p-6">
+        <h3 class="text-lg font-semibold mb-4">Recent Activity</h3>
+        <div id="activityLog" class="space-y-2 text-sm text-gray-400">
+          <div>No recent activity</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Authentication Script -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+    import { getDatabase, ref, onValue } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+
+    // Firebase config (for real-time data only, not auth)
+    const firebaseConfig = {
+      apiKey: "AIzaSyCpyJM8P3phalCzuiHrN9nOWaAUyByWY0M",
+      authDomain: "bullsbears-xyz.firebaseapp.com",
+      databaseURL: "https://bullsbears-xyz-default-rtdb.firebaseio.com",
+      projectId: "bullsbears-xyz",
+      storageBucket: "bullsbears-xyz.firebasestorage.app",
+      messagingSenderId: "603494406675",
+      appId: "1:603494406675:web:17d4bb70580ceb4f9bbde6",
+      measurementId: "G-RGZ02QS3LD"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // Backend API URL
+    const API_URL = 'https://bullsbears-backend-saonzofwoa-uc.a.run.app';
+
+    // DOM elements
+    const loginForm = document.getElementById('loginForm');
+    const adminDashboard = document.getElementById('adminDashboard');
+    const loginFormElement = document.getElementById('loginFormElement');
+    const errorMessage = document.getElementById('errorMessage');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    // Check if already logged in
+    const adminToken = localStorage.getItem('admin_token');
+    if (adminToken) {
+      verifyToken(adminToken);
+    }
+
+    // Login handler
+    loginFormElement.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('emailInput').value;
+      const password = document.getElementById('passwordInput').value;
+
+      try {
+        const response = await fetch(`${API_URL}/api/v1/admin/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await response.json();
+
+        if (data.success && data.token) {
+          localStorage.setItem('admin_token', data.token);
+          loginForm.classList.add('hidden');
+          adminDashboard.classList.remove('hidden');
+          loadDashboardData();
+          addActivity('Admin logged in');
+        } else {
+          showError(data.error || 'Invalid credentials');
+        }
+      } catch (error) {
+        console.error('Login error:', error);
+        showError('Login failed. Please try again.');
+      }
+    });
+
+    // Verify token
+    async function verifyToken(token) {
+      try {
+        const response = await fetch(`${API_URL}/api/v1/admin/auth/verify`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        const data = await response.json();
+
+        if (data.valid) {
+          loginForm.classList.add('hidden');
+          adminDashboard.classList.remove('hidden');
+          loadDashboardData();
+        } else {
+          localStorage.removeItem('admin_token');
+        }
+      } catch (error) {
+        console.error('Token verification error:', error);
+        localStorage.removeItem('admin_token');
+      }
+    }
+
+    // Logout handler
+    logoutBtn.addEventListener('click', async () => {
+      const token = localStorage.getItem('admin_token');
+      if (token) {
+        try {
+          await fetch(`${API_URL}/api/v1/admin/auth/logout`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+        } catch (error) {
+          console.error('Logout error:', error);
+        }
+      }
+      localStorage.removeItem('admin_token');
+      loginForm.classList.remove('hidden');
+      adminDashboard.classList.add('hidden');
+    });
+
+    // System control handlers
+    document.getElementById('systemOnBtn').addEventListener('click', async () => {
+      const token = localStorage.getItem('admin_token');
+      console.log('🟢 Turning system ON...');
+      try {
+        const response = await fetch(`${API_URL}/api/v1/admin/system/on`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        console.log('Response status:', response.status);
+        const data = await response.json();
+        console.log('Response data:', data);
+
+        if (data.success) {
+          addActivity('System turned ON');
+          updateStatus('statusSystem', true);
+          alert('✅ System is now ON');
+        } else {
+          console.error('Failed to turn system ON:', data);
+          alert('❌ Failed to turn system ON: ' + (data.error || data.message));
+        }
+      } catch (error) {
+        console.error('System ON error:', error);
+        alert('❌ Error: ' + error.message);
+      }
+    });
+
+    document.getElementById('systemOffBtn').addEventListener('click', async () => {
+      const token = localStorage.getItem('admin_token');
+      console.log('🔴 Turning system OFF...');
+      try {
+        const response = await fetch(`${API_URL}/api/v1/admin/system/off`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        console.log('Response status:', response.status);
+        const data = await response.json();
+        console.log('Response data:', data);
+
+        if (data.success) {
+          addActivity('System turned OFF');
+          updateStatus('statusSystem', false);
+          alert('✅ System is now OFF');
+        } else {
+          console.error('Failed to turn system OFF:', data);
+          alert('❌ Failed to turn system OFF: ' + (data.error || data.message));
+        }
+      } catch (error) {
+        console.error('System OFF error:', error);
+        alert('❌ Error: ' + error.message);
+      }
+    });
+
+    document.getElementById('primeDataBtn').addEventListener('click', async () => {
+      const token = localStorage.getItem('admin_token');
+
+      // Confirm before starting (this takes ~25 minutes)
+      if (!confirm('⚠️ This will load 90 days of data for ~6,960 stocks.\n\nExpected time: ~25 minutes\n\nContinue?')) {
+        return;
+      }
+
+      try {
+        addActivity('🔄 Starting data priming... (this will take ~25 minutes)');
+
+        const response = await fetch(`${API_URL}/api/v1/admin/prime-data`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          addActivity(`✅ Data priming complete! Loaded ${data.total_mb} MB of data`);
+          alert('✅ Data priming complete!\n\nYou can now turn the system ON.');
+        } else {
+          addActivity(`❌ Data priming failed: ${data.message || data.error}`);
+          alert('❌ Error: ' + (data.message || data.error));
+        }
+      } catch (error) {
+        console.error('Prime data error:', error);
+        addActivity('❌ Data priming error: ' + error.message);
+        alert('❌ Error: ' + error.message);
+      }
+    });
+
+    // Load dashboard data
+    function loadDashboardData() {
+      // Listen to system status
+      onValue(ref(db, 'system/status'), (snapshot) => {
+        const status = snapshot.val();
+        updateStatus('statusSystem', status?.active);
+        updateStatus('statusRunpod', status?.runpod);
+        updateStatus('statusDatabase', status?.database);
+      });
+
+      // Listen to statistics
+      onValue(ref(db, 'statistics'), (snapshot) => {
+        const stats = snapshot.val() || {};
+        document.getElementById('statUsers').textContent = stats.users || 0;
+        document.getElementById('statPicks').textContent = stats.picks || 0;
+        document.getElementById('statWatchlist').textContent = stats.watchlist || 0;
+        document.getElementById('statApiCalls').textContent = stats.apiCalls || 0;
+      });
+    }
+
+    function updateStatus(elementId, isOnline) {
+      const element = document.getElementById(elementId);
+      if (isOnline) {
+        element.className = 'status-badge status-online';
+        element.textContent = '● Online';
+      } else {
+        element.className = 'status-badge status-offline';
+        element.textContent = '● Offline';
+      }
+    }
+
+    function showError(message) {
+      errorMessage.textContent = message;
+      errorMessage.classList.remove('hidden');
+      setTimeout(() => errorMessage.classList.add('hidden'), 3000);
+    }
+
+    function addActivity(message) {
+      const activityLog = document.getElementById('activityLog');
+      const timestamp = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.textContent = `[${timestamp}] ${message}`;
+      activityLog.insertBefore(entry, activityLog.firstChild);
+
+      // Keep only last 10 entries
+      while (activityLog.children.length > 10) {
+        activityLog.removeChild(activityLog.lastChild);
+      }
+    }
+  </script>
+</body>
+</html>
+

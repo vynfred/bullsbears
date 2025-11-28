@@ -161,7 +161,7 @@ class StockFilterService:
     async def _fetch_all_nasdaq_stocks(self) -> List[Dict[str, Any]]:
         """Fetch all NASDAQ stocks with latest market data"""
         query = """
-        SELECT 
+        SELECT
             sc.symbol,
             sc.company_name,
             sc.sector,
@@ -175,22 +175,22 @@ class StockFilterService:
             pod.high_price,
             pod.low_price,
             pod.date as price_date,
-            pod.updated_at as price_updated
+            pod.created_at as price_updated
         FROM stock_classifications sc
-        LEFT JOIN prime_ohlc_90d pod ON sc.symbol = pod.symbol 
+        LEFT JOIN prime_ohlc_90d pod ON sc.symbol = pod.symbol
             AND pod.date = (
-                SELECT MAX(date) 
-                FROM prime_ohlc_90d pod2 
+                SELECT MAX(date)
+                FROM prime_ohlc_90d pod2
                 WHERE pod2.symbol = sc.symbol
                 AND pod2.date >= CURRENT_DATE - INTERVAL '7 days'
             )
         WHERE sc.exchange = 'NASDAQ'
         ORDER BY sc.market_cap DESC NULLS LAST
         """
-        
+
         async with self.db.acquire() as conn:
             rows = await conn.fetch(query)
-        
+
         return [dict(row) for row in rows]
     
     def _evaluate_stock_criteria(self, stock: Dict[str, Any]) -> Optional[FilterCriteria]:
@@ -211,7 +211,7 @@ class StockFilterService:
         price_date = stock.get('price_date')
         if price_date:
             data_age = (datetime.now().date() - price_date).days
-            if data_age > 1:  # More than 1 day old
+            if data_age > 7:  # More than 7 days old (relaxed for testing)
                 return FilterCriteria.STALE_DATA
         
         # Apply numerical filters

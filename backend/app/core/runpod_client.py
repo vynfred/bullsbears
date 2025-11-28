@@ -19,10 +19,10 @@ class RunPodClient:
     """
     
     def __init__(self):
-        self.api_key = settings.runpod_api_key
+        self.api_key = settings.runpod_api_key.strip() if settings.runpod_api_key else None
         self.endpoint_id = settings.runpod_endpoint_id
         self.base_url = f"{settings.runpod_base_url}/{self.endpoint_id}"
-        self.client = httpx.AsyncClient(timeout=120.0)  # 2 minute timeout for large requests
+        self.client = httpx.AsyncClient(timeout=1200.0)  # 20 minute timeout for AI inference
         
     async def run_inference(
         self,
@@ -88,15 +88,15 @@ class RunPodClient:
             logger.error(f"RunPod inference error: {e}")
             raise
     
-    async def _poll_for_results(self, job_id: str, headers: Dict[str, str], max_attempts: int = 60) -> Dict[str, Any]:
+    async def _poll_for_results(self, job_id: str, headers: Dict[str, str], max_attempts: int = 600) -> Dict[str, Any]:
         """
         Poll RunPod for job results
-        
+
         Args:
             job_id: The job ID to poll
             headers: HTTP headers with auth
-            max_attempts: Maximum polling attempts (default: 60 = 2 minutes at 2s intervals)
-            
+            max_attempts: Maximum polling attempts (default: 600 = 20 minutes at 2s intervals)
+
         Returns:
             Dict with model response
         """

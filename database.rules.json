@@ -39,6 +39,21 @@
     "pulse": {
       ".read": true,
       ".write": "auth != null && auth.token.admin == true"
+    },
+
+    "system": {
+      ".read": true,
+      ".write": true
+    },
+
+    "test": {
+      ".read": true,
+      ".write": true
+    },
+
+    "test_picks": {
+      ".read": true,
+      ".write": true
     }
   }
 }

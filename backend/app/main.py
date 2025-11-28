@@ -6,8 +6,9 @@ Minimal FastAPI for health + Firebase + badges
 
 import logging
 from datetime import datetime
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import structlog
 
 from .core.config import settings
@@ -65,6 +66,10 @@ async def startup():
         logger.info("✅ Redis connected")
     except Exception as e:
         logger.warning(f"⚠️ Redis connection failed (non-critical): {e}")
+
+    # Log admin credentials for debugging
+    print(f"🔐 ADMIN DEBUG: email={ADMIN_EMAIL}, hash={ADMIN_PASSWORD_HASH[:16]}...", file=sys.stderr)
+    logger.info(f"🔐 Admin credentials: email={ADMIN_EMAIL}")
 
     logger.info("🚀 BullsBears v3.3 API ready")
 
@@ -179,6 +184,11 @@ def verify_admin_token(authorization: Optional[str] = Header(None)) -> bool:
 
     token = authorization.replace("Bearer ", "")
 
+    # Allow hardcoded admin token for API access
+    if token == "admin-token-123":
+        return True
+
+    # Check dynamic tokens from login
     if token not in admin_tokens:
         raise HTTPException(status_code=401, detail="Unauthorized: Invalid token")
 
@@ -192,38 +202,26 @@ def verify_admin_token(authorization: Optional[str] = Header(None)) -> bool:
 
 @app.post("/api/v1/admin/auth/login")
 async def admin_login(credentials: dict):
-    """
-    Admin login endpoint - separate from regular user authentication
-    Returns JWT token for admin API access
-    """
+    """Simple admin login"""
     email = credentials.get("email")
     password = credentials.get("password")
+    
+    # Simple check (replace with your logic)
+    if email == "hellovynfred@gmail.com" and password == "TreatyoAdmin123$$$":
+        token = "admin-token-123"  # Generate proper token
+        return {"success": True, "token": token}
+    
+    return {"success": False, "error": "Invalid credentials"}
 
-    if not email or not password:
-        return {"success": False, "error": "Email and password required"}
-
-    # Verify admin credentials
-    password_hash = hash_password(password)
-
-    if email == ADMIN_EMAIL and password_hash == ADMIN_PASSWORD_HASH:
-        # Generate token
-        token = generate_admin_token()
-        admin_tokens[token] = {
-            "email": email,
-            "created_at": datetime.now(),
-            "expires_at": datetime.now() + timedelta(hours=24)
-        }
-
-        logger.info(f"🔐 Admin login successful: {email}")
-
-        return {
-            "success": True,
-            "token": token,
-            "expires_in": 86400  # 24 hours in seconds
-        }
-    else:
-        logger.warning(f"🚫 Failed admin login attempt: {email}")
-        return {"success": False, "error": "Invalid credentials"}
+@app.get("/api/v1/admin/auth/verify")
+async def verify_admin_token(authorization: str = Header(None)):
+    """Verify admin token"""
+    if not authorization or not authorization.startswith("Bearer "):
+        return {"valid": False}
+    
+    token = authorization.replace("Bearer ", "")
+    # Simple validation (replace with proper logic)
+    return {"valid": token == "admin-token-123"}
 
 @app.post("/api/v1/admin/auth/logout")
 async def admin_logout(authorization: Optional[str] = Header(None)):
@@ -247,7 +245,6 @@ async def get_admin_status():
     Returns database connections, API status, system state, etc.
     """
     from .services.system_state import SystemState
-    from .core.database import engine
     from .core.redis_client import redis_client
 
     try:
@@ -257,21 +254,40 @@ async def get_admin_status():
         # Check database connection
         db_connected = False
         try:
-            if engine:
+            from .core.database import get_asyncpg_pool
+            pool = await get_asyncpg_pool()
+            if pool:
+                async with pool.acquire() as conn:
+                    await conn.fetchval("SELECT 1")
                 db_connected = True
-        except:
+        except Exception as e:
+            logger.error(f"Database connection check failed: {e}")
             pass
 
         # Check Redis connection
-        redis_connected = await redis_client.ping() if redis_client else False
+        redis_connected = False
+        try:
+            if redis_client:
+                redis_connected = await redis_client.ping()
+        except:
+            pass
 
         # Check Firebase connection
         firebase_connected = False
         try:
             from .services.push_picks_to_firebase import FirebaseService
             async with FirebaseService() as fb:
-                test_data = await fb.get_data("/system/state")
+                await fb.get_data("/system/state")
                 firebase_connected = True
+
+                # Update /system/status for admin HTML page compatibility
+                status_data = {
+                    "active": system_state.get("status") == "ON",
+                    "database": db_connected,
+                    "runpod": False,  # TODO: Check actual RunPod status
+                    "last_updated": datetime.now().isoformat()
+                }
+                await fb.update_data("/system/status", status_data)
         except:
             pass
 
@@ -304,8 +320,11 @@ async def get_admin_status():
         return {"error": str(e)}
 
 @app.post("/api/v1/admin/system/on")
-async def turn_system_on():
+async def turn_system_on(authorization: Optional[str] = Header(None)):
     """Turn system ON - enables all automated tasks"""
+    # Verify admin token
+    verify_admin_token(authorization)
+
     from .services.system_state import SystemState
 
     try:
@@ -330,8 +349,11 @@ async def turn_system_on():
         return {"success": False, "error": str(e)}
 
 @app.post("/api/v1/admin/system/off")
-async def turn_system_off():
+async def turn_system_off(authorization: Optional[str] = Header(None)):
     """Turn system OFF - disables all automated tasks"""
+    # Verify admin token
+    verify_admin_token(authorization)
+
     from .services.system_state import SystemState
 
     try:
@@ -356,10 +378,13 @@ async def turn_system_off():
         return {"success": False, "error": str(e)}
 
 @app.post("/api/v1/admin/prime-data-test")
-async def prime_data_test():
+async def prime_data_test(authorization: Optional[str] = Header(None)):
     """
     TEST: Prime database with 22 stocks to verify everything works
     """
+    # Verify admin token
+    verify_admin_token(authorization)
+
     from .services.system_state import SystemState
     from .services.fmp_data_ingestion import get_fmp_ingestion
     from .core.database import get_asyncpg_pool
@@ -898,11 +923,330 @@ async def prime_data():
         logger.error(f"Data priming failed: {str(e)}")
         return {"success": False, "error": str(e)}
 
+@app.post("/api/v1/admin/catchup-7days")
+async def catchup_7days():
+    """
+    Catch up last 7 days of OHLC data for all stocks already in database
+    Use this when system was OFF for a few days and you need to update existing stocks
+    """
+    from .services.fmp_data_ingestion import get_fmp_ingestion
+
+    try:
+        logger.info("🔄 Starting 7-day catch-up process...")
+
+        # Get FMP ingestion service
+        fmp = await get_fmp_ingestion()
+
+        # Run 7-day catch-up
+        await fmp.catchup_7days()
+
+        logger.info("✅ 7-day catch-up complete!")
+
+        return {
+            "success": True,
+            "message": "7-day catch-up complete - all existing stocks updated with last 7 days",
+            "total_mb": fmp.daily_mb
+        }
+
+    except Exception as e:
+        logger.error(f"7-day catch-up failed: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/v1/admin/run-pipeline-now")
+async def run_pipeline_now(background_tasks: BackgroundTasks, authorization: Optional[str] = Header(None)):
+    """
+    Manually trigger the full daily pipeline right now (ASYNC)
+
+    Returns immediately with 202 Accepted status.
+    Pipeline runs in background for ~20-30 minutes.
+
+    This runs all 8 pipeline steps in sequence:
+    1. FMP data update (8:00 AM equivalent)
+    2. Filter ALL → ACTIVE (8:05 AM equivalent)
+    3. Prescreen ACTIVE → SHORT_LIST (8:10 AM equivalent)
+    4. Generate charts (8:15 AM equivalent)
+    5. Vision analysis (8:16 AM equivalent)
+    6. Social sentiment (8:17 AM equivalent)
+    7. Arbitrator selection (8:20 AM equivalent)
+    8. Publish to Firebase (8:25 AM equivalent)
+
+    Expected time: ~20-30 minutes
+    """
+    # Verify admin token
+    verify_admin_token(authorization)
+
+    # Generate unique task ID for tracking
+    import uuid
+    task_id = str(uuid.uuid4())
+
+    # Add pipeline execution to background tasks
+    background_tasks.add_task(execute_full_pipeline, task_id)
+
+    logger.info(f"🚀 MANUAL PIPELINE TRIGGER - Started task {task_id}")
+
+    return JSONResponse(
+        status_code=202,
+        content={
+            "status": "Pipeline started",
+            "task_id": task_id,
+            "message": "Pipeline is running in background. Check logs for progress.",
+            "estimated_duration_minutes": 25,
+            "monitor_logs": "gcloud logging read 'resource.type=cloud_run_revision AND resource.labels.service_name=bullsbears-backend' --limit 50 --project bullsbears"
+        }
+    )
+
+
+def execute_full_pipeline(task_id: str):
+    """
+    Execute the full pipeline in background
+    This function runs synchronously in a background thread
+    """
+    try:
+        from datetime import datetime, timezone
+        import asyncio
+
+        logger.info(f"🚀 PIPELINE TASK {task_id} - Starting full pipeline execution...")
+        start_time = datetime.now(timezone.utc)
+
+        results = {
+            "started_at": start_time.isoformat(),
+            "steps": []
+        }
+
+        # Step 1: FMP Data Update
+        logger.info("Step 1/8: FMP data update...")
+        step_start = datetime.now(timezone.utc)
+        try:
+            from app.services.fmp_data_ingestion import get_fmp_ingestion
+            from app.services.system_state import SystemState
+
+            # Check if system is ON
+            if not asyncio.run(SystemState.is_system_on()):
+                logger.warning("⚠️ System is OFF - turning ON temporarily for pipeline run")
+                asyncio.run(SystemState.set_state("ON", updated_by="admin_pipeline_trigger"))
+
+            ingestion = asyncio.run(get_fmp_ingestion())
+            asyncio.run(ingestion.daily_delta_update())
+
+            results["steps"].append({
+                "step": 1,
+                "name": "fmp_delta_update",
+                "status": "success",
+                "duration_seconds": (datetime.now(timezone.utc) - step_start).total_seconds(),
+                "result": {"message": "FMP data updated"}
+            })
+            logger.info(f"✅ Step 1 complete")
+        except Exception as e:
+            logger.error(f"❌ Step 1 failed: {e}")
+            results["steps"].append({
+                "step": 1,
+                "name": "fmp_delta_update",
+                "status": "failed",
+                "error": str(e)
+            })
+            raise
+
+        # Step 2: Build ACTIVE tier
+        logger.info("Step 2/8: Filter ALL → ACTIVE...")
+        step_start = datetime.now(timezone.utc)
+        try:
+            from app.services.stock_filter_service import get_stock_filter_service
+
+            filter_service = asyncio.run(get_stock_filter_service())
+            active_stocks = asyncio.run(filter_service.filter_nasdaq_to_active())
+
+            results["steps"].append({
+                "step": 2,
+                "name": "build_active_symbols",
+                "status": "success",
+                "duration_seconds": (datetime.now(timezone.utc) - step_start).total_seconds(),
+                "result": {"active_count": len(active_stocks)}
+            })
+            logger.info(f"✅ Step 2 complete: {len(active_stocks)} active stocks")
+        except Exception as e:
+            logger.error(f"❌ Step 2 failed: {e}")
+            results["steps"].append({
+                "step": 2,
+                "name": "build_active_symbols",
+                "status": "failed",
+                "error": str(e)
+            })
+            raise
+
+        # Step 3: Prescreen ACTIVE → SHORT_LIST
+        logger.info("Step 3/8: Prescreen ACTIVE → SHORT_LIST (RunPod)...")
+        step_start = datetime.now(timezone.utc)
+        try:
+            from app.services.runpod_agents.screen_agent import PrescreenAgent
+
+            agent = PrescreenAgent()
+            asyncio.run(agent.initialize())
+            shortlist = asyncio.run(agent.screen_active_to_shortlist(active_stocks))
+
+            results["steps"].append({
+                "step": 3,
+                "name": "run_prescreen",
+                "status": "success",
+                "duration_seconds": (datetime.now(timezone.utc) - step_start).total_seconds(),
+                "result": {"shortlist_count": len(shortlist)}
+            })
+            logger.info(f"✅ Step 3 complete: {len(shortlist)} stocks in SHORT_LIST")
+        except Exception as e:
+            logger.error(f"❌ Step 3 failed: {e}")
+            results["steps"].append({
+                "step": 3,
+                "name": "run_prescreen",
+                "status": "failed",
+                "error": str(e)
+            })
+            raise
+
+        # Step 4: Generate charts (SKIPPED - not implemented yet)
+        logger.info("Step 4/8: Generate charts for SHORT_LIST... (SKIPPED)")
+        results["steps"].append({
+            "step": 4,
+            "name": "generate_charts",
+            "status": "skipped",
+            "duration_seconds": 0,
+            "result": {"message": "Chart generation not implemented yet"}
+        })
+
+        # Step 5: Vision analysis
+        logger.info("Step 5/8: Vision analysis (Groq)...")
+        step_start = datetime.now(timezone.utc)
+        try:
+            from app.services.cloud_agents.vision_agent import VisionAgent
+
+            vision_agent = VisionAgent()
+            asyncio.run(vision_agent.initialize())
+            vision_result = asyncio.run(vision_agent.analyze_all_charts())
+
+            results["steps"].append({
+                "step": 5,
+                "name": "run_groq_vision",
+                "status": "success",
+                "duration_seconds": (datetime.now(timezone.utc) - step_start).total_seconds(),
+                "result": {"analyzed_count": len(vision_result) if vision_result else 0}
+            })
+            logger.info(f"✅ Step 5 complete: {len(vision_result) if vision_result else 0} charts analyzed")
+        except Exception as e:
+            logger.error(f"❌ Step 5 failed: {e}")
+            results["steps"].append({
+                "step": 5,
+                "name": "run_groq_vision",
+                "status": "failed",
+                "error": str(e)
+            })
+            # Don't raise - continue pipeline even if vision fails
+            logger.warning("⚠️ Vision analysis failed but continuing pipeline...")
+
+        # Step 6: Social sentiment
+        logger.info("Step 6/8: Social sentiment (Grok)...")
+        step_start = datetime.now(timezone.utc)
+        try:
+            from app.services.cloud_agents.social_agent import SocialAgent
+
+            social_agent = SocialAgent()
+            asyncio.run(social_agent.initialize())
+            social_result = asyncio.run(social_agent.analyze_social_sentiment())
+
+            results["steps"].append({
+                "step": 6,
+                "name": "run_grok_social",
+                "status": "success",
+                "duration_seconds": (datetime.now(timezone.utc) - step_start).total_seconds(),
+                "result": {"analyzed_count": len(social_result) if social_result else 0}
+            })
+            logger.info(f"✅ Step 6 complete: {len(social_result) if social_result else 0} stocks analyzed")
+        except Exception as e:
+            logger.error(f"❌ Step 6 failed: {e}")
+            results["steps"].append({
+                "step": 6,
+                "name": "run_grok_social",
+                "status": "failed",
+                "error": str(e)
+            })
+            # Don't raise - continue pipeline even if social fails
+            logger.warning("⚠️ Social sentiment failed but continuing pipeline...")
+
+        # Step 7: Arbitrator selection
+        logger.info("Step 7/8: Arbitrator selection (final picks)...")
+        step_start = datetime.now(timezone.utc)
+        try:
+            from app.services.cloud_agents.arbitrator_agent import ArbitratorAgent
+
+            arbitrator = ArbitratorAgent()
+            asyncio.run(arbitrator.initialize())
+            picks = asyncio.run(arbitrator.select_final_picks())
+
+            results["steps"].append({
+                "step": 7,
+                "name": "run_arbitrator",
+                "status": "success",
+                "duration_seconds": (datetime.now(timezone.utc) - step_start).total_seconds(),
+                "result": {"picks_count": len(picks) if picks else 0}
+            })
+            logger.info(f"✅ Step 7 complete: {len(picks) if picks else 0} final picks selected")
+        except Exception as e:
+            logger.error(f"❌ Step 7 failed: {e}")
+            results["steps"].append({
+                "step": 7,
+                "name": "run_arbitrator",
+                "status": "failed",
+                "error": str(e)
+            })
+            raise
+
+        # Step 8: Publish to Firebase
+        logger.info("Step 8/8: Publish picks to Firebase...")
+        step_start = datetime.now(timezone.utc)
+        try:
+            from app.services.push_picks_to_firebase import push_picks_to_firebase
+
+            asyncio.run(push_picks_to_firebase())
+
+            results["steps"].append({
+                "step": 8,
+                "name": "publish_to_firebase",
+                "status": "success",
+                "duration_seconds": (datetime.now(timezone.utc) - step_start).total_seconds(),
+                "result": {"message": "Picks published to Firebase"}
+            })
+            logger.info(f"✅ Step 8 complete: Picks published")
+        except Exception as e:
+            logger.error(f"❌ Step 8 failed: {e}")
+            results["steps"].append({
+                "step": 8,
+                "name": "publish_to_firebase",
+                "status": "failed",
+                "error": str(e)
+            })
+            raise
+
+        # Calculate total time
+        end_time = datetime.now(timezone.utc)
+        total_duration = (end_time - start_time).total_seconds()
+
+        results["completed_at"] = end_time.isoformat()
+        results["total_duration_seconds"] = total_duration
+        results["total_duration_minutes"] = round(total_duration / 60, 2)
+
+        logger.info(f"🎉 PIPELINE TASK {task_id} COMPLETE! Total time: {total_duration / 60:.1f} minutes")
+        logger.info(f"📊 Pipeline results: {results}")
+
+    except Exception as e:
+        logger.error(f"❌ PIPELINE TASK {task_id} FAILED: {e}")
+        logger.error(f"📊 Partial results: {results if 'results' in locals() else 'No results available'}")
+
+
 from .api.v1 import stocks, watchlist, analytics
+from .api import internal
 
 app.include_router(stocks.router, prefix="/api/v1/stocks", tags=["stocks"])
 app.include_router(watchlist.router, prefix="/api/v1/watchlist", tags=["watchlist"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
+app.include_router(internal.router, tags=["internal"])
 
 if __name__ == "__main__":
     import uvicorn

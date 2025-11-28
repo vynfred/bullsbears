@@ -32,6 +32,8 @@ export default function AdminPage() {
   const [isSystemOn, setIsSystemOn] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isPriming, setIsPriming] = useState(false);
+  const [dataPrimed, setDataPrimed] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string>('');
 
   const checkSystemStatus = async () => {
     setIsLoading(true);
@@ -39,10 +41,35 @@ export default function AdminPage() {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/status`);
       if (response.ok) {
         const data = await response.json();
-        setSystemStatus(data.status || systemStatus);
-        setIsSystemOn(data.system_on || false);
+
+        // Update system status from API response
+        setSystemStatus({
+          googleSQL: data.databases?.google_sql?.connected || false,
+          firebase: data.databases?.firebase?.connected || false,
+          fmpAPI: data.apis?.fmp?.status === 'healthy',
+          groqAPI: data.apis?.groq?.status === 'healthy',
+          grokAPI: data.apis?.grok?.status === 'healthy',
+          deepseekAPI: data.apis?.deepseek?.status === 'healthy',
+          runpodEndpoint: data.runpod?.status === 'healthy',
+        });
+
+        // Get system ON/OFF state from Firebase (persistent)
+        const systemState = data.system?.status || 'OFF';
+        setIsSystemOn(systemState === 'ON');
+        setDataPrimed(data.system?.data_primed || false);
+        setLastUpdated(data.system?.last_updated || '');
+
+        console.log('System status updated:', {
+          systemState,
+          isOn: systemState === 'ON',
+          dataPrimed: data.system?.data_primed,
+          lastUpdated: data.system?.last_updated,
+          databases: data.databases,
+          apis: data.apis
+        });
       }
     } catch (error) {
+      console.error('Failed to check system status:', error);
       toast.error("Failed to check system status");
     } finally {
       setIsLoading(false);
@@ -55,14 +82,26 @@ export default function AdminPage() {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/system/${turnOn ? 'on' : 'off'}`, {
         method: 'POST',
       });
+
       if (response.ok) {
-        setIsSystemOn(turnOn);
-        toast.success(`System turned ${turnOn ? 'ON' : 'OFF'}`);
+        const data = await response.json();
+
+        if (data.success) {
+          setIsSystemOn(turnOn);
+          toast.success(`✅ System turned ${turnOn ? 'ON' : 'OFF'} - State persisted to Firebase`);
+
+          // Refresh status to confirm persistence
+          setTimeout(() => checkSystemStatus(), 1000);
+        } else {
+          toast.error(`Failed: ${data.message || 'Unknown error'}`);
+        }
       } else {
-        toast.error(`Failed to turn system ${turnOn ? 'on' : 'off'}`);
+        const errorData = await response.json().catch(() => ({}));
+        toast.error(`Failed to turn system ${turnOn ? 'on' : 'off'}: ${errorData.error || 'Server error'}`);
       }
     } catch (error) {
-      toast.error("Failed to toggle system");
+      console.error('Toggle system error:', error);
+      toast.error("Failed to toggle system - check console for details");
     } finally {
       setIsLoading(false);
     }
@@ -74,13 +113,29 @@ export default function AdminPage() {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/prime-data`, {
         method: 'POST',
       });
+
       if (response.ok) {
-        toast.success("Data priming started! This will take several minutes...");
+        await response.json(); // Consume response
+        toast.success("✅ Data priming started! This will take several minutes...");
+
+        // Poll for completion every 10 seconds
+        const pollInterval = setInterval(async () => {
+          await checkSystemStatus();
+          if (dataPrimed) {
+            clearInterval(pollInterval);
+            toast.success("🎉 Data priming completed!");
+          }
+        }, 10000);
+
+        // Stop polling after 30 minutes
+        setTimeout(() => clearInterval(pollInterval), 1800000);
       } else {
-        toast.error("Failed to start data priming");
+        const errorData = await response.json().catch(() => ({}));
+        toast.error(`Failed to start data priming: ${errorData.error || 'Unknown error'}`);
       }
     } catch (error) {
-      toast.error("Failed to prime data");
+      console.error('Prime data error:', error);
+      toast.error("Failed to prime data - check console for details");
     } finally {
       setIsPriming(false);
     }
@@ -122,29 +177,49 @@ export default function AdminPage() {
               <div>
                 <p className="text-slate-200 font-semibold">System Status</p>
                 <p className="text-sm text-slate-400">Turn the AI pipeline on or off</p>
+                {lastUpdated && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    Last updated: {new Date(lastUpdated).toLocaleString()}
+                  </p>
+                )}
               </div>
-              <Badge className={isSystemOn ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/50 text-lg px-4 py-2" : "bg-slate-500/20 text-slate-400 border-slate-500/50 text-lg px-4 py-2"}>
-                {isSystemOn ? "ONLINE" : "OFFLINE"}
-              </Badge>
+              <div className="flex flex-col items-end gap-2">
+                <Badge className={isSystemOn ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/50 text-lg px-4 py-2" : "bg-slate-500/20 text-slate-400 border-slate-500/50 text-lg px-4 py-2"}>
+                  {isSystemOn ? "ONLINE" : "OFFLINE"}
+                </Badge>
+                {dataPrimed && (
+                  <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/50 text-xs px-2 py-1">
+                    Data Primed ✓
+                  </Badge>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-4">
               <Button
                 onClick={() => toggleSystem(true)}
                 disabled={isSystemOn || isLoading}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-500"
+                className={`flex-1 transition-all ${
+                  isSystemOn
+                    ? 'bg-emerald-600 border-2 border-emerald-400 shadow-lg shadow-emerald-500/50'
+                    : 'bg-emerald-600/50 hover:bg-emerald-600 border-2 border-emerald-600/30'
+                }`}
               >
                 <PlayCircle className="w-4 h-4 mr-2" />
-                Turn ON
+                {isSystemOn ? '✓ System ON' : 'Turn ON'}
               </Button>
               <Button
                 onClick={() => toggleSystem(false)}
                 disabled={!isSystemOn || isLoading}
                 variant="destructive"
-                className="flex-1"
+                className={`flex-1 transition-all ${
+                  !isSystemOn
+                    ? 'bg-red-600 border-2 border-red-400 shadow-lg shadow-red-500/50'
+                    : 'bg-red-600/50 hover:bg-red-600 border-2 border-red-600/30'
+                }`}
               >
                 <StopCircle className="w-4 h-4 mr-2" />
-                Turn OFF
+                {!isSystemOn ? '✓ System OFF' : 'Turn OFF'}
               </Button>
             </div>
           </CardContent>

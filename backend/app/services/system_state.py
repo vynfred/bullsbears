@@ -74,29 +74,70 @@ class SystemState:
             if status not in ["ON", "OFF"]:
                 logger.error(f"Invalid system status: {status}")
                 return False
-            
+
             # Get current state to preserve data_primed if not specified
             current_state = await SystemState.get_state()
-            
+
             state_data = {
                 "status": status,
                 "last_updated": datetime.now().isoformat(),
                 "updated_by": updated_by,
                 "data_primed": data_primed if data_primed is not None else current_state.get("data_primed", False)
             }
-            
+
             async with FirebaseService() as fb:
+                # Update /system/state (main state)
                 success = await fb.update_data(SystemState.SYSTEM_PATH, state_data)
-                
+
                 if success:
+                    # Also update /system/status for admin dashboard compatibility
+                    await SystemState._update_connection_status(fb)
                     logger.info(f"✅ System state set to {status} by {updated_by}")
                     return True
                 else:
                     logger.error(f"Failed to set system state to {status}")
                     return False
-                    
+
         except Exception as e:
             logger.error(f"Failed to set system state: {str(e)}")
+            return False
+
+    @staticmethod
+    async def _update_connection_status(fb: FirebaseService) -> bool:
+        """
+        Update /system/status with current connection status
+        This is for the admin dashboard HTML page compatibility
+        """
+        try:
+            # Check database connection
+            db_connected = False
+            try:
+                from ..core.database import get_asyncpg_pool
+                pool = await get_asyncpg_pool()
+                if pool:
+                    async with pool.acquire() as conn:
+                        await conn.fetchval("SELECT 1")
+                    db_connected = True
+            except:
+                pass
+
+            # Check system state
+            state = await SystemState.get_state()
+            is_active = state.get("status") == "ON"
+
+            # Update /system/status for admin dashboard
+            status_data = {
+                "active": is_active,
+                "database": db_connected,
+                "runpod": False,  # TODO: Check actual RunPod status
+                "last_updated": datetime.now().isoformat()
+            }
+
+            await fb.update_data("/system/status", status_data)
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to update connection status: {e}")
             return False
     
     @staticmethod
