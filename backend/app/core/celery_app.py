@@ -10,6 +10,10 @@ from celery import Celery
 # Use REDIS_URL from Render environment (internal)
 REDIS_URL = os.environ["REDIS_URL"]
 
+# Fix for Render's rediss:// SSL - add ssl_cert_reqs parameter
+if REDIS_URL.startswith("rediss://") and "ssl_cert_reqs" not in REDIS_URL:
+    REDIS_URL = REDIS_URL + ("&" if "?" in REDIS_URL else "?") + "ssl_cert_reqs=CERT_NONE"
+
 # Create Celery app
 celery_app = Celery(
     "bullsbears",
