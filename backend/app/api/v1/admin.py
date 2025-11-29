@@ -132,11 +132,46 @@ async def admin_health_check():
 
 
 @router.post("/prime-data")
-async def prime_historical_data():
-    """Prime historical data - placeholder for now"""
-    # TODO: Implement actual data priming when DataFlowManager is ready
-    return {
-        "success": True,
-        "message": "Data priming initiated (placeholder - not yet implemented)",
-        "total_mb": 0
-    }
+async def prime_historical_data(mode: str = "catchup"):
+    """
+    Prime historical data from FMP API
+
+    Modes:
+    - catchup: 7-day catchup (fast, ~5 min)
+    - bootstrap: Full 90-day bootstrap (slow, ~25 min, ~7.8 GB)
+    """
+    import os
+
+    # Check FMP API key
+    fmp_key = os.getenv("FMP_API_KEY")
+    if not fmp_key:
+        return {
+            "success": False,
+            "message": "FMP_API_KEY not configured in environment",
+            "total_mb": 0
+        }
+
+    try:
+        from app.services.fmp_data_ingestion import get_fmp_ingestion
+
+        ingestion = await get_fmp_ingestion()
+
+        if mode == "bootstrap":
+            # Full 90-day bootstrap - this takes ~25 minutes
+            await ingestion.bootstrap_prime_db()
+        else:
+            # 7-day catchup - faster
+            await ingestion.catchup_7d()
+
+        return {
+            "success": True,
+            "message": f"Data priming complete ({mode} mode)",
+            "total_mb": round(ingestion.daily_mb, 2)
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Data priming failed: {str(e)}",
+            "total_mb": 0
+        }
