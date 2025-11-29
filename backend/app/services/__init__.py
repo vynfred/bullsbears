@@ -16,7 +16,7 @@ from .kill_switch_service import is_kill_switch_active
 from .cloud_agents.learner_agent import run_weekly_learner
 
 # Output
-from .push_picks_to_firebase import push_picks_to_firebase, FirebaseService
+from .push_picks_to_firebase import publish_picks_to_firebase, FirebaseService
 
 # System State
 from .system_state import SystemState
@@ -30,7 +30,7 @@ __all__ = [
     "PrescreenAgent",
     "is_kill_switch_active",
     "run_weekly_learner",
-    "push_picks_to_firebase",
+    "publish_picks_to_firebase",
     "FirebaseService",
     "SystemState",
 ]
