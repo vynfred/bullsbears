@@ -8,8 +8,8 @@ import asyncio
 import logging
 from datetime import datetime
 from app.core.celery_app import celery_app
-from backend.app.services.cloud_agents.prescreen_agent import PrescreenAgent
-from app.services.system_state import SystemState
+from app.services.cloud_agents.prescreen_agent import PrescreenAgent
+from app.services.system_state import is_system_on
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ def run_prescreen():
     # Run prescreen - single Fireworks API call
     async def _run():
         # Check if system is ON
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping prescreen")
             return {"skipped": True, "reason": "system_off"}
         

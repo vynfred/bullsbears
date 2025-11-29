@@ -16,10 +16,10 @@ from .kill_switch_service import is_kill_switch_active
 from .cloud_agents.learner_agent import run_weekly_learner
 
 # Output
-from .push_picks_to_firebase import publish_picks_to_firebase, FirebaseService
+from .push_picks_to_firebase import publish_picks_to_firebase
 
 # System State
-from .system_state import SystemState
+from .system_state import is_system_on, set_system_on
 
 # NOTE: ChartGenerator is defined inline in backend/app/tasks/generate_charts.py
 # It's not a service - it's a task-specific class used only by the generate_charts task
@@ -31,6 +31,6 @@ __all__ = [
     "is_kill_switch_active",
     "run_weekly_learner",
     "publish_picks_to_firebase",
-    "FirebaseService",
-    "SystemState",
+    "is_system_on",
+    "set_system_on",
 ]

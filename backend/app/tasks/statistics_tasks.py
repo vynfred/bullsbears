@@ -10,7 +10,7 @@ import asyncio
 
 from ..core.celery_app import celery_app
 from ..services.statistics_service import StatisticsService
-from ..services.system_state import SystemState
+from ..services.system_state import is_system_on
 
 logger = logging.getLogger(__name__)
 stats_service = StatisticsService()  # singleton
@@ -21,7 +21,7 @@ def update_statistics_cache():
     """Every 5 min — full stats refresh"""
     async def _run():
         # Check if system is ON
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping statistics cache update")
             return {"skipped": True, "reason": "system_off"}
 
@@ -42,7 +42,7 @@ def update_badge_data_cache():
     """Every 2 min (market hours) — badge data for UI"""
     async def _run():
         # Check if system is ON
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping badge data cache update")
             return {"skipped": True, "reason": "system_off"}
 
@@ -63,7 +63,7 @@ def validate_statistics_accuracy():
     """Every hour — data integrity"""
     async def _run():
         # Check if system is ON
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping statistics validation")
             return {"skipped": True, "reason": "system_off"}
 
@@ -84,7 +84,7 @@ def generate_statistics_report():
     """Daily — monitoring report"""
     async def _run():
         # Check if system is ON
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping statistics report")
             return {"skipped": True, "reason": "system_off"}
 

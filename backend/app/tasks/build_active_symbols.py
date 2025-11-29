@@ -7,7 +7,7 @@ Build Active Symbols Task - NASDAQ ALL → ACTIVE Tier
 from celery import current_task
 from ..core.celery_app import celery_app
 from ..services.stock_filter_service import get_stock_filter_service
-from ..services.system_state import SystemState
+from ..services.system_state import is_system_on
 import logging
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ async def build_active_symbols(self):
     """Filter NASDAQ stocks to ACTIVE tier"""
     try:
         # Check if system is ON
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping ACTIVE tier filtering")
             return {"skipped": True, "reason": "system_off"}
 

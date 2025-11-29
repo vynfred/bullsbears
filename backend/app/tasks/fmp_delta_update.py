@@ -7,7 +7,7 @@ Runs at 3:00 AM ET
 import asyncio
 import logging
 from app.services import get_fmp_ingestion
-from app.services.system_state import SystemState
+from app.services.system_state import is_system_on
 from app.core.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 def fmp_delta_update():
     async def _run():
         # Check if system is ON
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping FMP delta update")
             return {"skipped": True, "reason": "system_off"}
 

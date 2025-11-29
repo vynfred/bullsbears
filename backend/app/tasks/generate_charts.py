@@ -17,7 +17,7 @@ import matplotlib.dates as mdates
 import pandas as pd
 
 from app.core.database import get_asyncpg_pool
-from backend.app.core.celery_app import celery_app
+from app.core.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -155,10 +155,10 @@ async def get_chart_generator() -> ChartGenerator:
 def generate_charts():
     """Celery task — runs at 8:15 AM ET"""
     async def _run():
-        from app.services.system_state import SystemState
+        from app.services.system_state import is_system_on
 
         # Check if system is ON
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping chart generation")
             return {"skipped": True, "reason": "system_off"}
 

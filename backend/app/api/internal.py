@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Header, Depends
 from typing import Optional
 from datetime import datetime
 
-from app.services.system_state import SystemState
+from app.services.system_state import is_system_on
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,7 @@ async def fix_database_schema(authorized: bool = Depends(verify_scheduler_auth))
 async def trigger_fmp_delta(authorized: bool = Depends(verify_scheduler_auth)):
     """8:00 AM - FMP Daily Delta Update"""
     try:
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping FMP delta update")
             return {"status": "skipped", "reason": "system_off"}
 
@@ -148,7 +148,7 @@ async def trigger_fmp_delta(authorized: bool = Depends(verify_scheduler_auth)):
 async def trigger_build_active(authorized: bool = Depends(verify_scheduler_auth)):
     """8:05 AM - Build ACTIVE tier from NASDAQ ALL"""
     try:
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping ACTIVE tier build")
             return {"status": "skipped", "reason": "system_off"}
 
@@ -174,7 +174,7 @@ async def trigger_build_active(authorized: bool = Depends(verify_scheduler_auth)
 async def trigger_prescreen(authorized: bool = Depends(verify_scheduler_auth)):
     """8:10 AM - Run Prescreen Agent (ACTIVE → SHORT_LIST)"""
     try:
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping prescreen")
             return {"status": "skipped", "reason": "system_off"}
 
@@ -200,7 +200,7 @@ async def trigger_prescreen(authorized: bool = Depends(verify_scheduler_auth)):
 async def trigger_generate_charts(authorized: bool = Depends(verify_scheduler_auth)):
     """8:15 AM - Generate charts for SHORT_LIST stocks"""
     try:
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping chart generation")
             return {"status": "skipped", "reason": "system_off"}
 
@@ -226,7 +226,7 @@ async def trigger_generate_charts(authorized: bool = Depends(verify_scheduler_au
 async def trigger_vision_analysis(authorized: bool = Depends(verify_scheduler_auth)):
     """8:16 AM - Run Groq Vision Analysis"""
     try:
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping vision analysis")
             return {"status": "skipped", "reason": "system_off"}
 
@@ -252,7 +252,7 @@ async def trigger_vision_analysis(authorized: bool = Depends(verify_scheduler_au
 async def trigger_social_analysis(authorized: bool = Depends(verify_scheduler_auth)):
     """8:17 AM - Run Grok Social Analysis"""
     try:
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping social analysis")
             return {"status": "skipped", "reason": "system_off"}
 
@@ -278,7 +278,7 @@ async def trigger_social_analysis(authorized: bool = Depends(verify_scheduler_au
 async def trigger_arbitrator(authorized: bool = Depends(verify_scheduler_auth)):
     """8:20 AM - Run Final Arbitrator (select 3-6 picks)"""
     try:
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping arbitrator")
             return {"status": "skipped", "reason": "system_off"}
 
@@ -304,7 +304,7 @@ async def trigger_arbitrator(authorized: bool = Depends(verify_scheduler_auth)):
 async def trigger_publish_picks(authorized: bool = Depends(verify_scheduler_auth)):
     """8:25 AM - Publish picks to Firebase"""
     try:
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping publish")
             return {"status": "skipped", "reason": "system_off"}
 
@@ -330,7 +330,7 @@ async def trigger_publish_picks(authorized: bool = Depends(verify_scheduler_auth
 async def trigger_weekly_learner(authorized: bool = Depends(verify_scheduler_auth)):
     """Saturday 4:00 AM - Run Weekly Learner"""
     try:
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping weekly learner")
             return {"status": "skipped", "reason": "system_off"}
 
@@ -356,7 +356,7 @@ async def trigger_weekly_learner(authorized: bool = Depends(verify_scheduler_aut
 async def trigger_update_statistics(authorized: bool = Depends(verify_scheduler_auth)):
     """Every 5 minutes - Update statistics cache"""
     try:
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             return {"status": "skipped", "reason": "system_off"}
 
         from app.services.statistics_service import get_statistics_service
@@ -374,7 +374,7 @@ async def trigger_update_statistics(authorized: bool = Depends(verify_scheduler_
 async def trigger_update_badges(authorized: bool = Depends(verify_scheduler_auth)):
     """Every 2 minutes (market hours) - Update badge data"""
     try:
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             return {"status": "skipped", "reason": "system_off"}
 
         from app.services.badge_service import get_badge_service

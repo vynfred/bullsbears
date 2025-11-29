@@ -13,7 +13,7 @@ from app.core.celery_app import celery_app
 from app.core.config import settings
 from app.services.cloud_agents.arbitrator_agent import get_final_picks
 from app.core.database import get_asyncpg_pool
-from app.services.system_state import SystemState
+from app.services.system_state import is_system_on
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ def run_arbitrator():
 
     async def _run():
         # Kill switch — respects admin panel
-        if not await SystemState.is_system_on():
+        if not await is_system_on():
             logger.info("System is OFF – skipping arbitrator")
             return {"skipped": True, "reason": "system_off"}
 
