@@ -128,8 +128,16 @@
               <span id="statusSystem" class="status-badge status-offline">● Offline</span>
             </div>
             <div class="flex justify-between">
-              <span>RunPod:</span>
-              <span id="statusRunpod" class="status-badge status-offline">● Offline</span>
+              <span>Render:</span>
+              <span id="statusRender" class="status-badge status-offline">● Offline</span>
+            </div>
+            <div class="flex justify-between">
+              <span>Fireworks:</span>
+              <span id="statusFireworks" class="status-badge status-offline">● Offline</span>
+            </div>
+            <div class="flex justify-between">
+              <span>Redis:</span>
+              <span id="statusRedis" class="status-badge status-offline">● Offline</span>
             </div>
             <div class="flex justify-between">
               <span>Database:</span>
@@ -190,7 +198,7 @@
     const db = getDatabase(app);
 
     // Backend API URL
-    const API_URL = 'https://bullsbears-backend-saonzofwoa-uc.a.run.app';
+    const API_URL = 'https://bullsbears.onrender.com';
 
     // DOM elements
     const loginForm = document.getElementById('loginForm');
@@ -374,16 +382,14 @@
     });
 
     // Load dashboard data
-    function loadDashboardData() {
-      // Listen to system status
-      onValue(ref(db, 'system/status'), (snapshot) => {
-        const status = snapshot.val();
-        updateStatus('statusSystem', status?.active);
-        updateStatus('statusRunpod', status?.runpod);
-        updateStatus('statusDatabase', status?.database);
-      });
+    async function loadDashboardData() {
+      // Fetch system status from backend
+      await fetchSystemStatus();
 
-      // Listen to statistics
+      // Fetch health status from backend
+      await fetchHealthStatus();
+
+      // Listen to statistics from Firebase
       onValue(ref(db, 'statistics'), (snapshot) => {
         const stats = snapshot.val() || {};
         document.getElementById('statUsers').textContent = stats.users || 0;
@@ -391,6 +397,37 @@
         document.getElementById('statWatchlist').textContent = stats.watchlist || 0;
         document.getElementById('statApiCalls').textContent = stats.apiCalls || 0;
       });
+
+      // Refresh status every 30 seconds
+      setInterval(async () => {
+        await fetchSystemStatus();
+        await fetchHealthStatus();
+      }, 30000);
+    }
+
+    async function fetchSystemStatus() {
+      try {
+        const response = await fetch(`${API_URL}/api/v1/admin/system/status`);
+        const data = await response.json();
+        updateStatus('statusSystem', data.system_on);
+      } catch (error) {
+        console.error('Failed to fetch system status:', error);
+      }
+    }
+
+    async function fetchHealthStatus() {
+      try {
+        const response = await fetch(`${API_URL}/api/v1/admin/health`);
+        const health = await response.json();
+        updateStatus('statusRender', health.render);
+        updateStatus('statusFireworks', health.fireworks);
+        updateStatus('statusRedis', health.redis);
+        updateStatus('statusDatabase', health.database);
+      } catch (error) {
+        console.error('Failed to fetch health status:', error);
+        // If we can't reach backend, Render is down
+        updateStatus('statusRender', false);
+      }
     }
 
     function updateStatus(elementId, isOnline) {

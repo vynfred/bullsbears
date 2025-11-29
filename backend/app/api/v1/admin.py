@@ -64,7 +64,62 @@ async def turn_system_on():
 async def turn_system_off():
     """Turn system OFF"""
     from app.services.system_state import set_system_on
-    
+
     await set_system_on(False)
     return {"success": True, "message": "System turned OFF"}
 
+
+@router.get("/health")
+async def admin_health_check():
+    """Check health of all services"""
+    import aiohttp
+    import os
+
+    health = {
+        "render": False,
+        "fireworks": False,
+        "database": False,
+        "redis": False
+    }
+
+    # Check Render backend (self)
+    health["render"] = True  # If we're responding, Render is up
+
+    # Check Fireworks API
+    fireworks_key = os.getenv("FIREWORKS_API_KEY")
+    if fireworks_key:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://api.fireworks.ai/inference/v1/models",
+                    headers={"Authorization": f"Bearer {fireworks_key}"},
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
+                    health["fireworks"] = resp.status == 200
+        except:
+            pass
+
+    # Check Redis
+    try:
+        from app.services.system_state import is_system_on
+        await is_system_on()
+        health["redis"] = True
+    except:
+        pass
+
+    # Check Database (placeholder - add real check when DB is connected)
+    db_url = os.getenv("DATABASE_URL")
+    health["database"] = bool(db_url)
+
+    return health
+
+
+@router.post("/prime-data")
+async def prime_historical_data():
+    """Prime historical data - placeholder for now"""
+    # TODO: Implement actual data priming when DataFlowManager is ready
+    return {
+        "success": True,
+        "message": "Data priming initiated (placeholder - not yet implemented)",
+        "total_mb": 0
+    }
