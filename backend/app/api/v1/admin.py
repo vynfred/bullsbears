@@ -203,32 +203,18 @@ async def init_database():
         }
 
 
-import asyncio
-
-# Global to track background task
-_prime_task = None
-
-async def _run_bootstrap():
-    """Background task to run bootstrap"""
-    from app.services.fmp_data_ingestion import get_fmp_ingestion
-    try:
-        ingestion = await get_fmp_ingestion()
-        await ingestion.bootstrap_prime_db()
-    except Exception as e:
-        import logging
-        logging.error(f"Bootstrap failed: {e}")
-
 @router.post("/prime-data")
 async def prime_historical_data(mode: str = "catchup"):
     """
-    Prime historical data from FMP API
+    Prime historical data from FMP API via Celery worker
 
     Modes:
     - catchup: 7-day catchup (fast, ~5 min)
-    - bootstrap: Full 90-day bootstrap (slow, ~25 min, ~7.8 GB) - runs in background
+    - bootstrap: Full 90-day bootstrap (slow, ~25 min, ~7.8 GB)
+
+    Both modes run on the Celery worker to avoid HTTP timeout.
     """
     import os
-    global _prime_task
 
     # Check FMP API key
     fmp_key = os.getenv("FMP_API_KEY")
@@ -240,56 +226,54 @@ async def prime_historical_data(mode: str = "catchup"):
         }
 
     try:
+        from app.tasks.fmp_bootstrap import fmp_bootstrap, fmp_catchup
+
         if mode == "bootstrap":
-            # Run bootstrap in background - returns immediately
-            # Check if already running
-            if _prime_task and not _prime_task.done():
-                return {
-                    "success": False,
-                    "message": "Bootstrap already in progress. Check /system/prime_progress in Firebase for status.",
-                    "total_mb": 0
-                }
-
-            # Start background task
-            _prime_task = asyncio.create_task(_run_bootstrap())
-
+            # Queue bootstrap task to Celery worker
+            task = fmp_bootstrap.delay()
             return {
                 "success": True,
-                "message": "Bootstrap started in background. Monitor progress in Firebase at /system/prime_progress",
+                "message": f"Bootstrap queued to worker (task_id: {task.id}). Monitor progress in Render worker logs.",
+                "task_id": task.id,
                 "total_mb": 0
             }
         else:
-            # 7-day catchup - faster, can run synchronously
-            from app.services.fmp_data_ingestion import get_fmp_ingestion
-            ingestion = await get_fmp_ingestion()
-            await ingestion.catchup_7days()
-
+            # Queue catchup task to Celery worker
+            task = fmp_catchup.delay()
             return {
                 "success": True,
-                "message": f"Data priming complete ({mode} mode)",
-                "total_mb": round(ingestion.daily_mb, 2)
+                "message": f"Catchup queued to worker (task_id: {task.id}). Monitor progress in Render worker logs.",
+                "task_id": task.id,
+                "total_mb": 0
             }
 
     except Exception as e:
         return {
             "success": False,
-            "message": f"Data priming failed: {str(e)}",
+            "message": f"Failed to queue task: {str(e)}",
             "total_mb": 0
         }
 
 
 @router.get("/prime-status")
-async def get_prime_status():
-    """Check status of bootstrap task"""
-    global _prime_task
+async def get_prime_status(task_id: str = None):
+    """Check status of bootstrap/catchup task"""
+    if not task_id:
+        return {"status": "unknown", "message": "Provide task_id to check status"}
 
-    if _prime_task is None:
-        return {"status": "not_started", "message": "No bootstrap has been started"}
-    elif _prime_task.done():
-        try:
-            _prime_task.result()  # Check for exceptions
-            return {"status": "complete", "message": "Bootstrap completed successfully"}
-        except Exception as e:
-            return {"status": "failed", "message": f"Bootstrap failed: {str(e)}"}
-    else:
-        return {"status": "running", "message": "Bootstrap in progress. Check Firebase /system/prime_progress"}
+    try:
+        from app.core.celery_app import celery_app
+        result = celery_app.AsyncResult(task_id)
+
+        if result.state == "PENDING":
+            return {"status": "pending", "message": "Task is queued, waiting for worker"}
+        elif result.state == "STARTED":
+            return {"status": "running", "message": "Task is running on worker"}
+        elif result.state == "SUCCESS":
+            return {"status": "complete", "message": "Task completed", "result": result.result}
+        elif result.state == "FAILURE":
+            return {"status": "failed", "message": f"Task failed: {result.result}"}
+        else:
+            return {"status": result.state, "message": f"Task state: {result.state}"}
+    except Exception as e:
+        return {"status": "error", "message": f"Error checking status: {str(e)}"}

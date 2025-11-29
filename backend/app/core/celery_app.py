@@ -21,6 +21,7 @@ celery_app = Celery(
     backend=REDIS_URL,  # same Redis for results + broker
     include=[
         "app.tasks.fmp_delta_update",
+        "app.tasks.fmp_bootstrap",
         "app.tasks.build_active_symbols",
         "app.tasks.run_prescreen",
         "app.tasks.generate_charts",
