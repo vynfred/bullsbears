@@ -161,7 +161,7 @@ async def prime_historical_data(mode: str = "catchup"):
             await ingestion.bootstrap_prime_db()
         else:
             # 7-day catchup - faster
-            await ingestion.catchup_7d()
+            await ingestion.catchup_7days()
 
         return {
             "success": True,
