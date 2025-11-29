@@ -71,46 +71,69 @@ class FMPIngestion:
             logger.error(f"FMP request failed {endpoint}: {e}")
             return {}
 
-    async def bootstrap_prime_db(self):
+    async def bootstrap_prime_db(self, resume: bool = True):
         from ..core.firebase import FirebaseClient
+        from ..core.database import get_asyncpg_pool
 
         logger.info("FMP BOOTSTRAP START – 7 weeks, ~7.8 GB")
         symbols = await self._get_nasdaq_symbols()
-        batch_size = 550
-        total_batches = 7
 
         # STEP 1: Insert all symbols into stock_classifications with tier='ALL'
         logger.info(f"STEP 1: Inserting {len(symbols)} stocks into stock_classifications table...")
         await self._insert_all_stocks(symbols)
         logger.info(f"✅ All {len(symbols)} stocks inserted into stock_classifications with tier='ALL'")
 
-        # STEP 2: Load 90 days of OHLC data for all stocks
+        # STEP 2: Check which symbols already have data (for resume)
+        if resume:
+            db = await get_asyncpg_pool()
+            async with db.acquire() as conn:
+                rows = await conn.fetch("SELECT DISTINCT symbol FROM prime_ohlc_90d")
+                existing = {r['symbol'] for r in rows}
+
+            original_count = len(symbols)
+            symbols = [s for s in symbols if s not in existing]
+            logger.info(f"RESUME MODE: {original_count - len(symbols)} symbols already loaded, {len(symbols)} remaining")
+
+        if not symbols:
+            logger.info("✅ All symbols already loaded!")
+            return
+
+        batch_size = 550
+        total_batches = (len(symbols) + batch_size - 1) // batch_size  # ceil division
+
+        # STEP 3: Load 90 days of OHLC data for remaining stocks
         async with FirebaseClient() as fb:
             for week in range(total_batches):
                 batch = symbols[week * batch_size:(week + 1) * batch_size]
 
-                # Update progress in Firebase
-                await fb.update_data("/system/prime_progress", {
-                    "current_batch": week + 1,
-                    "total_batches": total_batches,
-                    "current_stocks": len(batch),
-                    "total_stocks": len(symbols),
-                    "data_mb": round(self.daily_mb, 2),
-                    "status": "in_progress"
-                })
+                # Update progress in Firebase (ignore 404 errors)
+                try:
+                    await fb.update_data("/system/prime_progress", {
+                        "current_batch": week + 1,
+                        "total_batches": total_batches,
+                        "current_stocks": len(batch),
+                        "total_stocks": len(symbols),
+                        "data_mb": round(self.daily_mb, 2),
+                        "status": "in_progress"
+                    })
+                except:
+                    pass
 
                 await self._fetch_90d_batch(batch)
-                logger.info(f"Week {week + 1}/7 DONE – {len(batch)} symbols – {self.daily_mb:.2f} GB so far")
+                logger.info(f"Batch {week + 1}/{total_batches} DONE – {len(batch)} symbols – {self.daily_mb:.2f} GB so far")
                 await asyncio.sleep(2)
 
             # Mark as complete
-            await fb.update_data("/system/prime_progress", {
-                "current_batch": total_batches,
-                "total_batches": total_batches,
-                "total_stocks": len(symbols),
-                "data_mb": round(self.daily_mb, 2),
-                "status": "complete"
-            })
+            try:
+                await fb.update_data("/system/prime_progress", {
+                    "current_batch": total_batches,
+                    "total_batches": total_batches,
+                    "total_stocks": len(symbols),
+                    "data_mb": round(self.daily_mb, 2),
+                    "status": "complete"
+                })
+            except:
+                pass
 
         logger.info(f"BOOTSTRAP COMPLETE – {self.daily_mb:.2f} GB used")
 
