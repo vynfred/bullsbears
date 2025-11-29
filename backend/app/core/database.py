@@ -67,12 +67,19 @@ _asyncpg_pool: Pool = None
 async def get_asyncpg_pool() -> Pool:
     """Get asyncpg connection pool for raw SQL queries"""
     global _asyncpg_pool
-    
+
     if _asyncpg_pool is None:
         # Extract connection details from DATABASE_URL
         import urllib.parse
+        import ssl
+
         parsed = urllib.parse.urlparse(DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://"))
-        
+
+        # Create SSL context for Render PostgreSQL
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
         _asyncpg_pool = await asyncpg.create_pool(
             host=parsed.hostname,
             port=parsed.port or 5432,
@@ -80,9 +87,12 @@ async def get_asyncpg_pool() -> Pool:
             password=parsed.password,
             database=parsed.path.lstrip('/'),
             min_size=1,
-            max_size=10
+            max_size=10,
+            ssl=ssl_context,  # Enable SSL for Render
+            command_timeout=60,  # 60 second timeout per command
         )
-    
+        logger.info(f"asyncpg pool created: {parsed.hostname}")
+
     return _asyncpg_pool
 
 async def close_asyncpg_pool():
