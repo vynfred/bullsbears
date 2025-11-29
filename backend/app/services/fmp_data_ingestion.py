@@ -19,8 +19,7 @@ logger = logging.getLogger("FMP")
 
 # === CONFIG ===
 FMP_KEY = os.getenv("FMP_API_KEY")
-if not FMP_KEY:
-    raise RuntimeError("FMP_API_KEY not set in .env!")
+# Note: Don't raise at import time - check when actually using the API
 
 BASE = "https://financialmodelingprep.com/api/v3"
 RATE_LIMIT = 200  # calls/min (set to 200 to stay safely under 300 limit)
@@ -35,6 +34,8 @@ class FMPIngestion:
         self.daily_mb = 0.0
 
     async def initialize(self):
+        if not FMP_KEY:
+            raise RuntimeError("FMP_API_KEY not set - cannot initialize FMP ingestion")
         self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30))
 
     async def _rate_limit(self):
