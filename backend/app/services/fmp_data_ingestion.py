@@ -72,7 +72,7 @@ class FMPIngestion:
             return {}
 
     async def bootstrap_prime_db(self):
-        from .push_picks_to_firebase import FirebaseService
+        from ..core.firebase import FirebaseClient
 
         logger.info("FMP BOOTSTRAP START – 7 weeks, ~7.8 GB")
         symbols = await self._get_nasdaq_symbols()
@@ -85,7 +85,7 @@ class FMPIngestion:
         logger.info(f"✅ All {len(symbols)} stocks inserted into stock_classifications with tier='ALL'")
 
         # STEP 2: Load 90 days of OHLC data for all stocks
-        async with FirebaseService() as fb:
+        async with FirebaseClient() as fb:
             for week in range(total_batches):
                 batch = symbols[week * batch_size:(week + 1) * batch_size]
 
@@ -125,7 +125,7 @@ class FMPIngestion:
 
     async def catchup_7days(self):
         """Catch up last 7 days for all stocks already in database"""
-        from .push_picks_to_firebase import FirebaseService
+        from ..core.firebase import FirebaseClient
 
         logger.info("FMP 7-DAY CATCHUP START")
 
@@ -138,7 +138,7 @@ class FMPIngestion:
 
         logger.info(f"Catching up {len(symbols)} stocks with last 7 days of data")
 
-        async with FirebaseService() as fb:
+        async with FirebaseClient() as fb:
             # Update progress in Firebase
             await fb.update_data("/system/catchup_progress", {
                 "total_stocks": len(symbols),
