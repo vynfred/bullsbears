@@ -17,9 +17,11 @@ logger = logging.getLogger(__name__)
 # Get DATABASE_URL from Render (internal URL)
 DATABASE_URL = os.environ["DATABASE_URL"]
 
-# Auto-fix Render's postgres:// → postgresql+asyncpg://
+# Auto-fix Render's postgres:// or postgresql:// → postgresql+asyncpg://
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
+elif DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 # Create async engine — Render Postgres is always available
 engine = create_async_engine(
