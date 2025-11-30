@@ -4,9 +4,12 @@ BullsBears Admin API - Secret admin endpoints
 Only accessible via secret URL known to owner
 """
 
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 import os
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -392,6 +395,18 @@ async def get_dashboard_stats():
             except:
                 pass
 
+            # Get Firebase Auth user count
+            users_count = 0
+            try:
+                from firebase_admin import auth
+                # Iterate through users to count them (Firebase doesn't have a direct count API)
+                page = auth.list_users()
+                while page:
+                    users_count += len(page.users)
+                    page = page.get_next_page()
+            except Exception as e:
+                logger.warning(f"Could not count Firebase users: {e}")
+
             return {
                 "stocks": {
                     "total_symbols": stocks_count,
@@ -406,8 +421,7 @@ async def get_dashboard_stats():
                     "today": shortlist_today
                 },
                 "users": {
-                    "total": 0,  # Firebase users - will be implemented
-                    "note": "Firebase auth not integrated yet"
+                    "total": users_count
                 }
             }
     except Exception as e:
