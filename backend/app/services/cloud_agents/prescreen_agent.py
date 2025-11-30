@@ -1,23 +1,48 @@
 # backend/app/services/cloud_agents/prescreen_agent.py
 """
 Prescreen Agent - Fireworks.ai qwen2.5-72b-instruct
-ACTIVE tier (~4,400 stocks) → SHORT_LIST (exactly 75)
+ACTIVE tier → SHORT_LIST (up to 75 bullish + bearish)
 """
 
 import httpx
 import json
 import logging
 from datetime import date
-from pathlib import Path
 from app.core.config import settings
 from app.core.database import get_asyncpg_pool
 
 logger = logging.getLogger(__name__)
 
+PRESCREEN_PROMPT = """You are an expert stock screener. Analyze these stocks and identify CLEAR bullish or bearish setups for short-term trading (1-5 days).
+
+STOCK DATA (symbol, price, volume_today, pct_change_30d, avg_volume_30d, volume_ratio, volatility_30d):
+{STOCK_DATA}
+
+SELECTION RULES:
+- Only select stocks with UNAMBIGUOUS signals. Mixed or weak = SKIP.
+- Maximum 75 total picks (bullish + bearish combined). Can be fewer if signals are weak.
+
+BULLISH CRITERIA (must meet ≥2):
+1. 30-day price change ≥ +12% AND volume_ratio > 1.5 (momentum + volume confirmation)
+2. Breaking recent highs on elevated volume (volume_ratio > 2.0)
+3. Volatility expansion after consolidation (volatility_30d > 5% with positive price change)
+
+BEARISH CRITERIA (must meet ≥2):
+1. 30-day price change ≤ -12% AND volume_ratio > 1.5 (breakdown + volume confirmation)
+2. Support breakdown on elevated volume (volume_ratio > 2.0 with negative momentum)
+3. Volatility spike after tight range (volatility_30d > 8% with negative price change)
+
+Return ONLY valid JSON with this exact structure:
+{
+    "bullish": ["AAPL", "NVDA", ...],
+    "bearish": ["XYZ", "ABC", ...],
+    "summary": "Brief explanation of today's market conditions and selection rationale"
+}"""
+
+
 class PrescreenAgent:
     def __init__(self):
         self.model = "accounts/fireworks/models/qwen2.5-72b-instruct"
-        self.prompt_path = Path(__file__).parent.parent / "prompts" / "screen_prompt.txt"
         self.db = None
 
     async def initialize(self):
@@ -31,57 +56,85 @@ class PrescreenAgent:
         if not self.db:
             self.db = await get_asyncpg_pool()
 
-        # Get active stocks with recent price data from prime_ohlc_90d
+        # Get active stocks with calculated metrics
         async with self.db.acquire() as conn:
             stocks = await conn.fetch("""
-                WITH latest_prices AS (
-                    SELECT DISTINCT ON (symbol)
-                        symbol,
-                        close_price as price,
-                        volume,
-                        date
-                    FROM prime_ohlc_90d
-                    ORDER BY symbol, date DESC
+                WITH latest_date AS (
+                    SELECT MAX(date) as max_date FROM prime_ohlc_90d
+                ),
+                metrics AS (
+                    SELECT
+                        p.symbol,
+                        p.close_price as price,
+                        p.volume as volume_today,
+                        -- 30-day price change %
+                        ROUND(((p.close_price - p30.close_price) / NULLIF(p30.close_price, 0) * 100)::numeric, 2) as pct_change_30d,
+                        -- 30-day average volume
+                        ROUND(avg_vol.avg_volume::numeric, 0) as avg_volume_30d,
+                        -- Volume ratio (today vs 30d avg)
+                        ROUND((p.volume / NULLIF(avg_vol.avg_volume, 0))::numeric, 2) as volume_ratio,
+                        -- 30-day volatility (stdev of daily returns)
+                        ROUND(vol.volatility::numeric, 2) as volatility_30d
+                    FROM prime_ohlc_90d p
+                    CROSS JOIN latest_date ld
+                    -- 30-day ago price
+                    LEFT JOIN LATERAL (
+                        SELECT close_price
+                        FROM prime_ohlc_90d
+                        WHERE symbol = p.symbol AND date <= ld.max_date - INTERVAL '30 days'
+                        ORDER BY date DESC LIMIT 1
+                    ) p30 ON true
+                    -- 30-day average volume
+                    LEFT JOIN LATERAL (
+                        SELECT AVG(volume) as avg_volume
+                        FROM prime_ohlc_90d
+                        WHERE symbol = p.symbol AND date > ld.max_date - INTERVAL '30 days'
+                    ) avg_vol ON true
+                    -- 30-day volatility
+                    LEFT JOIN LATERAL (
+                        SELECT STDDEV((close_price - open_price) / NULLIF(open_price, 0) * 100) as volatility
+                        FROM prime_ohlc_90d
+                        WHERE symbol = p.symbol AND date > ld.max_date - INTERVAL '30 days'
+                    ) vol ON true
+                    WHERE p.date = ld.max_date
                 )
-                SELECT symbol, price, volume
-                FROM latest_prices
-                WHERE volume > 100000  -- Filter low volume
-                AND price > 1.0        -- No penny stocks
-                ORDER BY volume DESC
-                LIMIT 500              -- Top 500 by volume for AI to analyze
+                SELECT * FROM metrics
+                WHERE volume_today > 100000  -- Filter low volume
+                AND price > 1.25             -- No penny stocks (>$1.25)
+                AND pct_change_30d IS NOT NULL
+                ORDER BY volume_today DESC
+                LIMIT 500
             """)
 
         if not stocks:
             logger.warning("No stocks found in prime_ohlc_90d")
-            return {"shortlist_count": 0, "tickers": [], "error": "no_stocks"}
+            return {"shortlist_count": 0, "bullish": [], "bearish": [], "error": "no_stocks"}
 
         logger.info(f"Found {len(stocks)} active stocks to screen")
 
-        # Build stock list for prompt
-        stock_list = [{"symbol": s["symbol"], "price": float(s["price"]), "volume": int(s["volume"])} for s in stocks]
+        # Build stock data for prompt
+        stock_data = []
+        for s in stocks:
+            stock_data.append({
+                "symbol": s["symbol"],
+                "price": float(s["price"]),
+                "volume_today": int(s["volume_today"]),
+                "pct_change_30d": float(s["pct_change_30d"] or 0),
+                "avg_volume_30d": int(s["avg_volume_30d"] or 0),
+                "volume_ratio": float(s["volume_ratio"] or 0),
+                "volatility_30d": float(s["volatility_30d"] or 0)
+            })
 
-        # Load and format prompt
-        try:
-            prompt_template = self.prompt_path.read_text(encoding="utf-8")
-            prompt = prompt_template.replace("{STOCK_DATA}", json.dumps(stock_list[:200]))  # Send top 200 to API
-        except FileNotFoundError:
-            # Default prompt if file doesn't exist
-            prompt = f"""You are a stock screening AI. Analyze these stocks and select the top 75 most promising for short-term trading (1-5 days).
-
-STOCKS TO ANALYZE:
-{json.dumps(stock_list[:200], indent=2)}
-
-Return a JSON object with this exact structure:
-{{
-    "filtered_tickers": ["AAPL", "NVDA", ...],  // exactly 75 symbols
-    "summary": "Brief explanation of selection criteria"
-}}
-
-Focus on: high volume, price momentum, volatility potential. Return ONLY valid JSON."""
+        # Format prompt
+        prompt = PRESCREEN_PROMPT.replace("{STOCK_DATA}", json.dumps(stock_data, indent=2))
 
         # Call Fireworks API
+        bullish_picks = []
+        bearish_picks = []
+        summary = ""
+
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=180.0) as client:
                 resp = await client.post(
                     "https://api.fireworks.ai/inference/v1/chat/completions",
                     headers={
@@ -92,7 +145,7 @@ Focus on: high volume, price momentum, volatility potential. Return ONLY valid J
                         "model": self.model,
                         "messages": [{"role": "user", "content": prompt}],
                         "temperature": 0.0,
-                        "max_tokens": 4096
+                        "max_tokens": 8192
                     }
                 )
                 resp.raise_for_status()
@@ -107,44 +160,72 @@ Focus on: high volume, price momentum, volatility potential. Return ONLY valid J
                 content = content.split("```")[1].split("```")[0]
 
             result = json.loads(content.strip())
-            tickers = result.get("filtered_tickers", [])[:75]  # Cap at 75
+            bullish_picks = result.get("bullish", [])[:50]  # Cap bullish at 50
+            bearish_picks = result.get("bearish", [])[:25]  # Cap bearish at 25
+            summary = result.get("summary", "")
+
+            # Ensure total doesn't exceed 75
+            total = len(bullish_picks) + len(bearish_picks)
+            if total > 75:
+                # Trim proportionally
+                bullish_picks = bullish_picks[:50]
+                bearish_picks = bearish_picks[:25]
 
         except Exception as e:
             logger.error(f"Fireworks API error: {e}")
-            # Fallback: select top 75 by volume
-            tickers = [s["symbol"] for s in stock_list[:75]]
-            result = {"summary": f"Fallback selection due to API error: {e}"}
+            # Fallback: select top stocks by volume ratio
+            sorted_stocks = sorted(stock_data, key=lambda x: x["volume_ratio"], reverse=True)
+            for s in sorted_stocks[:75]:
+                if s["pct_change_30d"] > 5:
+                    bullish_picks.append(s["symbol"])
+                elif s["pct_change_30d"] < -5:
+                    bearish_picks.append(s["symbol"])
+            summary = f"Fallback selection due to API error: {e}"
 
         # Save to shortlist_candidates table
         today = date.today()
+        stock_lookup = {s["symbol"]: s for s in stock_data}
+
         async with self.db.acquire() as conn:
             # Clear today's existing shortlist
             await conn.execute("DELETE FROM shortlist_candidates WHERE date = $1", today)
 
-            # Insert new shortlist
-            for rank, symbol in enumerate(tickers, 1):
-                # Get price for this symbol
-                price_row = await conn.fetchrow("""
-                    SELECT close_price FROM prime_ohlc_90d
-                    WHERE symbol = $1 ORDER BY date DESC LIMIT 1
-                """, symbol)
-                price = float(price_row["close_price"]) if price_row else 0.0
-
+            # Insert bullish picks
+            for rank, symbol in enumerate(bullish_picks, 1):
+                s = stock_lookup.get(symbol, {})
                 await conn.execute("""
                     INSERT INTO shortlist_candidates (
-                        date, symbol, rank, prescreen_score, prescreen_reasoning,
+                        date, symbol, rank, direction, prescreen_score, prescreen_reasoning,
                         price_at_selection, created_at
-                    ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
                     ON CONFLICT (date, symbol) DO UPDATE SET
                         rank = EXCLUDED.rank,
+                        direction = EXCLUDED.direction,
                         prescreen_score = EXCLUDED.prescreen_score,
                         updated_at = NOW()
-                """, today, symbol, rank, 75 - rank + 1, result.get("summary", ""), price)
+                """, today, symbol, rank, "bull", s.get("volume_ratio", 0) * 10, summary, s.get("price", 0))
 
-        logger.info(f"✅ Saved {len(tickers)} stocks to shortlist_candidates")
+            # Insert bearish picks
+            for rank, symbol in enumerate(bearish_picks, len(bullish_picks) + 1):
+                s = stock_lookup.get(symbol, {})
+                await conn.execute("""
+                    INSERT INTO shortlist_candidates (
+                        date, symbol, rank, direction, prescreen_score, prescreen_reasoning,
+                        price_at_selection, created_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+                    ON CONFLICT (date, symbol) DO UPDATE SET
+                        rank = EXCLUDED.rank,
+                        direction = EXCLUDED.direction,
+                        prescreen_score = EXCLUDED.prescreen_score,
+                        updated_at = NOW()
+                """, today, symbol, rank, "bear", s.get("volume_ratio", 0) * 10, summary, s.get("price", 0))
+
+        total_picks = len(bullish_picks) + len(bearish_picks)
+        logger.info(f"✅ Saved {total_picks} stocks ({len(bullish_picks)} bull, {len(bearish_picks)} bear)")
 
         return {
-            "shortlist_count": len(tickers),
-            "tickers": tickers,
-            "summary": result.get("summary", "")
+            "shortlist_count": total_picks,
+            "bullish": bullish_picks,
+            "bearish": bearish_picks,
+            "summary": summary
         }
