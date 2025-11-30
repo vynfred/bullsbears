@@ -49,7 +49,7 @@ class ChartGenerator:
         # Get today's SHORT_LIST symbols
         async with self.db.acquire() as conn:
             rows = await conn.fetch("""
-                SELECT DISTINCT symbol
+                SELECT symbol, rank
                 FROM shortlist_candidates
                 WHERE date = $1
                 ORDER BY rank
