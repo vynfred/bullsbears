@@ -628,6 +628,28 @@ async def trigger_charts():
         return {"success": False, "message": f"Error: {str(e)}"}
 
 
+@router.post("/trigger-charts-sync")
+async def trigger_charts_sync():
+    """Run chart generation synchronously for debugging"""
+    try:
+        from app.services.system_state import is_system_on
+
+        if not await is_system_on():
+            return {"success": False, "message": "System is OFF. Turn it ON first."}
+
+        from app.tasks.generate_charts import get_chart_generator
+        gen = await get_chart_generator()
+        result = await gen.generate_all_charts()
+
+        return {
+            "success": True,
+            "result": result
+        }
+    except Exception as e:
+        import traceback
+        return {"success": False, "message": str(e), "traceback": traceback.format_exc()}
+
+
 @router.post("/trigger-vision")
 async def trigger_vision():
     """Manually trigger Groq vision analysis on charts"""
