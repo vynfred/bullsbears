@@ -13,6 +13,7 @@ import aiohttp
 import firebase_admin
 from firebase_admin import credentials, firestore
 from firebase_admin import db
+from firebase_admin import storage
 
 logger = logging.getLogger(__name__)
 
@@ -29,17 +30,22 @@ try:
     # Initialize with credentials
     cred = credentials.Certificate(service_account_dict)
     firebase_admin.initialize_app(cred, {
-        'databaseURL': 'https://bullsbears-xyz-default-rtdb.firebaseio.com/'
+        'databaseURL': 'https://bullsbears-xyz-default-rtdb.firebaseio.com/',
+        'storageBucket': 'bullsbears-xyz.firebasestorage.app'
     })
-    
+
     # Get database reference
     database_ref = db.reference()
-    
-    logger.info("Firebase initialized successfully")
-    
+
+    # Get storage bucket
+    storage_bucket = storage.bucket()
+
+    logger.info("Firebase initialized successfully (DB + Storage)")
+
 except Exception as e:
     logger.error(f"Firebase initialization failed: {e}")
     database_ref = None
+    storage_bucket = None
 
 class FirebaseClient:
     """Firebase Realtime Database client for BullsBears"""
@@ -286,5 +292,38 @@ def update_firebase_sync(path: str, data: Dict[str, Any]):
     except Exception as e:
         logger.error(f"Firebase sync update failed: {e}")
 
-# Keep your existing async versions for future use
-# Or just call update_firebase_sync() from tasks if you want zero async hassle
+
+def upload_chart_to_storage(symbol: str, date_str: str, png_bytes: bytes) -> Optional[str]:
+    """
+    Upload chart PNG to Firebase Storage and return public URL.
+    Path: charts/{YYYY-MM-DD}/{symbol}.png
+    """
+    if storage_bucket is None:
+        logger.error("Firebase Storage not initialized")
+        return None
+
+    try:
+        # Create blob path
+        blob_path = f"charts/{date_str}/{symbol}.png"
+        blob = storage_bucket.blob(blob_path)
+
+        # Upload PNG bytes
+        blob.upload_from_string(png_bytes, content_type="image/png")
+
+        # Make public
+        blob.make_public()
+
+        # Get public URL
+        public_url = blob.public_url
+        logger.info(f"📊 Uploaded chart: {blob_path} -> {public_url}")
+
+        return public_url
+
+    except Exception as e:
+        logger.error(f"Chart upload failed for {symbol}: {e}")
+        return None
+
+
+def get_storage_bucket():
+    """Get Firebase Storage bucket reference"""
+    return storage_bucket

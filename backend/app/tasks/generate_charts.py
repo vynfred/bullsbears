@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
 """
-Generate 75 × 256×256 PNG charts → base64 → PostgreSQL
+Generate charts for shortlist stocks → Firebase Storage → URL in PostgreSQL
 Runs at 8:15 AM ET → CPU only → $0 cost
 """
 
 import asyncio
 import logging
 import io
-import base64
-from pathlib import Path
-from typing import List, Dict
+from datetime import date
+from typing import Dict
 import matplotlib
 matplotlib.use('Agg')  # Non-interactive backend for Render worker
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 import pandas as pd
 
 from app.core.database import get_asyncpg_pool
 from app.core.celery_app import celery_app
+from app.core.firebase import upload_chart_to_storage
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +28,9 @@ BULL = "#00ff88"
 BEAR = "#ff4444"
 VOL = "#666666"
 
+
 class ChartGenerator:
-    """75 charts in < 7 seconds — CPU only — perfect for Render worker"""
+    """Generate charts and upload to Firebase Storage"""
 
     def __init__(self):
         self.db = None
@@ -39,44 +39,65 @@ class ChartGenerator:
     async def initialize(self):
         self.db = await get_asyncpg_pool()
 
-    async def generate_all_charts(self) -> List[Dict]:
-        """Generate charts for today's SHORT_LIST → store base64 in DB"""
-        logger.info("Generating 75 charts for today's SHORT_LIST")
+    async def generate_all_charts(self) -> Dict:
+        """Generate charts for today's SHORT_LIST → Firebase Storage → URL in DB"""
+        logger.info("📊 Starting chart generation for today's shortlist")
+
+        today = date.today()
+        date_str = today.strftime("%Y-%m-%d")
 
         # Get today's SHORT_LIST symbols
-        query = """
-        SELECT DISTINCT symbol 
-        FROM shortlist_candidates 
-        WHERE date::date = CURRENT_DATE 
-        ORDER BY rank
-        LIMIT 75
-        """
         async with self.db.acquire() as conn:
-            rows = await conn.fetch(query)
-        
+            rows = await conn.fetch("""
+                SELECT DISTINCT symbol
+                FROM shortlist_candidates
+                WHERE date = $1
+                ORDER BY rank
+            """, today)
+
         symbols = [row["symbol"] for row in rows]
         if not symbols:
             logger.warning("No SHORT_LIST found for today")
-            return []
+            return {"success": False, "reason": "no_shortlist", "charts": 0}
 
-        charts = []
+        logger.info(f"Generating {len(symbols)} charts...")
+
+        success_count = 0
+        failed = []
+
         for symbol in symbols:
             df = await self._fetch_90d(symbol)
             if df is not None and len(df) >= 30:
-                base64_png = self._render_chart(df)
-                await self._store_chart(symbol, base64_png)
-                charts.append({"symbol": symbol, "chart_base64": base64_png})
-            else:
-                logger.warning(f"Insufficient data for {symbol}")
-                charts.append({"symbol": symbol, "chart_base64": ""})
+                # Render chart to PNG bytes
+                png_bytes = self._render_chart(df)
 
-        logger.info(f"Generated {len(charts)} charts in < 7s")
-        return charts
+                # Upload to Firebase Storage
+                chart_url = upload_chart_to_storage(symbol, date_str, png_bytes)
+
+                if chart_url:
+                    # Store URL in shortlist_candidates
+                    await self._store_chart_url(symbol, today, chart_url)
+                    success_count += 1
+                else:
+                    failed.append(symbol)
+                    logger.warning(f"Failed to upload chart for {symbol}")
+            else:
+                failed.append(symbol)
+                logger.warning(f"Insufficient data for {symbol}")
+
+        logger.info(f"✅ Generated {success_count}/{len(symbols)} charts")
+
+        return {
+            "success": True,
+            "charts_generated": success_count,
+            "charts_failed": len(failed),
+            "failed_symbols": failed[:10]  # First 10 failures
+        }
 
     async def _fetch_90d(self, symbol: str) -> pd.DataFrame:
         """Pull 90-day OHLCV from Prime DB"""
         query = """
-        SELECT date, open_price, high_price, low_price, close_price, adj_close, volume, vwap
+        SELECT date, open_price, high_price, low_price, close_price, volume
         FROM prime_ohlc_90d
         WHERE symbol = $1
         ORDER BY date DESC
@@ -93,13 +114,13 @@ class ChartGenerator:
         df = df.sort_values("date").set_index("date")
         return df
 
-    def _render_chart(self, df: pd.DataFrame) -> str:
-        """Render 256×256 PNG → base64"""
+    def _render_chart(self, df: pd.DataFrame) -> bytes:
+        """Render 256×256 PNG → bytes"""
         self.fig.clear()
         ax1, ax2 = self.fig.subplots(2, 1, gridspec_kw={'height_ratios': [3, 1]})
 
         # Candlesticks
-        for i, (idx, row) in enumerate(df.iterrows()):
+        for i, (_, row) in enumerate(df.iterrows()):
             color = BULL if row["close_price"] >= row["open_price"] else BEAR
             ax1.plot([i, i], [row["low_price"], row["high_price"]], color=color, lw=0.8)
             rect = plt.Rectangle(
@@ -124,23 +145,21 @@ class ChartGenerator:
         buf = io.BytesIO()
         plt.savefig(buf, format="png", bbox_inches="tight", pad_inches=0)
         buf.seek(0)
-        return base64.b64encode(buf.read()).decode()
+        return buf.read()
 
-    async def _store_chart(self, symbol: str, base64_png: str):
-        """Atomic upsert into DB"""
-        query = """
-        INSERT INTO stock_charts (symbol, chart_data, generated_at)
-        VALUES ($1, $2, NOW())
-        ON CONFLICT (symbol) DO UPDATE SET
-            chart_data = EXCLUDED.chart_data,
-            generated_at = NOW()
-        """
+    async def _store_chart_url(self, symbol: str, today: date, chart_url: str):
+        """Store chart URL in shortlist_candidates"""
         async with self.db.acquire() as conn:
-            await conn.execute(query, symbol, base64_png)
+            await conn.execute("""
+                UPDATE shortlist_candidates
+                SET chart_url = $1, updated_at = NOW()
+                WHERE date = $2 AND symbol = $3
+            """, chart_url, today, symbol)
 
 
 # Global singleton
 _generator = None
+
 
 async def get_chart_generator() -> ChartGenerator:
     global _generator
