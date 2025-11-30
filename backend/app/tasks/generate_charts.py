@@ -109,7 +109,9 @@ class ChartGenerator:
         if not rows:
             return pd.DataFrame()
 
-        df = pd.DataFrame(rows)
+        # Convert asyncpg Records to dicts
+        data = [dict(row) for row in rows]
+        df = pd.DataFrame(data)
         df["date"] = pd.to_datetime(df["date"])
         df = df.sort_values("date").set_index("date")
         return df
