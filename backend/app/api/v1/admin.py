@@ -584,3 +584,144 @@ async def trigger_full_pipeline():
         }
     except Exception as e:
         return {"success": False, "message": f"Error: {str(e)}"}
+
+
+@router.post("/trigger-prescreen")
+async def trigger_prescreen():
+    """Manually trigger the prescreen task (ACTIVE → SHORT_LIST)"""
+    try:
+        from app.services.system_state import is_system_on
+
+        if not await is_system_on():
+            return {"success": False, "message": "System is OFF. Turn it ON first."}
+
+        from app.tasks.run_prescreen import run_prescreen
+        task = run_prescreen.delay()
+
+        return {
+            "success": True,
+            "message": f"Prescreen triggered (task_id: {task.id})",
+            "task_id": task.id
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error: {str(e)}"}
+
+
+@router.post("/trigger-charts")
+async def trigger_charts():
+    """Manually trigger chart generation for SHORT_LIST"""
+    try:
+        from app.services.system_state import is_system_on
+
+        if not await is_system_on():
+            return {"success": False, "message": "System is OFF. Turn it ON first."}
+
+        from app.tasks.generate_charts import generate_charts
+        task = generate_charts.delay()
+
+        return {
+            "success": True,
+            "message": f"Chart generation triggered (task_id: {task.id})",
+            "task_id": task.id
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error: {str(e)}"}
+
+
+@router.post("/trigger-vision")
+async def trigger_vision():
+    """Manually trigger Groq vision analysis on charts"""
+    try:
+        from app.services.system_state import is_system_on
+
+        if not await is_system_on():
+            return {"success": False, "message": "System is OFF. Turn it ON first."}
+
+        from app.tasks.run_groq_vision import run_groq_vision
+        task = run_groq_vision.delay()
+
+        return {
+            "success": True,
+            "message": f"Vision analysis triggered (task_id: {task.id})",
+            "task_id": task.id
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error: {str(e)}"}
+
+
+@router.post("/trigger-social")
+async def trigger_social():
+    """Manually trigger Grok social/news analysis"""
+    try:
+        from app.services.system_state import is_system_on
+
+        if not await is_system_on():
+            return {"success": False, "message": "System is OFF. Turn it ON first."}
+
+        from app.tasks.run_grok_social import run_grok_social
+        task = run_grok_social.delay()
+
+        return {
+            "success": True,
+            "message": f"Social analysis triggered (task_id: {task.id})",
+            "task_id": task.id
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error: {str(e)}"}
+
+
+@router.post("/trigger-arbitrator")
+async def trigger_arbitrator():
+    """Manually trigger the arbitrator task (SHORT_LIST → PICKS)"""
+    try:
+        from app.services.system_state import is_system_on
+
+        if not await is_system_on():
+            return {"success": False, "message": "System is OFF. Turn it ON first."}
+
+        from app.tasks.run_arbitrator import run_arbitrator
+        task = run_arbitrator.delay()
+
+        return {
+            "success": True,
+            "message": f"Arbitrator triggered (task_id: {task.id})",
+            "task_id": task.id
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error: {str(e)}"}
+
+
+@router.post("/trigger-full-pipeline")
+async def trigger_full_pipeline_sequence():
+    """Trigger the complete AI pipeline: Prescreen → Charts → Vision → Social → Arbitrator"""
+    try:
+        from app.services.system_state import is_system_on
+
+        if not await is_system_on():
+            return {"success": False, "message": "System is OFF. Turn it ON first."}
+
+        from celery import chain
+        from app.tasks.run_prescreen import run_prescreen
+        from app.tasks.generate_charts import generate_charts
+        from app.tasks.run_groq_vision import run_groq_vision
+        from app.tasks.run_grok_social import run_grok_social
+        from app.tasks.run_arbitrator import run_arbitrator
+
+        # Chain all tasks in sequence
+        pipeline = chain(
+            run_prescreen.s(),
+            generate_charts.s(),
+            run_groq_vision.s(),
+            run_grok_social.s(),
+            run_arbitrator.s()
+        )
+        result = pipeline.apply_async()
+
+        return {
+            "success": True,
+            "message": "Full pipeline triggered: Prescreen → Charts → Vision → Social → Arbitrator",
+            "task_id": result.id,
+            "pipeline_steps": ["prescreen", "charts", "vision", "social", "arbitrator"]
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error: {str(e)}"}
