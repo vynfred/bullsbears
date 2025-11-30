@@ -4,6 +4,7 @@ from .stocks import router as stocks_router
 from .watchlist import router as watchlist_router
 from .internal import router as internal_router
 from .admin import router as admin_router
+from .picks import router as picks_router
 
 __all__ = [
     "analytics_router",
@@ -11,4 +12,5 @@ __all__ = [
     "watchlist_router",
     "internal_router",
     "admin_router",
+    "picks_router",
 ]

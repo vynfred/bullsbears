@@ -19,10 +19,11 @@ app.add_middleware(
 )
 
 # Import routers after app creation to avoid circular imports
-from .api.v1 import analytics, stocks, watchlist, internal, admin
+from .api.v1 import analytics, stocks, watchlist, internal, admin, picks
 
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
 app.include_router(stocks.router, prefix="/api/v1/stocks", tags=["stocks"])
 app.include_router(watchlist.router, prefix="/api/v1/watchlist", tags=["watchlist"])
 app.include_router(internal.router, prefix="/api/v1/internal", tags=["internal"])
 app.include_router(admin.router, prefix="/api/v1")
+app.include_router(picks.router, prefix="/api/v1", tags=["picks"])

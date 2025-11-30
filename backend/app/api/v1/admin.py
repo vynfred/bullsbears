@@ -190,10 +190,84 @@ async def init_database():
                 CREATE INDEX IF NOT EXISTS idx_ohlc_date ON prime_ohlc_90d(date);
             """)
 
+            # Create picks table
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS picks (
+                    id SERIAL PRIMARY KEY,
+                    symbol VARCHAR(10) NOT NULL,
+                    direction VARCHAR(10) NOT NULL,
+                    confidence DECIMAL(5, 4) NOT NULL,
+                    reasoning TEXT,
+                    target_low DECIMAL(10, 2),
+                    target_high DECIMAL(10, 2),
+                    pick_context JSONB,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    expires_at TIMESTAMP
+                )
+            """)
+
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_picks_symbol ON picks(symbol);
+                CREATE INDEX IF NOT EXISTS idx_picks_direction ON picks(direction);
+                CREATE INDEX IF NOT EXISTS idx_picks_created ON picks(created_at);
+            """)
+
+            # Create shortlist_candidates table
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS shortlist_candidates (
+                    id SERIAL PRIMARY KEY,
+                    date DATE NOT NULL,
+                    symbol VARCHAR(10) NOT NULL,
+                    price_at_selection DECIMAL(10, 2),
+                    prescreen_score DECIMAL(5, 2),
+                    technical_score DECIMAL(5, 2),
+                    fundamental_score DECIMAL(5, 2),
+                    sentiment_score DECIMAL(5, 2),
+                    vision_flags JSONB,
+                    social_score DECIMAL(5, 2),
+                    was_picked BOOLEAN DEFAULT FALSE,
+                    picked_direction VARCHAR(10),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(date, symbol)
+                )
+            """)
+
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_shortlist_date ON shortlist_candidates(date);
+                CREATE INDEX IF NOT EXISTS idx_shortlist_symbol ON shortlist_candidates(symbol);
+                CREATE INDEX IF NOT EXISTS idx_shortlist_picked ON shortlist_candidates(was_picked);
+            """)
+
+            # Create pick_outcomes_detailed table
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS pick_outcomes_detailed (
+                    id SERIAL PRIMARY KEY,
+                    pick_id INTEGER REFERENCES picks(id),
+                    symbol VARCHAR(10) NOT NULL,
+                    direction VARCHAR(10) NOT NULL,
+                    entry_price DECIMAL(10, 2),
+                    target_low DECIMAL(10, 2),
+                    target_high DECIMAL(10, 2),
+                    outcome VARCHAR(20) DEFAULT 'pending',
+                    exit_price DECIMAL(10, 2),
+                    max_gain_pct DECIMAL(6, 2),
+                    days_to_peak INTEGER,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    resolved_at TIMESTAMP
+                )
+            """)
+
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_outcomes_pick ON pick_outcomes_detailed(pick_id);
+                CREATE INDEX IF NOT EXISTS idx_outcomes_symbol ON pick_outcomes_detailed(symbol);
+                CREATE INDEX IF NOT EXISTS idx_outcomes_outcome ON pick_outcomes_detailed(outcome);
+            """)
+
         return {
             "success": True,
             "message": "Database tables created successfully",
-            "tables": ["stock_classifications", "prime_ohlc_90d"]
+            "tables": ["stock_classifications", "prime_ohlc_90d", "picks", "shortlist_candidates", "pick_outcomes_detailed"]
         }
 
     except Exception as e:
@@ -277,3 +351,222 @@ async def get_prime_status(task_id: str = None):
             return {"status": result.state, "message": f"Task state: {result.state}"}
     except Exception as e:
         return {"status": "error", "message": f"Error checking status: {str(e)}"}
+
+
+
+# ==================== DATA ENDPOINTS FOR ADMIN DASHBOARD ====================
+
+@router.get("/data/stats")
+async def get_dashboard_stats():
+    """Get summary stats for admin dashboard"""
+    try:
+        from app.core.database import get_asyncpg_pool
+        from datetime import datetime, timedelta
+
+        db = await get_asyncpg_pool()
+        async with db.acquire() as conn:
+            # Get stocks count
+            stocks_count = await conn.fetchval("""
+                SELECT COUNT(DISTINCT symbol) FROM prime_ohlc_90d
+            """) or 0
+
+            # Check if picks table exists and get count
+            picks_count = 0
+            picks_today = 0
+            try:
+                picks_count = await conn.fetchval("SELECT COUNT(*) FROM picks") or 0
+                picks_today = await conn.fetchval("""
+                    SELECT COUNT(*) FROM picks WHERE DATE(created_at) = CURRENT_DATE
+                """) or 0
+            except:
+                pass
+
+            # Get shortlist count
+            shortlist_count = 0
+            shortlist_today = 0
+            try:
+                shortlist_count = await conn.fetchval("SELECT COUNT(*) FROM shortlist_candidates") or 0
+                shortlist_today = await conn.fetchval("""
+                    SELECT COUNT(*) FROM shortlist_candidates WHERE date = CURRENT_DATE
+                """) or 0
+            except:
+                pass
+
+            return {
+                "stocks": {
+                    "total_symbols": stocks_count,
+                    "ohlc_rows": await conn.fetchval("SELECT COUNT(*) FROM prime_ohlc_90d") or 0
+                },
+                "picks": {
+                    "total": picks_count,
+                    "today": picks_today
+                },
+                "shortlist": {
+                    "total": shortlist_count,
+                    "today": shortlist_today
+                },
+                "users": {
+                    "total": 0,  # Firebase users - will be implemented
+                    "note": "Firebase auth not integrated yet"
+                }
+            }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.get("/data/picks")
+async def get_picks_data(limit: int = 50, offset: int = 0):
+    """Get picks for admin dashboard"""
+    try:
+        from app.core.database import get_asyncpg_pool
+
+        db = await get_asyncpg_pool()
+        async with db.acquire() as conn:
+            # Check if table exists
+            exists = await conn.fetchval("""
+                SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'picks')
+            """)
+            if not exists:
+                return {"picks": [], "total": 0, "message": "Picks table not created yet"}
+
+            total = await conn.fetchval("SELECT COUNT(*) FROM picks") or 0
+            rows = await conn.fetch("""
+                SELECT id, symbol, direction, confidence, reasoning,
+                       target_low, target_high, created_at
+                FROM picks
+                ORDER BY created_at DESC
+                LIMIT $1 OFFSET $2
+            """, limit, offset)
+
+            picks = [{
+                "id": r["id"],
+                "symbol": r["symbol"],
+                "direction": r["direction"],
+                "confidence": float(r["confidence"]) * 100 if r["confidence"] else 0,
+                "reasoning": r["reasoning"][:100] + "..." if r["reasoning"] and len(r["reasoning"]) > 100 else r["reasoning"],
+                "target_low": float(r["target_low"]) if r["target_low"] else None,
+                "target_high": float(r["target_high"]) if r["target_high"] else None,
+                "created_at": r["created_at"].isoformat() if r["created_at"] else None
+            } for r in rows]
+
+            return {"picks": picks, "total": total}
+    except Exception as e:
+        return {"error": str(e), "picks": [], "total": 0}
+
+
+@router.get("/data/shortlist")
+async def get_shortlist_data(limit: int = 50, offset: int = 0, date: str = None):
+    """Get shortlist candidates for admin dashboard"""
+    try:
+        from app.core.database import get_asyncpg_pool
+        from datetime import datetime
+
+        db = await get_asyncpg_pool()
+        async with db.acquire() as conn:
+            exists = await conn.fetchval("""
+                SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'shortlist_candidates')
+            """)
+            if not exists:
+                return {"shortlist": [], "total": 0, "message": "Shortlist table not created yet"}
+
+            query = "SELECT COUNT(*) FROM shortlist_candidates"
+            params = []
+            if date:
+                query += " WHERE date = $1"
+                params.append(datetime.strptime(date, "%Y-%m-%d").date())
+
+            total = await conn.fetchval(query, *params) or 0
+
+            data_query = """
+                SELECT id, date, symbol, price_at_selection, prescreen_score,
+                       technical_score, sentiment_score, was_picked, picked_direction, created_at
+                FROM shortlist_candidates
+            """
+            if date:
+                data_query += " WHERE date = $1"
+                data_query += " ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+                rows = await conn.fetch(data_query, datetime.strptime(date, "%Y-%m-%d").date(), limit, offset)
+            else:
+                data_query += " ORDER BY created_at DESC LIMIT $1 OFFSET $2"
+                rows = await conn.fetch(data_query, limit, offset)
+
+            shortlist = [{
+                "id": r["id"],
+                "date": r["date"].isoformat() if r["date"] else None,
+                "symbol": r["symbol"],
+                "price": float(r["price_at_selection"]) if r["price_at_selection"] else None,
+                "prescreen_score": float(r["prescreen_score"]) if r["prescreen_score"] else None,
+                "technical_score": float(r["technical_score"]) if r["technical_score"] else None,
+                "sentiment_score": float(r["sentiment_score"]) if r["sentiment_score"] else None,
+                "was_picked": r["was_picked"],
+                "picked_direction": r["picked_direction"],
+                "created_at": r["created_at"].isoformat() if r["created_at"] else None
+            } for r in rows]
+
+            return {"shortlist": shortlist, "total": total}
+    except Exception as e:
+        return {"error": str(e), "shortlist": [], "total": 0}
+
+
+@router.get("/data/stocks")
+async def get_stocks_data(limit: int = 50, offset: int = 0, search: str = None):
+    """Get stock data for admin dashboard"""
+    try:
+        from app.core.database import get_asyncpg_pool
+
+        db = await get_asyncpg_pool()
+        async with db.acquire() as conn:
+            # Get unique symbols with latest data
+            if search:
+                total = await conn.fetchval("""
+                    SELECT COUNT(DISTINCT symbol) FROM prime_ohlc_90d
+                    WHERE symbol ILIKE $1
+                """, f"%{search}%") or 0
+
+                rows = await conn.fetch("""
+                    SELECT DISTINCT ON (symbol) symbol, date, close_price, volume
+                    FROM prime_ohlc_90d
+                    WHERE symbol ILIKE $1
+                    ORDER BY symbol, date DESC
+                    LIMIT $2 OFFSET $3
+                """, f"%{search}%", limit, offset)
+            else:
+                total = await conn.fetchval("SELECT COUNT(DISTINCT symbol) FROM prime_ohlc_90d") or 0
+                rows = await conn.fetch("""
+                    SELECT DISTINCT ON (symbol) symbol, date, close_price, volume
+                    FROM prime_ohlc_90d
+                    ORDER BY symbol, date DESC
+                    LIMIT $1 OFFSET $2
+                """, limit, offset)
+
+            stocks = [{
+                "symbol": r["symbol"],
+                "last_date": r["date"].isoformat() if r["date"] else None,
+                "close_price": float(r["close_price"]) if r["close_price"] else None,
+                "volume": r["volume"]
+            } for r in rows]
+
+            return {"stocks": stocks, "total": total}
+    except Exception as e:
+        return {"error": str(e), "stocks": [], "total": 0}
+
+
+@router.post("/trigger-pipeline")
+async def trigger_full_pipeline():
+    """Manually trigger the full daily pipeline"""
+    try:
+        from app.services.system_state import is_system_on
+
+        if not await is_system_on():
+            return {"success": False, "message": "System is OFF. Turn it ON first."}
+
+        from app.tasks.fmp_delta_update import fmp_delta_update
+        task = fmp_delta_update.delay()
+
+        return {
+            "success": True,
+            "message": f"Pipeline triggered (task_id: {task.id})",
+            "task_id": task.id
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error: {str(e)}"}

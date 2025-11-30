@@ -79,13 +79,13 @@ export const api = {
   }): Promise<any[]> => {
     const { sentiment, limit, min_confidence } = params;
     return fetchWithError(
-      `/picks/live?sentiment=${sentiment}&limit=${limit}&min_confidence=${min_confidence}`
+      `/api/v1/picks/live?sentiment=${sentiment}&limit=${limit}&min_confidence=${min_confidence}`
     );
   },
 
   // WATCHLIST
   getWatchlistEntries: async (): Promise<HistoryEntry[]> => {
-    return fetchWithError('/watchlist');
+    return fetchWithError('/api/v1/watchlist');
   },
 
   addToWatchlist: async (request: {
@@ -97,7 +97,7 @@ export const api = {
     ai_confidence_score: number;
     ai_recommendation: string;
   }) => {
-    return fetchWithError('/watchlist', {
+    return fetchWithError('/api/v1/watchlist', {
       method: 'POST',
       body: JSON.stringify(request),
     });
@@ -105,12 +105,12 @@ export const api = {
 
   // NOTIFICATIONS
   getWatchlistNotifications: async (): Promise<WatchlistNotification[]> => {
-    return fetchWithError('/watchlist/notifications');
+    return fetchWithError('/api/v1/watchlist/notifications');
   },
 
   // HISTORY
   getHistory: async (): Promise<HistoryEntry[]> => {
-    return fetchWithError('/history');
+    return fetchWithError('/api/v1/history');
   },
 
   // STATS

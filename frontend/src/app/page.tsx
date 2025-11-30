@@ -1,159 +1,116 @@
-// src/app/page.tsx
+// src/app/page.tsx - Public Landing Page
 "use client";
 
-import { useState } from "react";
-import { 
-  Menu, TrendingUp, Eye, LineChart, 
-  User, HelpCircle, Settings, FileText, LogOut 
-} from "lucide-react";
-
-// src/app/page.tsx
-import PicksTab from "@/components/private/PicksTab";
-import WatchlistTab from "@/components/private/WatchlistTab";
-import AnalyticsTab from "@/components/private/AnalyticsTab";
-import ProfilePage from "@/components/private/ProfilePage";
-import SettingsPage from "@/components/private/SettingsPage";
-import HowItWorksPage from "@/components/public/HowItWorksPage";
-import FAQPage from "@/components/public/FAQPage";
-import TermsPrivacyPage from "@/components/public/TermsPrivacyPage";
-
-// Named imports
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { TrendingUp, Shield, Zap, BarChart3 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 import { AnimatedLogo } from "@/components/shared/AnimatedLogo";
 import { CandleBackground } from "@/components/shared/CandleBackground";
-import { 
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger 
-} from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Toaster } from "@/components/ui/sonner";
 
-type TabType = "picks" | "watchlist" | "analytics";
-type PageType = TabType | "profile" | "settings" | "howItWorks" | "faq" | "terms";
+export default function LandingPage() {
+  const router = useRouter();
+  const { user, loading } = useAuth();
 
-export default function Home() {
-  const [activePage, setActivePage] = useState<PageType>("picks");
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [candleFlash, setCandleFlash] = useState<"green" | "red" | null>(null);
-
-  const handleNavigation = (page: PageType) => {
-    setActivePage(page);
-    setIsMenuOpen(false);
-  };
-
-  const triggerCandleFlash = (type: "bullish" | "bearish") => {
-    const color = type === "bullish" ? "green" : "red";
-    setCandleFlash(color);
-    setTimeout(() => setCandleFlash(null), 2000);
-  };
+  // Redirect logged-in users to dashboard
+  useEffect(() => {
+    if (!loading && user) {
+      router.push('/dashboard');
+    }
+  }, [user, loading, router]);
 
   return (
-    <div className="dark min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 pb-20">
-      <CandleBackground flashColor={candleFlash} />
-      <Toaster />
+    <div className="dark min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <CandleBackground flashColor={null} />
 
       {/* Header */}
-      <header className="border-b border-slate-800 sticky top-0 bg-slate-950/95 backdrop-blur-sm z-20 shadow-lg shadow-black/20">
+      <header className="border-b border-slate-800 sticky top-0 bg-slate-950/95 backdrop-blur-sm z-20">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <Sheet open={isMenuOpen} onOpenChange={setIsMenuOpen}>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="hover:bg-slate-800 text-slate-100 border border-slate-700">
-                  <Menu className="w-6 h-6" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="bg-slate-950 border-slate-800">
-                <SheetHeader>
-                  <SheetTitle>
-                    <AnimatedLogo className="text-2xl font-black" />
-                  </SheetTitle>
-                </SheetHeader>
-                <div className="mt-8 space-y-2">
-                  <Button variant="ghost" className="w-full justify-start hover:bg-slate-800 text-slate-200" onClick={() => handleNavigation("profile")}>
-                    <User className="w-5 h-5 mr-3" /> Profile
-                  </Button>
-                  <Button variant="ghost" className="w-full justify-start hover:bg-slate-800 text-slate-200" onClick={() => handleNavigation("howItWorks")}>
-                    <HelpCircle className="w-5 h-5 mr-3" /> How it Works
-                  </Button>
-                  <Button variant="ghost" className="w-full justify-start hover:bg-slate-800 text-slate-200" onClick={() => handleNavigation("settings")}>
-                    <Settings className="w-5 h-5 mr-3" /> Settings
-                  </Button>
-                  <Button variant="ghost" className="w-full justify-start hover:bg-slate-800 text-slate-200" onClick={() => handleNavigation("faq")}>
-                    <HelpCircle className="w-5 h-5 mr-3" /> FAQ
-                  </Button>
-                  <Button variant="ghost" className="w-full justify-start hover:bg-slate-800 text-slate-200" onClick={() => handleNavigation("terms")}>
-                    <FileText className="w-5 h-5 mr-3" /> Terms / Privacy
-                  </Button>
-
-                  <Separator className="my-4 bg-slate-800" />
-
-                  <Button variant="ghost" className="w-full justify-start hover:bg-slate-800 text-rose-400 hover:text-rose-300">
-                    <LogOut className="w-5 h-5 mr-3" /> Logout
-                  </Button>
-                </div>
-              </SheetContent>
-            </Sheet>
-
-            <div className="absolute left-1/2 -translate-x-1/2">
-              <AnimatedLogo className="text-3xl font-black" />
+            <AnimatedLogo className="text-2xl font-black" />
+            <div className="flex gap-3">
+              <Link href="/login" className="px-4 py-2 text-slate-300 hover:text-white transition-colors">
+                Sign In
+              </Link>
+              <Link href="/signup" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-colors">
+                Get Started
+              </Link>
             </div>
-
-            <div className="w-10" />
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-6 max-w-6xl relative z-10">
-        {activePage === "picks" && <PicksTab onPickClick={triggerCandleFlash} />}
-        {activePage === "watchlist" && <WatchlistTab />}
-        {activePage === "analytics" && <AnalyticsTab onNavigateToPicks={() => setActivePage("picks")} />}
-        {activePage === "profile" && <ProfilePage />}
-        {activePage === "settings" && <SettingsPage />}
-        {activePage === "howItWorks" && <HowItWorksPage />}
-        {activePage === "faq" && <FAQPage />}
-        {activePage === "terms" && <TermsPrivacyPage />}
+      {/* Hero */}
+      <main className="container mx-auto px-4 py-16 max-w-6xl relative z-10">
+        <div className="text-center mb-16">
+          <h1 className="text-4xl md:text-6xl font-black text-white mb-6">
+            AI-Powered <span className="text-emerald-400">Bullish</span> & <span className="text-rose-400">Bearish</span> Stock Picks
+          </h1>
+          <p className="text-xl text-slate-400 max-w-2xl mx-auto mb-8">
+            Get daily AI-generated stock picks with confidence scores, target prices, and real-time tracking.
+          </p>
+          <div className="flex gap-4 justify-center">
+            <Link href="/signup" className="px-8 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-lg transition-all hover:scale-105">
+              Start Free →
+            </Link>
+            <Link href="/login" className="px-8 py-4 border border-slate-700 hover:border-slate-500 text-white rounded-xl font-bold text-lg transition-colors">
+              Sign In
+            </Link>
+          </div>
+        </div>
+
+        {/* Features */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+            <div className="w-12 h-12 bg-emerald-500/20 rounded-lg flex items-center justify-center mb-4">
+              <TrendingUp className="w-6 h-6 text-emerald-400" />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-2">Daily Picks</h3>
+            <p className="text-slate-400 text-sm">6 AI-selected stocks every trading day at 8:30 AM ET</p>
+          </div>
+          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+            <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center mb-4">
+              <Shield className="w-6 h-6 text-purple-400" />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-2">Risk Managed</h3>
+            <p className="text-slate-400 text-sm">Stop losses and target prices for every pick</p>
+          </div>
+          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+            <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mb-4">
+              <Zap className="w-6 h-6 text-blue-400" />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-2">Real-Time</h3>
+            <p className="text-slate-400 text-sm">Live price tracking and target hit notifications</p>
+          </div>
+          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+            <div className="w-12 h-12 bg-rose-500/20 rounded-lg flex items-center justify-center mb-4">
+              <BarChart3 className="w-6 h-6 text-rose-400" />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-2">Performance</h3>
+            <p className="text-slate-400 text-sm">Track win rates and accuracy over time</p>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="text-center py-12 border-t border-slate-800">
+          <p className="text-slate-500 text-sm uppercase tracking-wider mb-8">Powered by</p>
+          <div className="flex justify-center gap-12 flex-wrap text-slate-400">
+            <span>16 AI Agents</span>
+            <span>•</span>
+            <span>6,960 NASDAQ Stocks</span>
+            <span>•</span>
+            <span>Self-Learning ML</span>
+          </div>
+        </div>
       </main>
 
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 border-t border-slate-800 bg-slate-950/95 backdrop-blur-sm shadow-2xl z-20">
-        <div className="grid grid-cols-3 h-20">
-          <button
-            onClick={() => setActivePage("picks")}
-            className={`flex flex-col items-center justify-center gap-1 transition-all duration-300 ${
-              activePage === "picks"
-                ? "text-emerald-400 bg-gradient-to-t from-emerald-950/40 to-transparent shadow-inner"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/20"
-            }`}
-          >
-            <TrendingUp className="w-6 h-6" />
-            <span className="text-sm">AI Picks</span>
-          </button>
-
-          <button
-            onClick={() => setActivePage("watchlist")}
-            className={`flex flex-col items-center justify-center gap-1 transition-all duration-300 ${
-              activePage === "watchlist"
-                ? "text-purple-400 bg-gradient-to-t from-purple-950/40 to-transparent shadow-inner"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/20"
-            }`}
-          >
-            <Eye className="w-6 h-6" />
-            <span className="text-sm">Watchlist</span>
-          </button>
-
-          <button
-            onClick={() => setActivePage("analytics")}
-            className={`flex flex-col items-center justify-center gap-1 transition-all duration-300 ${
-              activePage === "analytics"
-                ? "text-blue-400 bg-gradient-to-t from-blue-950/40 to-transparent shadow-inner"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/20"
-            }`}
-          >
-            <LineChart className="w-6 h-6" />
-            <span className="text-sm">Analytics</span>
-          </button>
+      {/* Footer */}
+      <footer className="border-t border-slate-800 py-8">
+        <div className="container mx-auto px-4 text-center text-slate-500 text-sm">
+          © 2024 BullsBears.xyz • Not financial advice
         </div>
-      </nav>
+      </footer>
     </div>
   );
 }

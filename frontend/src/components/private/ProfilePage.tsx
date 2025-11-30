@@ -1,17 +1,56 @@
+"use client";
+
 import { Mail, Calendar, Award, Flame, Share2, Copy } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function ProfilePage() {
-  const referralCode = "BULLS2024XYZ";
+  const { user, userProfile } = useAuth();
+
+  // Generate referral code from user ID (first 8 chars)
+  const referralCode = user?.uid ? `BB${user.uid.substring(0, 8).toUpperCase()}` : "LOADING";
   const referralLink = `https://bullsbears.xyz/ref/${referralCode}`;
 
   const copyReferralLink = () => {
     navigator.clipboard.writeText(referralLink);
     toast.success("Referral link copied to clipboard!");
+  };
+
+  // Get initials from display name or email
+  const getInitials = () => {
+    if (userProfile?.displayName) {
+      return userProfile.displayName.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+    }
+    if (user?.email) {
+      return user.email.substring(0, 2).toUpperCase();
+    }
+    return "BB";
+  };
+
+  // Calculate days as member
+  const getDaysMember = () => {
+    if (userProfile?.createdAt) {
+      const now = new Date();
+      const created = new Date(userProfile.createdAt);
+      const diffTime = Math.abs(now.getTime() - created.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays;
+    }
+    return 0;
+  };
+
+  // Format date
+  const formatDate = (date: Date | undefined) => {
+    if (!date) return "Unknown";
+    return new Date(date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
   };
 
   return (
@@ -21,17 +60,22 @@ export default function ProfilePage() {
         <CardContent className="pt-6">
           <div className="flex flex-col items-center text-center space-y-4">
             <Avatar className="w-24 h-24 border-4 border-purple-500/50">
+              {userProfile?.photoURL ? (
+                <AvatarImage src={userProfile.photoURL} alt={userProfile.displayName || "User"} />
+              ) : null}
               <AvatarFallback className="bg-gradient-to-br from-purple-600 to-blue-600 text-white text-3xl">
-                JD
+                {getInitials()}
               </AvatarFallback>
             </Avatar>
             <div>
-              <h2 className="text-2xl text-slate-100">John Doe</h2>
-              <p className="text-slate-400">Premium Member</p>
+              <h2 className="text-2xl text-slate-100">
+                {userProfile?.displayName || user?.email?.split('@')[0] || "User"}
+              </h2>
+              <p className="text-slate-400">Free Member</p>
             </div>
             <Badge className="bg-gradient-to-r from-emerald-500 to-purple-500 text-white border-0">
               <Award className="w-3 h-3 mr-1" />
-              Pro Trader
+              {userProfile?.emailVerified ? "Verified" : "New Trader"}
             </Badge>
           </div>
         </CardContent>
@@ -47,21 +91,21 @@ export default function ProfilePage() {
             <Mail className="w-5 h-5 text-slate-400" />
             <div>
               <p className="text-sm text-slate-500">Email</p>
-              <p>john.doe@example.com</p>
+              <p>{user?.email || "Not set"}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 text-slate-300">
             <Calendar className="w-5 h-5 text-slate-400" />
             <div>
               <p className="text-sm text-slate-500">Sign Up Date</p>
-              <p>January 15, 2024</p>
+              <p>{formatDate(userProfile?.createdAt)}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 text-slate-300">
             <Calendar className="w-5 h-5 text-slate-400" />
             <div>
               <p className="text-sm text-slate-500">Days as Member</p>
-              <p>295 days</p>
+              <p>{getDaysMember()} days</p>
             </div>
           </div>
           <div className="flex items-center gap-3 text-slate-300">
@@ -69,8 +113,7 @@ export default function ProfilePage() {
             <div>
               <p className="text-sm text-slate-500">Active Streak</p>
               <p className="flex items-center gap-1">
-                <span>42 days</span>
-                <Flame className="w-4 h-4 text-orange-400" />
+                <span>Coming soon</span>
               </p>
             </div>
           </div>
