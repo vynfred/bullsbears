@@ -689,6 +689,102 @@ async def trigger_vision_sync():
         return {"success": False, "message": str(e), "traceback": traceback.format_exc()}
 
 
+@router.post("/test-groq-vision")
+async def test_groq_vision():
+    """Test Groq Vision API with a single chart - verbose debug"""
+    import os
+    import base64
+    import httpx
+    import json
+    from pathlib import Path
+    from app.core.database import get_asyncpg_pool
+
+    debug_info = {}
+
+    # Check API key
+    groq_key = os.getenv("GROQ_API_KEY")
+    debug_info["groq_key_set"] = bool(groq_key)
+    debug_info["groq_key_prefix"] = groq_key[:10] + "..." if groq_key else None
+
+    # Get one chart URL
+    db = await get_asyncpg_pool()
+    async with db.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT symbol, chart_url FROM shortlist_candidates
+            WHERE chart_url IS NOT NULL LIMIT 1
+        """)
+
+    if not row:
+        return {"success": False, "message": "No charts found", "debug": debug_info}
+
+    symbol = row["symbol"]
+    chart_url = row["chart_url"]
+    debug_info["symbol"] = symbol
+    debug_info["chart_url"] = chart_url
+
+    # Download image
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            img_resp = await client.get(chart_url)
+            img_resp.raise_for_status()
+            base64_png = base64.b64encode(img_resp.content).decode("utf-8")
+            debug_info["image_downloaded"] = True
+            debug_info["image_size_bytes"] = len(img_resp.content)
+    except Exception as e:
+        debug_info["image_error"] = str(e)
+        return {"success": False, "message": "Image download failed", "debug": debug_info}
+
+    # Load prompt
+    prompt_path = Path(__file__).parent.parent.parent / "services" / "prompts" / "vision_prompt.txt"
+    prompt = prompt_path.read_text(encoding="utf-8").strip()
+    debug_info["prompt_loaded"] = True
+
+    # Call Groq
+    payload = {
+        "model": "llama-3.2-11b-vision-preview",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": f"Stock: {symbol}\n\n{prompt}"},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_png}"}}
+                ]
+            }
+        ],
+        "temperature": 0.0,
+        "max_tokens": 256,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                json=payload,
+                headers={"Authorization": f"Bearer {groq_key}"},
+            )
+            debug_info["groq_status"] = resp.status_code
+            debug_info["groq_response"] = resp.text[:500]
+
+            if resp.status_code == 200:
+                content = resp.json()["choices"][0]["message"]["content"]
+                debug_info["groq_content"] = content
+
+                # Parse JSON
+                start = content.find("{")
+                end = content.rfind("}") + 1
+                if start != -1 and end > 0:
+                    flags = json.loads(content[start:end])
+                    debug_info["parsed_flags"] = flags
+                    return {"success": True, "flags": flags, "debug": debug_info}
+                else:
+                    return {"success": False, "message": "No JSON in response", "debug": debug_info}
+            else:
+                return {"success": False, "message": f"Groq error: {resp.status_code}", "debug": debug_info}
+    except Exception as e:
+        debug_info["groq_error"] = str(e)
+        return {"success": False, "message": str(e), "debug": debug_info}
+
+
 @router.post("/trigger-social")
 async def trigger_social():
     """Manually trigger Grok social/news analysis"""
