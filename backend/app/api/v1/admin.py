@@ -9,6 +9,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 import os
 
+from app.core.database import get_asyncpg_pool
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -810,6 +812,55 @@ async def test_vision():
     except Exception as e:
         debug_info["fireworks_error"] = str(e)
         return {"success": False, "message": str(e), "debug": debug_info}
+
+
+@router.get("/shortlist-status")
+async def shortlist_status():
+    """Check current shortlist status - vision and social completion"""
+    try:
+        db = await get_asyncpg_pool()
+        async with db.acquire() as conn:
+            # Get latest date
+            row = await conn.fetchrow("SELECT MAX(date) as latest_date FROM shortlist_candidates")
+            if not row or not row['latest_date']:
+                return {"success": False, "message": "No shortlist found"}
+
+            latest_date = row['latest_date']
+
+            # Get counts
+            stats = await conn.fetchrow("""
+                SELECT
+                    COUNT(*) as total,
+                    COUNT(CASE WHEN direction = 'bull' THEN 1 END) as bullish,
+                    COUNT(CASE WHEN direction = 'bear' THEN 1 END) as bearish,
+                    COUNT(CASE WHEN vision_flags IS NOT NULL THEN 1 END) as has_vision,
+                    COUNT(CASE WHEN social_score IS NOT NULL THEN 1 END) as has_social
+                FROM shortlist_candidates
+                WHERE date = $1
+            """, latest_date)
+
+            # Get sample
+            sample = await conn.fetch("""
+                SELECT symbol, direction, social_score,
+                       vision_flags IS NOT NULL as has_vision
+                FROM shortlist_candidates
+                WHERE date = $1
+                ORDER BY rank
+                LIMIT 5
+            """, latest_date)
+
+            return {
+                "success": True,
+                "date": str(latest_date),
+                "total": stats['total'],
+                "bullish": stats['bullish'],
+                "bearish": stats['bearish'],
+                "has_vision": stats['has_vision'],
+                "has_social": stats['has_social'],
+                "sample": [dict(s) for s in sample]
+            }
+    except Exception as e:
+        return {"success": False, "message": str(e)}
 
 
 @router.post("/trigger-social")
