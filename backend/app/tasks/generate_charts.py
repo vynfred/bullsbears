@@ -130,6 +130,10 @@ class ChartGenerator:
         data = [dict(row) for row in rows]
         df = pd.DataFrame(data)
         df["date"] = pd.to_datetime(df["date"])
+        # Convert Decimal to float for matplotlib compatibility
+        for col in ["open_price", "high_price", "low_price", "close_price"]:
+            df[col] = df[col].astype(float)
+        df["volume"] = df["volume"].astype(float)
         df = df.sort_values("date").set_index("date")
         return df
 
