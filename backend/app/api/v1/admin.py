@@ -884,6 +884,54 @@ async def trigger_social():
         return {"success": False, "message": f"Error: {str(e)}"}
 
 
+@router.post("/trigger-social-sync")
+async def trigger_social_sync():
+    """Run Grok social analysis synchronously (for debugging)"""
+    import os
+
+    debug_info = {
+        "grok_key_set": bool(os.getenv("GROK_API_KEY")),
+        "grok_key_prefix": os.getenv("GROK_API_KEY", "")[:10] + "..." if os.getenv("GROK_API_KEY") else None,
+    }
+
+    try:
+        from app.services.system_state import is_system_on
+        if not await is_system_on():
+            return {"success": False, "message": "System is OFF", "debug": debug_info}
+
+        # Get symbols from shortlist
+        db = await get_asyncpg_pool()
+        async with db.acquire() as conn:
+            symbols = await conn.fetch("""
+                SELECT symbol FROM shortlist_candidates
+                WHERE date = (SELECT MAX(date) FROM shortlist_candidates)
+            """)
+
+        if not symbols:
+            return {"success": False, "message": "No symbols in shortlist", "debug": debug_info}
+
+        debug_info["symbol_count"] = len(symbols)
+
+        # Run social analysis directly
+        from app.services.cloud_agents.social_agent import run_social_analysis
+        results = await run_social_analysis([{"symbol": s["symbol"]} for s in symbols])
+
+        # Count successful
+        with_scores = sum(1 for r in results if r.get("social_score", 0) != 0)
+
+        return {
+            "success": True,
+            "result": {
+                "analyzed": len(results),
+                "with_scores": with_scores
+            },
+            "debug": debug_info
+        }
+    except Exception as e:
+        debug_info["error"] = str(e)
+        return {"success": False, "message": str(e), "debug": debug_info}
+
+
 @router.post("/trigger-arbitrator")
 async def trigger_arbitrator():
     """Manually trigger the arbitrator task (SHORT_LIST → PICKS)"""
