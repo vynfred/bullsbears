@@ -1114,10 +1114,13 @@ async def trigger_arbitrator_sync():
                 target_low = fib_targets.target_1
                 target_high = fib_targets.target_2
 
+                # Store complete fib data including stop_loss and entry for pretty charts
                 debug_info[f"fib_{symbol}"] = {
                     "price": current_price,
+                    "entry_price": current_price,
                     "target_1": target_low,
                     "target_2": target_high,
+                    "stop_loss": fib_targets.stop_loss,
                     "swing_low": fib_targets.swing_low,
                     "swing_high": fib_targets.swing_high,
                     "valid": fib_targets.valid
@@ -1148,6 +1151,14 @@ async def trigger_arbitrator_sync():
                     SET was_picked = TRUE, picked_direction = $1
                     WHERE date = $2 AND symbol = $3
                 """, direction, shortlist_date, symbol)
+
+        # Generate pretty charts for final picks (async, don't block)
+        try:
+            from app.tasks.generate_pretty_charts import generate_pretty_charts_for_picks
+            chart_result = await generate_pretty_charts_for_picks()
+            debug_info["pretty_charts"] = chart_result
+        except Exception as chart_err:
+            debug_info["pretty_charts_error"] = str(chart_err)
 
         return {
             "success": True,

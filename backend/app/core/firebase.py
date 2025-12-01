@@ -293,10 +293,16 @@ def update_firebase_sync(path: str, data: Dict[str, Any]):
         logger.error(f"Firebase sync update failed: {e}")
 
 
-def upload_chart_to_storage(symbol: str, date_str: str, png_bytes: bytes) -> Optional[str]:
+def upload_chart_to_storage(symbol: str, date_str: str, png_bytes: bytes, folder: str = "charts") -> Optional[str]:
     """
     Upload chart PNG to Firebase Storage and return public URL.
-    Path: charts/{YYYY-MM-DD}/{symbol}.png
+    Path: {folder}/{YYYY-MM-DD}/{symbol}.png
+
+    Args:
+        symbol: Stock ticker
+        date_str: Date string (YYYY-MM-DD)
+        png_bytes: PNG image bytes
+        folder: Storage folder (default: "charts", can be "pretty" for annotated charts)
     """
     if storage_bucket is None:
         logger.error("Firebase Storage not initialized")
@@ -304,7 +310,7 @@ def upload_chart_to_storage(symbol: str, date_str: str, png_bytes: bytes) -> Opt
 
     try:
         # Create blob path
-        blob_path = f"charts/{date_str}/{symbol}.png"
+        blob_path = f"{folder}/{date_str}/{symbol}.png"
         blob = storage_bucket.blob(blob_path)
 
         # Upload PNG bytes
