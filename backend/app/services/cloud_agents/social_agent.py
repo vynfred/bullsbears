@@ -9,7 +9,7 @@ import asyncio
 import json
 import logging
 import os
-from datetime import date
+from datetime import date  # noqa: F401 - used for type hints
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -103,9 +103,15 @@ async def _store_social_results(results: List[Dict[str, Any]]):
     """Store social data in shortlist_candidates table"""
     try:
         db = await get_asyncpg_pool()
-        today = date.today()
 
         async with db.acquire() as conn:
+            # Get the latest shortlist date (may not be today)
+            row = await conn.fetchrow("SELECT MAX(date) as latest_date FROM shortlist_candidates")
+            if not row or not row['latest_date']:
+                logger.error("No shortlist found to update")
+                return
+            shortlist_date = row['latest_date']
+
             for r in results:
                 social_data = {
                     "headlines": r.get("headlines", []),
@@ -122,8 +128,8 @@ async def _store_social_results(results: List[Dict[str, Any]]):
                         polymarket_prob = $3,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE date = $4 AND symbol = $5
-                """, r["social_score"], json.dumps(social_data), r.get("polymarket_prob"), today, r["symbol"])
+                """, r["social_score"], json.dumps(social_data), r.get("polymarket_prob"), shortlist_date, r["symbol"])
 
-        logger.info(f"Social results stored for {len(results)} symbols")
+        logger.info(f"Social results stored for {len(results)} symbols (date: {shortlist_date})")
     except Exception as e:
         logger.error(f"Failed to store social results: {e}")
