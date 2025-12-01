@@ -1,4 +1,9 @@
-# render.yaml 
+# render.yaml - BullsBears v5 Infrastructure
+# ============================================
+# Web Service: FastAPI backend
+# Cron Jobs: Daily pipeline (8:00 AM ET) + Weekly learner (4:10 AM ET Monday)
+# ============================================
+
 services:
   - type: web
     name: bullsbears-api
@@ -10,17 +15,12 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      ENVIRONMENT: production
+      - key: ENVIRONMENT
+        value: production
 
-  - type: worker
-    name: bullsbears-worker
-    env: python
-    region: virginia
-    repo: https://github.com/vynfred/bullsbears
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: python celery_worker.py
-
+  # Daily Pipeline Cron Job
+  # Runs at 8:00 AM ET (13:00 UTC) on weekdays
+  # Pipeline: FMP Delta → Prescreen → Charts → Vision → Social → Arbitrator
   - type: cron
     name: bullsbears-daily-pipeline
     env: python
@@ -28,11 +28,18 @@ services:
     repo: https://github.com/vynfred/bullsbears
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    schedule: "0 8 * * 1-5"
-    startCommand: python -c "from app.tasks.fmp_delta_update import fmp_delta_update; fmp_delta_update.delay()"
+    schedule: "0 13 * * 1-5"
+    startCommand: python scripts/run_daily_pipeline.py
 
-# render.yaml
-cronJobs:
-  - name: weekly-learner
-    schedule: "10 4 * * 1"    # Every Monday 04:10 ET
-    command: celery -A app.core.celery_app call app.tasks.run_learner.run_learner
+  # Weekly Learner Cron Job
+  # Runs at 4:10 AM ET (9:10 UTC) on Saturdays
+  # Analyzes past week's outcomes and updates weights.json
+  - type: cron
+    name: bullsbears-weekly-learner
+    env: python
+    region: virginia
+    repo: https://github.com/vynfred/bullsbears
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    schedule: "10 9 * * 6"
+    startCommand: python scripts/run_weekly_learner.py
