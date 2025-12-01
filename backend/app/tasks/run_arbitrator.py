@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.services.cloud_agents.arbitrator_agent import get_final_picks
 from app.core.database import get_asyncpg_pool
 from app.services.system_state import is_system_on
+from app.services.fib_calculator import get_fib_targets_for_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,8 @@ def run_arbitrator():
             async with db.acquire() as conn:
                 for pick in final_picks:
                     symbol = pick.get("symbol")
+                    direction = pick.get("direction", "bullish")
+
                     candidate = await conn.fetchrow("""
                         SELECT * FROM shortlist_candidates
                         WHERE date = $1 AND symbol = $2
@@ -101,6 +104,24 @@ def run_arbitrator():
                     if not candidate:
                         logger.warning(f"Candidate data missing for {symbol}")
                         continue
+
+                    # Calculate Fibonacci-based targets (no AI hallucination)
+                    current_price = float(candidate['price_at_selection']) if candidate['price_at_selection'] else 0
+                    fib_targets = await get_fib_targets_for_symbol(
+                        symbol=symbol,
+                        current_price=current_price,
+                        direction=direction,
+                        db_pool=db
+                    )
+
+                    # Use Fib extension targets
+                    target_low = fib_targets.target_1   # Primary target (~70-75% hit rate)
+                    target_high = fib_targets.target_2  # Moonshot target (~40-50% hit rate)
+                    stop_loss = fib_targets.stop_loss
+
+                    logger.info(f"{symbol} ({direction}): price=${current_price:.2f}, "
+                               f"targets=${target_low:.2f}-${target_high:.2f}, "
+                               f"stop=${stop_loss:.2f}, valid={fib_targets.valid}")
 
                     pick_context = {
                         "technical": json.loads(candidate['technical_snapshot'] or '{}'),
@@ -118,10 +139,19 @@ def run_arbitrator():
                             "confidence": pick.get("confidence", 0.0),
                             "reasoning": pick.get("reasoning", "")
                         },
+                        "fib_analysis": {
+                            "swing_low": fib_targets.swing_low,
+                            "swing_high": fib_targets.swing_high,
+                            "target_1": fib_targets.target_1,
+                            "target_2": fib_targets.target_2,
+                            "stop_loss": fib_targets.stop_loss,
+                            "valid_setup": fib_targets.valid,
+                            "invalidation_reason": fib_targets.invalidation_reason
+                        },
                         "market_context": phase_data.get("market_context", {})
                     }
 
-                    # Insert final pick
+                    # Insert final pick with Fib targets
                     pick_id = await conn.fetchval("""
                         INSERT INTO picks (
                             symbol, direction, confidence, reasoning,
@@ -133,11 +163,11 @@ def run_arbitrator():
                         ) RETURNING id
                     """,
                         symbol,
-                        pick.get("direction", "bullish"),
+                        direction,
                         pick.get("confidence", 0.0),
                         pick.get("reasoning", ""),
-                        pick.get("target_low"),
-                        pick.get("target_high"),
+                        target_low,
+                        target_high,
                         json.dumps(pick_context)
                     )
 
@@ -148,7 +178,7 @@ def run_arbitrator():
                             picked_direction = $1,
                             updated_at = CURRENT_TIMESTAMP
                         WHERE date = $2 AND symbol = $3
-                    """, pick.get("direction", "bullish"), shortlist_date, symbol)
+                    """, direction, shortlist_date, symbol)
 
                     await conn.execute("""
                         INSERT INTO pick_outcomes_detailed (
@@ -159,10 +189,10 @@ def run_arbitrator():
                     """,
                         pick_id,
                         symbol,
-                        pick.get("direction"),
-                        candidate['price_at_selection'],
-                        pick.get("target_low"),
-                        pick.get("target_high")
+                        direction,
+                        current_price,
+                        target_low,
+                        target_high
                     )
 
             logger.info(f"Arbitrator complete: {len(final_picks)} picks saved")

@@ -6,44 +6,37 @@ CRITICAL RULES:
 1. BULLISH picks: Stocks with direction="bull" that have highest probability of going UP 10%+ in 30 days
 2. BEARISH picks: Stocks with direction="bear" that have highest probability of going DOWN 10%+ in 30 days
 3. You MUST select from BOTH categories - we need both bullish AND bearish picks
-4. Rank by: prescreen_score + vision_flags strength + social_score (positive for bull, negative for bear is GOOD)
+4. Rank by: prescreen_score + vision_flags strength + social_score alignment
 5. For bearish picks: negative social_score is a POSITIVE signal (confirms bearish sentiment)
 
 SCORING GUIDE:
 - prescreen_score: Higher = stronger candidate (0-100 scale)
-- vision_flags: breakout=true, trend_up=true are bullish signals; trend_down=true is bearish signal
-- social_score: -5 to +5 scale. Positive = bullish sentiment, Negative = bearish sentiment
+- vision_flags: breakout=true, trend_up=true are bullish; trend_down=true is bearish
+- social_score: -5 to +5 scale. Positive = bullish, Negative = bearish
 
-TARGET PRICE RULES (CRITICAL):
-- Each candidate has a "price_at_selection" field - this is the CURRENT stock price
-- For BULLISH picks: target_low = price * 1.10, target_high = price * 1.20 (10-20% upside)
-- For BEARISH picks: target_low = price * 0.90, target_high = price * 0.80 (10-20% downside)
-- NEVER return arbitrary dollar amounts - ALWAYS calculate from the actual price_at_selection
+REASONING FORMAT (use bullet points):
+• Key technical signal from vision analysis
+• Social/sentiment alignment
+• Risk factor or catalyst
+Keep it to 2-4 bullet points.
 
-REASONING FORMAT:
-- Use bullet points for clarity
-- Include: key technical signals, sentiment alignment, risk factors
-- Keep it concise but actionable (2-4 bullet points)
+DO NOT output target prices - they are calculated automatically using Fibonacci extensions.
 
-Return ONLY this JSON format - no extra text:
+Return ONLY this JSON format - no markdown, no extra text:
 
 {
   "bullish_picks": [
     {
       "ticker": "SYMBOL",
       "confidence": 85,
-      "reasoning": "• Strong breakout pattern detected\n• Positive social sentiment (+3)\n• Above key moving averages",
-      "target_low": 11.00,
-      "target_high": 12.00
+      "reasoning": "• Strong breakout pattern detected\n• Positive social sentiment (+3)\n• Above key support levels"
     }
   ],
   "bearish_picks": [
     {
       "ticker": "SYMBOL",
       "confidence": 78,
-      "reasoning": "• Clear downtrend on chart\n• Negative sentiment (-2)\n• Breaking support levels",
-      "target_low": 9.00,
-      "target_high": 8.00
+      "reasoning": "• Clear downtrend on chart\n• Negative sentiment (-2)\n• Breaking support levels"
     }
   ]
 }
