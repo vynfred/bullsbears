@@ -932,6 +932,72 @@ async def trigger_social_sync():
         return {"success": False, "message": str(e), "debug": debug_info}
 
 
+@router.post("/test-grok")
+async def test_grok():
+    """Test Grok API with a single symbol - verbose debug"""
+    import os
+    import json
+    import httpx
+    from pathlib import Path
+
+    debug_info = {
+        "grok_key_set": bool(os.getenv("GROK_API_KEY")),
+        "grok_key_prefix": os.getenv("GROK_API_KEY", "")[:10] + "..." if os.getenv("GROK_API_KEY") else None,
+    }
+
+    try:
+        grok_key = os.getenv("GROK_API_KEY")
+        if not grok_key:
+            return {"success": False, "message": "GROK_API_KEY not set", "debug": debug_info}
+
+        # Load prompt
+        prompt_path = Path(__file__).parent.parent.parent / "services" / "prompts" / "social_prompt.txt"
+        prompt = prompt_path.read_text(encoding="utf-8").strip()
+        debug_info["prompt_loaded"] = True
+
+        # Test with AAPL
+        symbol = "AAPL"
+        full_prompt = prompt.replace("{SYMBOL}", symbol)
+        debug_info["test_symbol"] = symbol
+
+        payload = {
+            "model": "grok-beta",
+            "messages": [{"role": "user", "content": full_prompt}],
+            "temperature": 0.0,
+            "max_tokens": 256,
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                "https://api.x.ai/v1/chat/completions",
+                json=payload,
+                headers={"Authorization": f"Bearer {grok_key}"}
+            )
+
+            debug_info["grok_status"] = resp.status_code
+
+            if resp.status_code == 200:
+                content = resp.json()["choices"][0]["message"]["content"]
+                debug_info["grok_raw_response"] = content
+
+                # Try to parse JSON
+                start = content.find("{")
+                end = content.rfind("}") + 1
+                if start != -1 and end > 0:
+                    data = json.loads(content[start:end])
+                    debug_info["parsed_data"] = data
+                    return {"success": True, "data": data, "debug": debug_info}
+                else:
+                    return {"success": False, "message": "No JSON in response", "debug": debug_info}
+            else:
+                debug_info["grok_error"] = resp.text
+                return {"success": False, "message": f"Grok API error: {resp.status_code}", "debug": debug_info}
+
+    except Exception as e:
+        debug_info["error"] = str(e)
+        return {"success": False, "message": str(e), "debug": debug_info}
+
+
 @router.post("/trigger-arbitrator")
 async def trigger_arbitrator():
     """Manually trigger the arbitrator task (SHORT_LIST → PICKS)"""
