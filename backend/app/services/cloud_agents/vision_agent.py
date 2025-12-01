@@ -25,14 +25,17 @@ MODEL = "accounts/fireworks/models/qwen3-vl-30b-a3b-thinking"
 # Hot-reloaded prompt
 PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "vision_prompt.txt"
 
-# Default flags on failure
+# Default flags on failure - Advanced pattern flags
 DEFAULT_FLAGS = {
-    "breakout_flag": False,
-    "volume_flag": False,
-    "support_resistance_flag": False,
-    "trend_flag": False,
-    "pattern_flag": False,
-    "reversal_flag": False,
+    "volume_shelf_breakout": False,
+    "wyckoff_phase_2": False,
+    "spring_setup": False,
+    "higher_high_higher_low": False,
+    "vcp_tightness": False,
+    "parabolic_curve": False,
+    "stop_hunt_liquidity_grab": False,
+    "dominant_pattern": "none",
+    "trend_direction": "neutral",
 }
 
 
@@ -128,12 +131,15 @@ async def _analyze_one(client: httpx.AsyncClient, item: Dict[str, Any], prompt: 
         return {
             "symbol": symbol,
             "vision_flags": {
-                "breakout_flag": bool(flags.get("breakout_flag", False)),
-                "volume_flag": bool(flags.get("volume_flag", False)),
-                "support_resistance_flag": bool(flags.get("support_resistance_flag", False)),
-                "trend_flag": bool(flags.get("trend_flag", False)),
-                "pattern_flag": bool(flags.get("pattern_flag", False)),
-                "reversal_flag": bool(flags.get("reversal_flag", False)),
+                "volume_shelf_breakout": bool(flags.get("volume_shelf_breakout", False)),
+                "wyckoff_phase_2": bool(flags.get("wyckoff_phase_2", False)),
+                "spring_setup": bool(flags.get("spring_setup", False)),
+                "higher_high_higher_low": bool(flags.get("higher_high_higher_low", False)),
+                "vcp_tightness": bool(flags.get("vcp_tightness", False)),
+                "parabolic_curve": bool(flags.get("parabolic_curve", False)),
+                "stop_hunt_liquidity_grab": bool(flags.get("stop_hunt_liquidity_grab", False)),
+                "dominant_pattern": str(flags.get("dominant_pattern", "none")),
+                "trend_direction": str(flags.get("trend_direction", "neutral")),
             }
         }
     except Exception as e:

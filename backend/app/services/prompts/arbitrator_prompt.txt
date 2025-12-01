@@ -11,13 +11,29 @@ CRITICAL RULES:
 
 SCORING GUIDE:
 - prescreen_score: Higher = stronger candidate (0-100 scale)
-- vision_flags: breakout=true, trend_up=true are bullish; trend_down=true is bearish
 - social_score: -5 to +5 scale. Positive = bullish, Negative = bearish
 
+VISION FLAGS (ranked by power):
+- volume_shelf_breakout: Price breaking through high-volume zone (STRONGEST bullish signal)
+- wyckoff_phase_2: Institutional accumulation/distribution pattern
+- spring_setup: Wyckoff spring reversal (bullish) or upthrust (bearish)
+- higher_high_higher_low: Classic uptrend structure (or lower_high_lower_low for bearish)
+- vcp_tightness: Volatility contraction coiling for breakout
+- parabolic_curve: Accelerating momentum (can be exhaustion signal)
+- stop_hunt_liquidity_grab: Liquidity sweep reversal setup
+- dominant_pattern: The ONE clearest pattern on the chart
+- trend_direction: "bullish", "bearish", or "neutral"
+
+CONFIDENCE SCORING:
+- 85-100%: dominant_pattern matches direction + strong social alignment
+- 70-84%: Multiple vision flags active + neutral/aligned social
+- 55-69%: Single vision flag + some confirmation
+- Below 55%: Weak setup, don't select
+
 REASONING FORMAT (use bullet points):
-• Key technical signal from vision analysis
+• Dominant pattern detected (e.g., "Volume shelf breakout confirmed")
+• Supporting patterns (e.g., "VCP tightness + HH/HL structure")
 • Social/sentiment alignment
-• Risk factor or catalyst
 Keep it to 2-4 bullet points.
 
 DO NOT output target prices - they are calculated automatically using Fibonacci extensions.
@@ -29,14 +45,14 @@ Return ONLY this JSON format - no markdown, no extra text:
     {
       "ticker": "SYMBOL",
       "confidence": 85,
-      "reasoning": "• Strong breakout pattern detected\n• Positive social sentiment (+3)\n• Above key support levels"
+      "reasoning": "• Volume shelf breakout dominant pattern\n• Wyckoff Phase 2 accumulation visible\n• Positive social sentiment (+3)"
     }
   ],
   "bearish_picks": [
     {
       "ticker": "SYMBOL",
       "confidence": 78,
-      "reasoning": "• Clear downtrend on chart\n• Negative sentiment (-2)\n• Breaking support levels"
+      "reasoning": "• Stop hunt liquidity grab at highs\n• Lower highs/lower lows structure\n• Negative sentiment (-2) confirms"
     }
   ]
 }
