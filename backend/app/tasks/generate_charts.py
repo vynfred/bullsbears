@@ -40,20 +40,31 @@ class ChartGenerator:
         self.db = await get_asyncpg_pool()
 
     async def generate_all_charts(self) -> Dict:
-        """Generate charts for today's SHORT_LIST → Firebase Storage → URL in DB"""
-        logger.info("📊 Starting chart generation for today's shortlist")
+        """Generate charts for latest SHORT_LIST → Firebase Storage → URL in DB"""
+        logger.info("📊 Starting chart generation for shortlist")
 
-        today = date.today()
-        date_str = today.strftime("%Y-%m-%d")
+        # Get the most recent shortlist date (handles timezone differences)
+        async with self.db.acquire() as conn:
+            latest = await conn.fetchrow("""
+                SELECT MAX(date) as latest_date FROM shortlist_candidates
+            """)
 
-        # Get today's SHORT_LIST symbols
+        if not latest or not latest['latest_date']:
+            logger.warning("No shortlist found in database")
+            return {"success": False, "reason": "no_shortlist", "charts": 0}
+
+        shortlist_date = latest['latest_date']
+        date_str = shortlist_date.strftime("%Y-%m-%d")
+        logger.info(f"Using shortlist date: {date_str}")
+
+        # Get SHORT_LIST symbols for that date
         async with self.db.acquire() as conn:
             rows = await conn.fetch("""
                 SELECT symbol, rank
                 FROM shortlist_candidates
                 WHERE date = $1
                 ORDER BY rank
-            """, today)
+            """, shortlist_date)
 
         symbols = [row["symbol"] for row in rows]
         if not symbols:
@@ -76,7 +87,7 @@ class ChartGenerator:
 
                 if chart_url:
                     # Store URL in shortlist_candidates
-                    await self._store_chart_url(symbol, today, chart_url)
+                    await self._store_chart_url(symbol, shortlist_date, chart_url)
                     success_count += 1
                 else:
                     failed.append(symbol)
