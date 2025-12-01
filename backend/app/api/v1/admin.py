@@ -1085,12 +1085,44 @@ async def trigger_arbitrator_sync():
         if not final_picks:
             return {"success": False, "message": "No picks returned", "debug": debug_info}
 
-        # Store picks
+        # Store picks with Fib-based targets
+        from app.services.fib_calculator import get_fib_targets_for_symbol
+
         async with db.acquire() as conn:
             for pick in final_picks:
                 symbol = pick.get("symbol") or pick.get("ticker")
                 if not symbol:
                     continue
+                direction = pick.get("direction", "bullish")
+
+                # Get price from shortlist
+                candidate = await conn.fetchrow("""
+                    SELECT price_at_selection FROM shortlist_candidates
+                    WHERE date = $1 AND symbol = $2
+                """, shortlist_date, symbol)
+
+                current_price = float(candidate['price_at_selection']) if candidate and candidate['price_at_selection'] else 0
+
+                # Calculate Fib targets (no hallucination)
+                fib_targets = await get_fib_targets_for_symbol(
+                    symbol=symbol,
+                    current_price=current_price,
+                    direction=direction,
+                    db_pool=db
+                )
+
+                target_low = fib_targets.target_1
+                target_high = fib_targets.target_2
+
+                debug_info[f"fib_{symbol}"] = {
+                    "price": current_price,
+                    "target_1": target_low,
+                    "target_2": target_high,
+                    "swing_low": fib_targets.swing_low,
+                    "swing_high": fib_targets.swing_high,
+                    "valid": fib_targets.valid
+                }
+
                 await conn.execute("""
                     INSERT INTO picks (
                         symbol, direction, confidence, reasoning,
@@ -1102,12 +1134,12 @@ async def trigger_arbitrator_sync():
                     )
                 """,
                     symbol,
-                    pick.get("direction", "bullish"),
+                    direction,
                     float(pick.get("confidence", 0)) / 100.0 if pick.get("confidence", 0) > 1 else pick.get("confidence", 0.0),
                     pick.get("reasoning", ""),
-                    pick.get("target_low"),
-                    pick.get("target_high"),
-                    json.dumps({"arbitrator": pick})
+                    target_low,
+                    target_high,
+                    json.dumps({"arbitrator": pick, "fib": debug_info[f"fib_{symbol}"]})
                 )
 
                 # Mark as picked
@@ -1115,7 +1147,7 @@ async def trigger_arbitrator_sync():
                     UPDATE shortlist_candidates
                     SET was_picked = TRUE, picked_direction = $1
                     WHERE date = $2 AND symbol = $3
-                """, pick.get("direction", "bullish"), shortlist_date, symbol)
+                """, direction, shortlist_date, symbol)
 
         return {
             "success": True,
