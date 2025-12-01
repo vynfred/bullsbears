@@ -1068,14 +1068,29 @@ async def trigger_arbitrator_sync():
 
         debug_info["arbitrator_response"] = result
 
+        # Handle both response formats: final_picks OR bullish_picks/bearish_picks
         final_picks = result.get("final_picks", [])
+        if not final_picks:
+            # Try bullish_picks + bearish_picks format
+            bullish = result.get("bullish_picks", [])
+            bearish = result.get("bearish_picks", [])
+            for p in bullish:
+                p["direction"] = "bullish"
+                p["symbol"] = p.get("ticker") or p.get("symbol")
+            for p in bearish:
+                p["direction"] = "bearish"
+                p["symbol"] = p.get("ticker") or p.get("symbol")
+            final_picks = bullish + bearish
+
         if not final_picks:
             return {"success": False, "message": "No picks returned", "debug": debug_info}
 
         # Store picks
         async with db.acquire() as conn:
             for pick in final_picks:
-                symbol = pick.get("symbol")
+                symbol = pick.get("symbol") or pick.get("ticker")
+                if not symbol:
+                    continue
                 await conn.execute("""
                     INSERT INTO picks (
                         symbol, direction, confidence, reasoning,
@@ -1088,7 +1103,7 @@ async def trigger_arbitrator_sync():
                 """,
                     symbol,
                     pick.get("direction", "bullish"),
-                    pick.get("confidence", 0.0),
+                    float(pick.get("confidence", 0)) / 100.0 if pick.get("confidence", 0) > 1 else pick.get("confidence", 0.0),
                     pick.get("reasoning", ""),
                     pick.get("target_low"),
                     pick.get("target_high"),

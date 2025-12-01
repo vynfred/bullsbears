@@ -34,18 +34,25 @@ async def get_final_picks(phase_data: dict) -> dict:
     except FileNotFoundError:
         bias = {"social_score_multiplier": 1.2, "confidence_calibration": 0.75}
 
+    # Separate bullish and bearish candidates
+    short_list = phase_data.get("short_list", [])
+    bullish_candidates = [s for s in short_list if s.get("direction") == "bull"]
+    bearish_candidates = [s for s in short_list if s.get("direction") == "bear"]
+
     # Build enhanced prompt with learned insights
     enhanced_prompt = f"""{base_prompt}
 
 LEARNED ARBITRATOR BIAS (updated nightly):
 Social Score ×{bias.get("social_score_multiplier", 1.2)}
 Confidence Calibration: {bias.get("confidence_calibration", 0.75)}
-Sector Preferences: {json.dumps(bias.get("sector_preferences", {}), indent=2)}
 
-TOP CANDIDATES ({len(phase_data.get("short_list", []))} total):
-{json.dumps(phase_data.get("short_list", [])[:15], indent=2)}
+=== BULLISH CANDIDATES ({len(bullish_candidates)} stocks with direction="bull") ===
+{json.dumps(bullish_candidates[:20], indent=2, default=str)}
 
-Select 3–6 final picks. Return valid JSON only.
+=== BEARISH CANDIDATES ({len(bearish_candidates)} stocks with direction="bear") ===
+{json.dumps(bearish_candidates[:20], indent=2, default=str)}
+
+Select TOP 3 from each category. Return valid JSON only.
 """
 
     payload = {
