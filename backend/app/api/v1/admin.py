@@ -771,11 +771,11 @@ async def test_vision():
             }
         ],
         "temperature": 0.0,
-        "max_tokens": 256,
+        "max_tokens": 1024,  # Thinking model needs more tokens for reasoning + JSON output
     }
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=90.0) as client:
             resp = await client.post(
                 "https://api.fireworks.ai/inference/v1/chat/completions",
                 json=payload,
