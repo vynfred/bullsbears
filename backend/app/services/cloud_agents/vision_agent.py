@@ -18,9 +18,9 @@ from app.core.database import get_asyncpg_pool
 
 logger = logging.getLogger(__name__)
 
-# Fireworks Vision API (Qwen2.5-VL-72B)
+# Fireworks Vision API (Qwen2.5-VL-7B)
 FIREWORKS_URL = "https://api.fireworks.ai/inference/v1/chat/completions"
-MODEL = "accounts/fireworks/models/qwen2-vl-72b-instruct"
+MODEL = "accounts/fireworks/models/qwen2.5-vl-7b-instruct"
 
 # Hot-reloaded prompt
 PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "vision_prompt.txt"
