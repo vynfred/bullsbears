@@ -1,15 +1,15 @@
 # backend/app/services/cloud_agents/vision_agent.py
 """
 Vision Agent – Groq Llama-3.2-11B-Vision (Phase 3)
-75 parallel calls → 6 boolean pattern flags per chart
-Pure async. No classes. No legacy.
+Fetches chart images from Firebase Storage → sends to Groq Vision API
+Returns 6 boolean pattern flags per chart
 """
 
 import asyncio
+import base64
 import json
 import logging
 import os
-from datetime import date
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -18,24 +18,37 @@ from app.core.database import get_asyncpg_pool
 
 logger = logging.getLogger(__name__)
 
-# Groq API — locked in
+# Groq Vision API
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 MODEL = "llama-3.2-11b-vision-preview"
 
-# Hot-reloaded prompt (loaded once)
-PROMPT = (Path(__file__).parent.parent / "prompts" / "vision_prompt.txt").read_text(encoding="utf-8").strip()
+# Hot-reloaded prompt
+PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "vision_prompt.txt"
+
+# Default flags on failure
+DEFAULT_FLAGS = {
+    "breakout_flag": False,
+    "volume_flag": False,
+    "support_resistance_flag": False,
+    "trend_flag": False,
+    "pattern_flag": False,
+    "reversal_flag": False,
+}
 
 
 async def run_vision_analysis(charts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Input: List of dicts with 'symbol' and 'chart_base64' (PNG string)
+    Input: List of dicts with 'symbol' and 'chart_url' (Firebase Storage URL)
     Output: List with 'symbol' and 'vision_flags' (6 booleans)
     """
-    logger.info(f"Vision agent: analyzing {len(charts)} charts via Groq")
+    logger.info(f"Vision agent: analyzing {len(charts)} charts via Groq Vision")
 
-    async with httpx.AsyncClient(timeout=30.0, limits=httpx.Limits(max_connections=100)) as client:
-        tasks = [_analyze_one(client, item) for item in charts]
+    # Reload prompt each run (hot-reload)
+    prompt = PROMPT_PATH.read_text(encoding="utf-8").strip()
+
+    async with httpx.AsyncClient(timeout=60.0, limits=httpx.Limits(max_connections=20)) as client:
+        tasks = [_analyze_one(client, item, prompt) for item in charts]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Process results
@@ -44,38 +57,39 @@ async def run_vision_analysis(charts: List[Dict[str, Any]]) -> List[Dict[str, An
         symbol = item["symbol"]
         if isinstance(result, Exception):
             logger.error(f"Vision analysis failed for {symbol}: {result}")
-            processed.append({
-                "symbol": symbol,
-                "vision_flags": {
-                    "wyckoff_phase_2": False,
-                    "weekly_triangle_coil": False,
-                    "volume_shelf_breakout": False,
-                    "p_shape_profile": False,
-                    "fakeout_wick_rejection": False,
-                    "spring_setup": False,
-                }
-            })
+            processed.append({"symbol": symbol, "vision_flags": DEFAULT_FLAGS.copy()})
         else:
             processed.append(result)
 
     # Store in DB
     await _store_vision_results(processed)
 
-    logger.info(f"Vision analysis complete: {len(processed)} charts")
+    success_count = sum(1 for p in processed if p["vision_flags"] != DEFAULT_FLAGS)
+    logger.info(f"Vision analysis complete: {success_count}/{len(processed)} analyzed successfully")
     return processed
 
 
-async def _analyze_one(client: httpx.AsyncClient, item: Dict[str, Any]) -> Dict[str, Any]:
+async def _analyze_one(client: httpx.AsyncClient, item: Dict[str, Any], prompt: str) -> Dict[str, Any]:
     symbol = item["symbol"]
-    base64_png = item["chart_base64"]
+    chart_url = item["chart_url"]
 
+    # Download chart image from Firebase Storage
+    try:
+        img_resp = await client.get(chart_url)
+        img_resp.raise_for_status()
+        base64_png = base64.b64encode(img_resp.content).decode("utf-8")
+    except Exception as e:
+        logger.error(f"Failed to download chart for {symbol}: {e}")
+        raise
+
+    # Send to Groq Vision API
     payload = {
         "model": MODEL,
         "messages": [
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": PROMPT},
+                    {"type": "text", "text": f"Stock: {symbol}\n\n{prompt}"},
                     {
                         "type": "image_url",
                         "image_url": {"url": f"data:image/png;base64,{base64_png}"}
@@ -84,7 +98,7 @@ async def _analyze_one(client: httpx.AsyncClient, item: Dict[str, Any]) -> Dict[
             }
         ],
         "temperature": 0.0,
-        "max_tokens": 128,
+        "max_tokens": 256,
     }
 
     try:
@@ -96,20 +110,23 @@ async def _analyze_one(client: httpx.AsyncClient, item: Dict[str, Any]) -> Dict[
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]
 
-        # Strict JSON parse
+        # Parse JSON from response
         start = content.find("{")
         end = content.rfind("}") + 1
+        if start == -1 or end == 0:
+            raise ValueError(f"No JSON found in response: {content[:100]}")
+
         flags = json.loads(content[start:end])
 
         return {
             "symbol": symbol,
             "vision_flags": {
-                "wyckoff_phase_2": bool(flags.get("wyckoff_phase_2", False)),
-                "weekly_triangle_coil": bool(flags.get("weekly_triangle_coil", False)),
-                "volume_shelf_breakout": bool(flags.get("volume_shelf_breakout", False)),
-                "p_shape_profile": bool(flags.get("p_shape_profile", False)),
-                "fakeout_wick_rejection": bool(flags.get("fakeout_wick_rejection", False)),
-                "spring_setup": bool(flags.get("spring_setup", False)),
+                "breakout_flag": bool(flags.get("breakout_flag", False)),
+                "volume_flag": bool(flags.get("volume_flag", False)),
+                "support_resistance_flag": bool(flags.get("support_resistance_flag", False)),
+                "trend_flag": bool(flags.get("trend_flag", False)),
+                "pattern_flag": bool(flags.get("pattern_flag", False)),
+                "reversal_flag": bool(flags.get("reversal_flag", False)),
             }
         }
     except Exception as e:
@@ -121,7 +138,16 @@ async def _store_vision_results(results: List[Dict[str, Any]]):
     """Store vision flags in shortlist_candidates table"""
     try:
         db = await get_asyncpg_pool()
-        today = date.today()
+
+        # Get latest shortlist date
+        async with db.acquire() as conn:
+            latest = await conn.fetchrow("SELECT MAX(date) as latest_date FROM shortlist_candidates")
+
+        if not latest or not latest['latest_date']:
+            logger.error("No shortlist found for storing vision results")
+            return
+
+        shortlist_date = latest['latest_date']
 
         async with db.acquire() as conn:
             for r in results:
@@ -130,8 +156,8 @@ async def _store_vision_results(results: List[Dict[str, Any]]):
                     SET vision_flags = $1,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE date = $2 AND symbol = $3
-                """, json.dumps(r["vision_flags"]), today, r["symbol"])
+                """, json.dumps(r["vision_flags"]), shortlist_date, r["symbol"])
 
-        logger.info(f"Vision results stored for {len(results)} symbols")
+        logger.info(f"Vision results stored for {len(results)} symbols (date: {shortlist_date})")
     except Exception as e:
         logger.error(f"Failed to store vision results: {e}")

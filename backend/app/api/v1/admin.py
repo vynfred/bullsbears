@@ -671,6 +671,24 @@ async def trigger_vision():
         return {"success": False, "message": f"Error: {str(e)}"}
 
 
+@router.post("/trigger-vision-sync")
+async def trigger_vision_sync():
+    """Run vision analysis synchronously for debugging"""
+    try:
+        from app.services.system_state import is_system_on
+
+        if not await is_system_on():
+            return {"success": False, "message": "System is OFF. Turn it ON first."}
+
+        from app.tasks.run_groq_vision import _run_vision
+        result = await _run_vision()
+
+        return {"success": True, "result": result}
+    except Exception as e:
+        import traceback
+        return {"success": False, "message": str(e), "traceback": traceback.format_exc()}
+
+
 @router.post("/trigger-social")
 async def trigger_social():
     """Manually trigger Grok social/news analysis"""
