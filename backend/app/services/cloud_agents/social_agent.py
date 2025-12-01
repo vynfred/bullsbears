@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Grok API — locked in
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 GROK_URL = "https://api.x.ai/v1/chat/completions"
-MODEL = "grok-beta"
+MODEL = "grok-4-fast-reasoning"
 
 # Hot-reloaded prompt
 PROMPT = (Path(__file__).parent.parent / "prompts" / "social_prompt.txt").read_text(encoding="utf-8").strip()

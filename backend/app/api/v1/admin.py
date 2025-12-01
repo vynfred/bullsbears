@@ -961,7 +961,7 @@ async def test_grok():
         debug_info["test_symbol"] = symbol
 
         payload = {
-            "model": "grok-beta",
+            "model": "grok-4-fast-reasoning",
             "messages": [{"role": "user", "content": full_prompt}],
             "temperature": 0.0,
             "max_tokens": 256,
