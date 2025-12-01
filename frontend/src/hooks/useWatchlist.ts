@@ -1,10 +1,27 @@
 // src/hooks/useWatchlist.ts
+// Uses Firebase Realtime Database for user-specific watchlist storage
 import { useState, useEffect, useCallback } from 'react';
-import { api } from '@/lib/api';
-import { HistoryEntry } from '@/lib/types';
+import { getDatabase, ref, onValue, push, remove, set } from 'firebase/database';
+import { useAuth } from './useAuth';
+
+export interface WatchlistEntry {
+  id: string;
+  symbol: string;
+  name?: string;
+  entry_type: string;  // 'long' or 'short'
+  entry_price: number;
+  target_price: number;
+  ai_confidence_score: number;
+  ai_recommendation: string;
+  added_at: string;
+  // Computed fields (from FMP API)
+  current_price?: number;
+  price_change?: number;
+  price_change_percent?: number;
+}
 
 export interface UseWatchlistReturn {
-  watchlistEntries: HistoryEntry[];
+  watchlistEntries: WatchlistEntry[];
   addToWatchlist: (request: {
     symbol: string;
     name?: string;
@@ -14,61 +31,151 @@ export interface UseWatchlistReturn {
     ai_confidence_score: number;
     ai_recommendation: string;
   }) => Promise<boolean>;
+  removeFromWatchlist: (symbol: string) => Promise<boolean>;
   isAdding: boolean;
   error: string | null;
-  refresh: () => Promise<void>;
+  refresh: () => void;
   isInWatchlist: (symbol: string) => boolean;
 }
 
 export function useWatchlist(): UseWatchlistReturn {
-  const [watchlistEntries, setWatchlistEntries] = useState<HistoryEntry[]>([]);
+  const { user } = useAuth();
+  const [watchlistEntries, setWatchlistEntries] = useState<WatchlistEntry[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchWatchlist = useCallback(async () => {
-    try {
-      setError(null);
-      const data = await api.getWatchlistEntries();
-      setWatchlistEntries(data);
-    } catch (err) {
-      setError('Failed to load watchlist');
+  // Subscribe to Firebase Realtime Database for watchlist updates
+  useEffect(() => {
+    if (!user?.uid) {
+      setWatchlistEntries([]);
+      return;
     }
-  }, []);
 
-  const addToWatchlist = useCallback(async (request: any) => {
+    const db = getDatabase();
+    const watchlistRef = ref(db, `users/${user.uid}/watchlist`);
+
+    const unsubscribe = onValue(watchlistRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const entries: WatchlistEntry[] = Object.entries(data).map(([key, value]: [string, any]) => ({
+          id: key,
+          symbol: value.symbol,
+          name: value.name,
+          entry_type: value.entry_type,
+          entry_price: value.entry_price,
+          target_price: value.target_price,
+          ai_confidence_score: value.ai_confidence_score,
+          ai_recommendation: value.ai_recommendation,
+          added_at: value.added_at,
+          current_price: value.current_price,
+          price_change: value.price_change,
+          price_change_percent: value.price_change_percent,
+        }));
+        // Sort by added_at descending (newest first)
+        entries.sort((a, b) => new Date(b.added_at).getTime() - new Date(a.added_at).getTime());
+        setWatchlistEntries(entries);
+      } else {
+        setWatchlistEntries([]);
+      }
+      setError(null);
+    }, (err) => {
+      console.error('Firebase watchlist error:', err);
+      setError('Failed to load watchlist');
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  const addToWatchlist = useCallback(async (request: {
+    symbol: string;
+    name?: string;
+    entry_type: string;
+    entry_price: number;
+    target_price: number;
+    ai_confidence_score: number;
+    ai_recommendation: string;
+  }) => {
+    if (!user?.uid) {
+      setError('Must be logged in to add to watchlist');
+      return false;
+    }
+
+    // Check if already in watchlist
+    if (watchlistEntries.some(e => e.symbol === request.symbol)) {
+      setError(`${request.symbol} already in watchlist`);
+      return false;
+    }
+
     try {
       setIsAdding(true);
       setError(null);
-      const result = await api.addToWatchlist(request);
-      if (result.success) {
-        await fetchWatchlist();
-        return true;
-      }
-      setError(result.message || 'Failed to add');
-      return false;
+
+      const db = getDatabase();
+      const watchlistRef = ref(db, `users/${user.uid}/watchlist`);
+
+      await push(watchlistRef, {
+        symbol: request.symbol,
+        name: request.name || request.symbol,
+        entry_type: request.entry_type,
+        entry_price: request.entry_price,
+        target_price: request.target_price,
+        ai_confidence_score: request.ai_confidence_score,
+        ai_recommendation: request.ai_recommendation,
+        added_at: new Date().toISOString(),
+      });
+
+      return true;
     } catch (err) {
-      setError('Network error');
+      console.error('Failed to add to watchlist:', err);
+      setError('Failed to add to watchlist');
       return false;
     } finally {
       setIsAdding(false);
     }
-  }, [fetchWatchlist]);
+  }, [user?.uid, watchlistEntries]);
+
+  const removeFromWatchlist = useCallback(async (symbol: string) => {
+    if (!user?.uid) {
+      setError('Must be logged in');
+      return false;
+    }
+
+    const entry = watchlistEntries.find(e => e.symbol === symbol);
+    if (!entry) {
+      setError(`${symbol} not found in watchlist`);
+      return false;
+    }
+
+    try {
+      const db = getDatabase();
+      const entryRef = ref(db, `users/${user.uid}/watchlist/${entry.id}`);
+      await remove(entryRef);
+      return true;
+    } catch (err) {
+      console.error('Failed to remove from watchlist:', err);
+      setError('Failed to remove from watchlist');
+      return false;
+    }
+  }, [user?.uid, watchlistEntries]);
 
   const isInWatchlist = useCallback(
-    (symbol: string) => watchlistEntries.some(e => e.ticker === symbol),
+    (symbol: string) => watchlistEntries.some(e => e.symbol === symbol),
     [watchlistEntries]
   );
 
-  useEffect(() => {
-    fetchWatchlist();
-  }, [fetchWatchlist]);
+  const refresh = useCallback(() => {
+    // Firebase onValue listener auto-refreshes, but we can trigger a manual check
+    // by just clearing error state
+    setError(null);
+  }, []);
 
   return {
     watchlistEntries,
     addToWatchlist,
+    removeFromWatchlist,
     isAdding,
     error,
-    refresh: fetchWatchlist,
+    refresh,
     isInWatchlist,
   };
 }

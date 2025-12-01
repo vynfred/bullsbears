@@ -1,28 +1,43 @@
 // src/components/private/WatchlistTab.tsx
 'use client';
 
-import React from 'react';
-import { useWatchlist } from '@/hooks/useWatchlist';
-import { HistoryEntry } from '@/lib/types';
-import { TrendingUp, TrendingDown, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { useWatchlist, WatchlistEntry } from '@/hooks/useWatchlist';
+import { TrendingUp, TrendingDown, X, Eye, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 
 export default function WatchlistTab() {
   const {
     watchlistEntries,
-    isAdding,
+    removeFromWatchlist,
     error,
     refresh,
-    isInWatchlist,
-    addToWatchlist,
   } = useWatchlist();
+
+  const [removingSymbol, setRemovingSymbol] = useState<string | null>(null);
+
+  const handleRemove = async (symbol: string) => {
+    setRemovingSymbol(symbol);
+    await removeFromWatchlist(symbol);
+    setRemovingSymbol(null);
+  };
+
+  // Calculate days since added
+  const getDaysSinceAdded = (addedAt: string) => {
+    const added = new Date(addedAt);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - added.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
 
   if (error) {
     return (
       <div className="p-4 text-center text-red-400">
-        Error: {error}
-        <Button onClick={refresh} variant="outline" className="ml-2">
+        <p>Error: {error}</p>
+        <Button onClick={refresh} variant="outline" className="mt-2">
+          <RefreshCw className="w-4 h-4 mr-2" />
           Retry
         </Button>
       </div>
@@ -31,60 +46,102 @@ export default function WatchlistTab() {
 
   if (watchlistEntries.length === 0) {
     return (
-      <div className="p-8 text-center text-gray-400">
-        <p className="text-lg">Your watchlist is empty</p>
-        <p className="text-sm mt-2">Add picks from the AI feed to start tracking</p>
+      <div className="p-8 text-center">
+        <Eye className="w-16 h-16 mx-auto mb-4 text-slate-500 opacity-30" />
+        <p className="text-lg text-slate-400">Your watchlist is empty</p>
+        <p className="text-sm mt-2 text-slate-500">Add picks from the AI feed to start tracking</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      {watchlistEntries.map(entry => {
-        const isPositive = entry.actual_percent >= 0;
+      <div className="flex items-center justify-between px-2">
+        <h2 className="text-lg font-semibold text-slate-200">
+          Watching {watchlistEntries.length} stock{watchlistEntries.length !== 1 ? 's' : ''}
+        </h2>
+      </div>
+
+      {watchlistEntries.map((entry: WatchlistEntry) => {
+        const changePercent = entry.price_change_percent || 0;
+        const isPositive = changePercent >= 0;
+        const isBullish = entry.entry_type === 'long';
+        const daysSinceAdded = getDaysSinceAdded(entry.added_at);
+
         return (
-          <Card key={entry.id} className="bg-gray-800 border-gray-700">
+          <Card
+            key={entry.id}
+            className={`border-2 transition-all ${
+              isBullish
+                ? 'bg-gradient-to-br from-emerald-950/40 via-slate-900/40 to-emerald-900/20 border-emerald-700/30'
+                : 'bg-gradient-to-br from-rose-950/40 via-slate-900/40 to-rose-900/20 border-rose-700/30'
+            }`}
+          >
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg text-white">
-                  {entry.ticker}
-                  <span className="text-sm font-normal text-gray-400 ml-2">
-                    {entry.company_name}
-                  </span>
-                </CardTitle>
+                <div className="flex items-center gap-3">
+                  <CardTitle className="text-lg text-slate-100">
+                    {entry.symbol}
+                  </CardTitle>
+                  <Badge
+                    variant="outline"
+                    className={isBullish ? 'text-emerald-400 border-emerald-500/50' : 'text-rose-400 border-rose-500/50'}
+                  >
+                    {isBullish ? 'LONG' : 'SHORT'}
+                  </Badge>
+                </div>
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="text-gray-400 hover:text-red-400"
-                  onClick={() => {
-                    // Optional: remove from watchlist
-                  }}
+                  className="text-slate-400 hover:text-red-400 hover:bg-red-500/10"
+                  onClick={() => handleRemove(entry.symbol)}
+                  disabled={removingSymbol === entry.symbol}
                 >
-                  <X className="w-4 h-4" />
+                  {removingSymbol === entry.symbol ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <X className="w-4 h-4" />
+                  )}
                 </Button>
               </div>
+              {entry.name && (
+                <p className="text-sm text-slate-400">{entry.name}</p>
+              )}
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-gray-400">Entry</p>
-                  <p className="text-white">${entry.entry_price.toFixed(2)}</p>
+                  <p className="text-slate-500 text-xs uppercase">Price When Identified</p>
+                  <p className="text-slate-200 text-lg">${entry.entry_price.toFixed(2)}</p>
                 </div>
                 <div>
-                  <p className="text-gray-400">Current</p>
-                  <p className="text-white">${entry.current_price.toFixed(2)}</p>
+                  <p className="text-slate-500 text-xs uppercase">Target</p>
+                  <p className="text-slate-200 text-lg">${entry.target_price.toFixed(2)}</p>
                 </div>
                 <div>
-                  <p className="text-gray-400">Change</p>
-                  <p className={isPositive ? 'text-emerald-400' : 'text-red-400'}>
-                    {isPositive ? <TrendingUp className="inline w-4 h-4 mr-1" /> : <TrendingDown className="inline w-4 h-4 mr-1" />}
-                    {entry.actual_percent.toFixed(2)}%
+                  <p className="text-slate-500 text-xs uppercase">Change Since</p>
+                  <p className={`text-lg flex items-center gap-1 ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {isPositive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                    {isPositive ? '+' : ''}{changePercent.toFixed(2)}%
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-400">Days to Hit</p>
-                  <p className="text-white">{entry.days_to_hit}</p>
+                  <p className="text-slate-500 text-xs uppercase">Days Held</p>
+                  <p className="text-slate-200 text-lg">{daysSinceAdded}d</p>
                 </div>
+              </div>
+
+              {/* AI Confidence */}
+              <div className="mt-4 pt-4 border-t border-slate-700/50">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 text-xs uppercase">AI Confidence</span>
+                  <span className={`text-sm ${entry.ai_confidence_score >= 70 ? 'text-emerald-400' : entry.ai_confidence_score >= 50 ? 'text-yellow-400' : 'text-orange-400'}`}>
+                    {entry.ai_confidence_score}%
+                  </span>
+                </div>
+                {entry.ai_recommendation && (
+                  <p className="text-slate-400 text-xs mt-2 italic">{entry.ai_recommendation}</p>
+                )}
               </div>
             </CardContent>
           </Card>

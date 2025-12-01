@@ -1,5 +1,6 @@
 // src/lib/api.ts
 import { HistoryEntry, WatchlistNotification } from './types';
+import { getAuth } from 'firebase/auth';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -30,14 +31,39 @@ export interface AIVsWatchlistPerformance {
   period: string;
 }
 
-const fetchWithError = async (url: string, options: RequestInit = {}) => {
+// Get Firebase auth token for authenticated requests
+const getAuthToken = async (): Promise<string | null> => {
   try {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (user) {
+      return await user.getIdToken();
+    }
+    return null;
+  } catch (error) {
+    console.error('Failed to get auth token:', error);
+    return null;
+  }
+};
+
+const fetchWithError = async (url: string, options: RequestInit = {}, requireAuth = false) => {
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string>),
+    };
+
+    // Add auth token if required
+    if (requireAuth) {
+      const token = await getAuthToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
+
     const res = await fetch(`${API_BASE}${url}`, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
     });
 
     if (!res.ok) {
@@ -83,9 +109,9 @@ export const api = {
     );
   },
 
-  // WATCHLIST
+  // WATCHLIST (requires auth)
   getWatchlistEntries: async (): Promise<HistoryEntry[]> => {
-    return fetchWithError('/api/v1/watchlist');
+    return fetchWithError('/api/v1/watchlist', {}, true);
   },
 
   addToWatchlist: async (request: {
@@ -100,12 +126,18 @@ export const api = {
     return fetchWithError('/api/v1/watchlist', {
       method: 'POST',
       body: JSON.stringify(request),
-    });
+    }, true);
   },
 
-  // NOTIFICATIONS
+  removeFromWatchlist: async (symbol: string) => {
+    return fetchWithError(`/api/v1/watchlist/${symbol}`, {
+      method: 'DELETE',
+    }, true);
+  },
+
+  // NOTIFICATIONS (requires auth)
   getWatchlistNotifications: async (): Promise<WatchlistNotification[]> => {
-    return fetchWithError('/api/v1/watchlist/notifications');
+    return fetchWithError('/api/v1/watchlist/notifications', {}, true);
   },
 
   // HISTORY

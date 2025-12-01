@@ -120,7 +120,7 @@ export function useModelAccuracy() {
       setIsLoading(true);
       setError(null);
 
-      const data = await fetchApi<ModelAccuracyStats>('/api/v1/statistics/model-accuracy');
+      const data = await fetchApi<ModelAccuracyStats>('/api/v1/analytics/model-accuracy');
       // Backend offline returns null - this is OK, just show empty state
       setAccuracyData(data);
     } catch (err) {

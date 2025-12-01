@@ -14,6 +14,17 @@ SCORING GUIDE:
 - vision_flags: breakout=true, trend_up=true are bullish signals; trend_down=true is bearish signal
 - social_score: -5 to +5 scale. Positive = bullish sentiment, Negative = bearish sentiment
 
+TARGET PRICE RULES (CRITICAL):
+- Each candidate has a "price_at_selection" field - this is the CURRENT stock price
+- For BULLISH picks: target_low = price * 1.10, target_high = price * 1.20 (10-20% upside)
+- For BEARISH picks: target_low = price * 0.90, target_high = price * 0.80 (10-20% downside)
+- NEVER return arbitrary dollar amounts - ALWAYS calculate from the actual price_at_selection
+
+REASONING FORMAT:
+- Use bullet points for clarity
+- Include: key technical signals, sentiment alignment, risk factors
+- Keep it concise but actionable (2-4 bullet points)
+
 Return ONLY this JSON format - no extra text:
 
 {
@@ -21,18 +32,18 @@ Return ONLY this JSON format - no extra text:
     {
       "ticker": "SYMBOL",
       "confidence": 85,
-      "reasoning": "Brief explanation of why this is a top bullish pick",
-      "target_low": 50.00,
-      "target_high": 55.00
+      "reasoning": "• Strong breakout pattern detected\n• Positive social sentiment (+3)\n• Above key moving averages",
+      "target_low": 11.00,
+      "target_high": 12.00
     }
   ],
   "bearish_picks": [
     {
       "ticker": "SYMBOL",
       "confidence": 78,
-      "reasoning": "Brief explanation of why this is a top bearish pick",
-      "target_low": 45.00,
-      "target_high": 40.00
+      "reasoning": "• Clear downtrend on chart\n• Negative sentiment (-2)\n• Breaking support levels",
+      "target_low": 9.00,
+      "target_high": 8.00
     }
   ]
 }

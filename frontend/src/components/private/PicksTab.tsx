@@ -256,12 +256,12 @@ export default function PicksTab({ onPickClick }: PicksTabProps = {}) {
 
                             <div className="text-center shrink-0">
                               <div className="text-xl text-slate-100">${pick.priceAtAlert > 0 ? pick.priceAtAlert.toFixed(2) : '—'}</div>
-                              <p className="text-slate-500 text-xs whitespace-nowrap">entry price</p>
+                              <p className="text-slate-500 text-xs whitespace-nowrap">price when identified</p>
                             </div>
 
                             <div className="text-center shrink-0">
                               <div className={`text-xl ${isBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                ${pick.targetPriceLow?.toFixed(2) || '—'} - ${pick.targetPriceHigh?.toFixed(2) || '—'}
+                                ${pick.targetPriceLow?.toFixed(2) || '—'} → ${pick.targetPriceHigh?.toFixed(2) || '—'}
                               </div>
                               <p className="text-slate-500 text-xs whitespace-nowrap">target range</p>
                             </div>
@@ -304,42 +304,60 @@ export default function PicksTab({ onPickClick }: PicksTabProps = {}) {
 
                     <CollapsibleContent>
                       <CardContent className="pt-0 pb-4 space-y-4 border-t border-slate-700/50">
-                        {/* Chart Image */}
-                        {pick.chartUrl && (
-                          <div className="pt-4">
-                            <img
-                              src={pick.chartUrl}
-                              alt={`${pick.symbol} chart`}
-                              className="w-full rounded-lg border border-slate-700/50"
-                            />
-                          </div>
-                        )}
+                        {/* Chart + Analysis Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+                          {/* Left: Chart Image */}
+                          {pick.chartUrl ? (
+                            <div className="flex items-center">
+                              <img
+                                src={pick.chartUrl}
+                                alt={`${pick.symbol} chart`}
+                                className="w-full rounded-lg border border-slate-700/50"
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-center bg-slate-800/30 rounded-lg border border-slate-700/50 min-h-[200px]">
+                              <p className="text-slate-500 text-sm">Chart not available</p>
+                            </div>
+                          )}
 
-                        {/* Target Prices */}
-                        <div className="grid grid-cols-2 gap-2 pt-4">
-                          <div className={`text-center p-3 rounded-lg ${isBullish ? 'bg-emerald-900/30 border border-emerald-700/30' : 'bg-rose-900/30 border border-rose-700/30'}`}>
-                            <p className="text-slate-400 text-xs mb-1">Target Low</p>
-                            <p className={isBullish ? 'text-emerald-400 text-lg font-semibold' : 'text-rose-400 text-lg font-semibold'}>
-                              ${pick.targetPriceLow?.toFixed(2) || '—'}
-                            </p>
-                          </div>
-                          <div className={`text-center p-3 rounded-lg ${isBullish ? 'bg-emerald-900/30 border border-emerald-700/30' : 'bg-rose-900/30 border border-rose-700/30'}`}>
-                            <p className="text-slate-400 text-xs mb-1">Target High</p>
-                            <p className={isBullish ? 'text-emerald-400 text-lg font-semibold' : 'text-rose-400 text-lg font-semibold'}>
-                              ${pick.targetPriceHigh?.toFixed(2) || '—'}
-                            </p>
+                          {/* Right: AI Analysis + Targets */}
+                          <div className="flex flex-col gap-3">
+                            {/* Target Range Box */}
+                            <div className={`p-4 rounded-lg ${isBullish ? 'bg-emerald-900/20 border border-emerald-700/30' : 'bg-rose-900/20 border border-rose-700/30'}`}>
+                              <p className="text-slate-400 text-xs mb-2 uppercase tracking-wider">Target Range</p>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-2xl font-bold ${isBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                  ${pick.targetPriceLow?.toFixed(2) || '—'}
+                                </span>
+                                <span className="text-slate-500">→</span>
+                                <span className={`text-2xl font-bold ${isBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                  ${pick.targetPriceHigh?.toFixed(2) || '—'}
+                                </span>
+                              </div>
+                              {pick.priceAtAlert > 0 && (
+                                <p className="text-slate-500 text-xs mt-2">
+                                  {isBullish ? 'Upside' : 'Downside'}: {Math.abs(((pick.targetPriceHigh || 0) - pick.priceAtAlert) / pick.priceAtAlert * 100).toFixed(1)}%
+                                </p>
+                              )}
+                            </div>
+
+                            {/* AI Analysis Bullet Points */}
+                            {(pick.reasoning || pick.aiSummary) && (
+                              <div className="p-4 bg-slate-800/30 rounded-lg flex-1">
+                                <p className="text-slate-400 text-xs mb-3 uppercase tracking-wider">AI Analysis</p>
+                                <ul className="space-y-2">
+                                  {(pick.reasoning || pick.aiSummary || '').split('\n').filter(Boolean).map((point: string, idx: number) => (
+                                    <li key={idx} className="text-sm text-slate-300 flex items-start gap-2">
+                                      <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${isBullish ? 'bg-emerald-400' : 'bg-rose-400'}`}></span>
+                                      <span>{point.replace(/^[•\-]\s*/, '')}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                           </div>
                         </div>
-
-                        {/* AI Analysis */}
-                        {(pick.aiSummary || pick.reasoning) && (
-                          <div className="p-4 bg-slate-800/30 rounded-lg">
-                            <p className="text-slate-400 mb-2 text-center text-sm font-medium">AI Analysis</p>
-                            <p className="text-sm leading-relaxed text-center text-slate-300">
-                              {pick.reasoning || pick.aiSummary}
-                            </p>
-                          </div>
-                        )}
 
                         {/* Add to Watchlist Button */}
                         <Button
@@ -350,10 +368,10 @@ export default function PicksTab({ onPickClick }: PicksTabProps = {}) {
                               symbol: pick.symbol,
                               name: pick.name || pick.symbol,
                               entry_type: isBullish ? "long" : "short",
-                              entry_price: pick.currentPrice,
+                              entry_price: pick.priceAtAlert,
                               target_price: isBullish ? pick.targetPriceHigh : pick.targetPriceLow,
                               ai_confidence_score: pick.confidence,
-                              ai_recommendation: pick.aiSummary || pick.reasoning || "High-confidence AI pick",
+                              ai_recommendation: pick.reasoning || "High-confidence AI pick",
                             });
                           }}
                           disabled={isAdding || alreadyInWatchlist}
