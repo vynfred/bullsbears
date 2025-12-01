@@ -8,7 +8,7 @@ No rotation. No fallback. Maximum win rate + nightly learner improvement.
 import asyncio
 import logging
 import json
-from datetime import date
+from datetime import datetime
 from app.core.celery_app import celery_app
 from app.core.config import settings
 from app.services.cloud_agents.arbitrator_agent import get_final_picks
@@ -37,12 +37,21 @@ def run_arbitrator():
         try:
             db = await get_asyncpg_pool()
 
-            # Pull today's SHORT_LIST with all analysis
+            # Pull latest SHORT_LIST with all analysis (may not be today)
             async with db.acquire() as conn:
+                # Get latest shortlist date
+                date_row = await conn.fetchrow("SELECT MAX(date) as latest_date FROM shortlist_candidates")
+                if not date_row or not date_row['latest_date']:
+                    logger.warning("No shortlist found in database")
+                    return {"success": False, "reason": "no_shortlist"}
+                shortlist_date = date_row['latest_date']
+                logger.info(f"Using shortlist date: {shortlist_date}")
+
                 shortlist = await conn.fetch("""
                     SELECT
                         symbol,
                         rank,
+                        direction,
                         prescreen_score,
                         prescreen_reasoning,
                         price_at_selection,
@@ -53,10 +62,10 @@ def run_arbitrator():
                         social_data,
                         polymarket_prob
                     FROM shortlist_candidates
-                    WHERE date::date = CURRENT_DATE
+                    WHERE date = $1
                     ORDER BY rank
                     LIMIT 75
-                """)
+                """, shortlist_date)
 
             if not shortlist:
                 logger.warning("No SHORT_LIST found for today")
@@ -80,8 +89,6 @@ def run_arbitrator():
                 logger.warning("Arbitrator returned no picks")
                 return {"success": False, "reason": "no_picks_returned"}
 
-            today = date.today()
-
             # Save picks + full context + create outcome tracking
             async with db.acquire() as conn:
                 for pick in final_picks:
@@ -89,7 +96,7 @@ def run_arbitrator():
                     candidate = await conn.fetchrow("""
                         SELECT * FROM shortlist_candidates
                         WHERE date = $1 AND symbol = $2
-                    """, today, symbol)
+                    """, shortlist_date, symbol)
 
                     if not candidate:
                         logger.warning(f"Candidate data missing for {symbol}")
@@ -99,15 +106,15 @@ def run_arbitrator():
                         "technical": json.loads(candidate['technical_snapshot'] or '{}'),
                         "fundamental": json.loads(candidate['fundamental_snapshot'] or '{}'),
                         "ai_scores": {
-                            "prescreen_score": candidate['prescreen_score'],
+                            "prescreen_score": float(candidate['prescreen_score']) if candidate['prescreen_score'] else 0.0,
                             "prescreen_reasoning": candidate['prescreen_reasoning'],
                             "vision_flags": json.loads(candidate['vision_flags'] or '{}'),
-                            "social_score": candidate['social_score'],
+                            "social_score": float(candidate['social_score']) if candidate['social_score'] else 0.0,
                             "social_data": json.loads(candidate['social_data'] or '{}'),
-                            "polymarket_prob": candidate['polymarket_prob'],
+                            "polymarket_prob": float(candidate['polymarket_prob']) if candidate['polymarket_prob'] else None,
                         },
                         "arbitrator": {
-                            "model": "qwen2.5-72b-instruct",
+                            "model": "gpt-oss-120b",
                             "confidence": pick.get("confidence", 0.0),
                             "reasoning": pick.get("reasoning", "")
                         },
@@ -118,9 +125,8 @@ def run_arbitrator():
                     pick_id = await conn.fetchval("""
                         INSERT INTO picks (
                             symbol, direction, confidence, reasoning,
-                            target_low, target_low, target_high,
+                            target_low, target_high,
                             pick_context, created_at, expires_at
-                            created_at, expires_at
                         ) VALUES (
                             $1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP,
                             CURRENT_TIMESTAMP + INTERVAL '30 days'
@@ -141,8 +147,8 @@ def run_arbitrator():
                         SET was_picked = TRUE,
                             picked_direction = $1,
                             updated_at = CURRENT_TIMESTAMP
-                        WHERE date = $1 AND symbol = $2
-                    """, pick.get("direction", "bullish"), today, symbol)
+                        WHERE date = $2 AND symbol = $3
+                    """, pick.get("direction", "bullish"), shortlist_date, symbol)
 
                     await conn.execute("""
                         INSERT INTO pick_outcomes_detailed (
