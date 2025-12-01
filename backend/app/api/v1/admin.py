@@ -791,11 +791,16 @@ async def test_vision():
                 content = resp.json()["choices"][0]["message"]["content"]
                 debug_info["fireworks_content"] = content
 
-                # Parse JSON
-                start = content.find("{")
-                end = content.rfind("}") + 1
+                # Parse JSON - for thinking models, look after </think> tag
+                json_content = content
+                if "</think>" in content:
+                    json_content = content.split("</think>")[-1].strip()
+
+                # Find the last JSON object (most reliable for thinking models)
+                start = json_content.rfind("{")
+                end = json_content.rfind("}") + 1
                 if start != -1 and end > 0:
-                    flags = json.loads(content[start:end])
+                    flags = json.loads(json_content[start:end])
                     debug_info["parsed_flags"] = flags
                     return {"success": True, "flags": flags, "debug": debug_info}
                 else:

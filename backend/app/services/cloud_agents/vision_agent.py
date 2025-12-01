@@ -112,13 +112,18 @@ async def _analyze_one(client: httpx.AsyncClient, item: Dict[str, Any], prompt: 
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]
 
-        # Parse JSON from response
-        start = content.find("{")
-        end = content.rfind("}") + 1
-        if start == -1 or end == 0:
-            raise ValueError(f"No JSON found in response: {content[:100]}")
+        # Parse JSON from response - for thinking models, look after </think> tag
+        json_content = content
+        if "</think>" in content:
+            json_content = content.split("</think>")[-1].strip()
 
-        flags = json.loads(content[start:end])
+        # Find the last JSON object (most reliable for thinking models)
+        start = json_content.rfind("{")
+        end = json_content.rfind("}") + 1
+        if start == -1 or end == 0:
+            raise ValueError(f"No JSON found in response: {content[:200]}")
+
+        flags = json.loads(json_content[start:end])
 
         return {
             "symbol": symbol,
