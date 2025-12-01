@@ -97,7 +97,7 @@ async def _analyze_one(client: httpx.AsyncClient, item: Dict[str, Any], prompt: 
             }
         ],
         "temperature": 0.0,
-        "max_tokens": 1024,  # Thinking model needs more tokens for reasoning + JSON output
+        "max_tokens": 2048,  # Thinking model needs more tokens for reasoning + JSON output
     }
 
     try:

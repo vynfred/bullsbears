@@ -771,7 +771,7 @@ async def test_vision():
             }
         ],
         "temperature": 0.0,
-        "max_tokens": 1024,  # Thinking model needs more tokens for reasoning + JSON output
+        "max_tokens": 2048,  # Thinking model needs more tokens for reasoning + JSON output
     }
 
     try:
