@@ -4,16 +4,15 @@
 import React, { useState, useMemo } from "react";
 import {
   ChevronDown,
-  TrendingUp,
-  TrendingDown,
+  ChevronUp,
   Plus,
   Clock,
   Sparkles,
   RefreshCw,
-  X
+  ArrowUpDown
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -27,6 +26,8 @@ const bearIcon = "/assets/bear-icon.png";
 interface PicksTabProps {
   onPickClick?: (type: "bullish" | "bearish") => void;
 }
+
+type SortOption = "confidence" | "bullish" | "bearish" | "entry";
 
 export default function PicksTab({ onPickClick }: PicksTabProps = {}) {
   const {
@@ -48,37 +49,151 @@ export default function PicksTab({ onPickClick }: PicksTabProps = {}) {
     watchlistEntries,
     addToWatchlist,
     isAdding,
+    isInWatchlist,
   } = useWatchlist();
 
-  const isInWatchlist = (symbol: string) => 
-    watchlistEntries.some(entry => entry.ticker === symbol);
-
-  const [sortBy, setSortBy] = useState<"confidence" | "change" | "time">("confidence");
+  const [sortBy, setSortBy] = useState<SortOption>("confidence");
   const [filterSentiment, setFilterSentiment] = useState<"all" | "bullish" | "bearish">("all");
   const [openPickId, setOpenPickId] = useState<string | null>(null);
 
   const filteredPicks = useMemo(() => {
-    let picksToShow = filterSentiment === "all" ? picks : 
-      filterSentiment === "bullish" ? picks.filter(p => p.sentiment === "bullish") : 
-      picks.filter(p => p.sentiment === "bearish");
+    let picksToShow = picks;
+
+    // Apply sentiment filter
+    if (filterSentiment === "bullish") {
+      picksToShow = picks.filter(p => p.sentiment === "bullish");
+    } else if (filterSentiment === "bearish") {
+      picksToShow = picks.filter(p => p.sentiment === "bearish");
+    }
+
+    // Apply sort
+    if (sortBy === "bullish") {
+      picksToShow = picksToShow.filter(p => p.sentiment === "bullish");
+    } else if (sortBy === "bearish") {
+      picksToShow = picksToShow.filter(p => p.sentiment === "bearish");
+    }
 
     return [...picksToShow].sort((a, b) => {
       if (sortBy === "confidence") return b.confidence - a.confidence;
-      if (sortBy === "change") return b.change - a.change;
-      if (sortBy === "time") return b.timestamp.getTime() - a.timestamp.getTime();
-      return 0;
+      if (sortBy === "entry") {
+        const aDiff = Math.abs(a.change);
+        const bDiff = Math.abs(b.change);
+        return aDiff - bDiff;
+      }
+      return b.confidence - a.confidence;
     });
   }, [picks, filterSentiment, sortBy]);
+
+  const bullishCount = picks.filter(p => p.sentiment === "bullish").length;
+  const bearishCount = picks.filter(p => p.sentiment === "bearish").length;
+
+  const getConfidenceLevel = (confidence: number): { label: string; color: string } => {
+    if (confidence >= 80) return { label: "High", color: "text-emerald-400" };
+    if (confidence >= 65) return { label: "Medium", color: "text-yellow-400" };
+    return { label: "Low", color: "text-orange-400" };
+  };
 
   const formatTimeToTarget = (hours?: number) => {
     if (!hours) return "—";
     const days = Math.floor(hours / 24);
-    const h = hours % 24;
+    const h = Math.floor(hours % 24);
     return days > 0 ? `${days}d ${h}h` : `${h}h`;
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Circular Stats Badge */}
+      <div className="flex justify-center">
+        <motion.div
+          animate={{
+            scale: [1, 1.02, 1],
+          }}
+          transition={{
+            duration: 3,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+          className="relative"
+        >
+          {/* Conic gradient border ring - emerald LEFT, rose RIGHT */}
+          <div
+            className="w-48 h-48 rounded-full p-1 shadow-2xl"
+            style={{
+              background: `conic-gradient(from 180deg at 50% 50%,
+                rgb(249, 115, 22) 0deg,
+                rgb(16, 185, 129) 45deg,
+                rgb(16, 185, 129) 135deg,
+                rgb(249, 115, 22) 180deg,
+                rgb(244, 63, 94) 225deg,
+                rgb(244, 63, 94) 315deg,
+                rgb(249, 115, 22) 360deg)`
+            }}
+          >
+            <div className="w-full h-full rounded-full bg-slate-900 flex flex-col items-center justify-center">
+              <span className="text-[10px] text-slate-400 uppercase tracking-widest mb-2">Today&apos;s Picks</span>
+              <div className="flex items-center justify-center gap-6">
+                {/* Bullish side */}
+                <button
+                  onClick={() => setFilterSentiment(filterSentiment === "bullish" ? "all" : "bullish")}
+                  className={`flex flex-col items-center transition-all ${filterSentiment === "bullish" ? "scale-110" : "hover:scale-105"}`}
+                >
+                  <span className="text-4xl font-bold text-emerald-400">{bullishCount}</span>
+                  <img
+                    src={bullIcon}
+                    alt="bull"
+                    className="w-5 h-5 mt-1"
+                    style={{ filter: 'brightness(0) saturate(100%) invert(78%) sepia(23%) saturate(1234%) hue-rotate(94deg) brightness(91%) contrast(86%)' }}
+                  />
+                  <span className="text-[10px] text-emerald-400 mt-1 uppercase tracking-wide">Bullish</span>
+                </button>
+
+                {/* Divider */}
+                <div className="h-16 w-px bg-slate-700" />
+
+                {/* Bearish side */}
+                <button
+                  onClick={() => setFilterSentiment(filterSentiment === "bearish" ? "all" : "bearish")}
+                  className={`flex flex-col items-center transition-all ${filterSentiment === "bearish" ? "scale-110" : "hover:scale-105"}`}
+                >
+                  <span className="text-4xl font-bold text-rose-400">{bearishCount}</span>
+                  <img
+                    src={bearIcon}
+                    alt="bear"
+                    className="w-5 h-5 mt-1"
+                    style={{ filter: 'brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(3959%) hue-rotate(316deg) brightness(96%) contrast(92%)' }}
+                  />
+                  <span className="text-[10px] text-rose-400 mt-1 uppercase tracking-wide">Bearish</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Filter and Sort Options */}
+      <div className="flex items-center justify-center gap-3">
+        <Select value={filterSentiment} onValueChange={(v) => setFilterSentiment(v as typeof filterSentiment)}>
+          <SelectTrigger className="w-[140px] bg-slate-800 border-slate-600 text-slate-100">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-slate-900 border-slate-700">
+            <SelectItem value="all" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">All Picks</SelectItem>
+            <SelectItem value="bullish" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">Bullish Only</SelectItem>
+            <SelectItem value="bearish" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">Bearish Only</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Button onClick={refresh} variant="outline" size="sm" disabled={isRefreshing} className="bg-slate-800 border-slate-600">
+          <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
+      </div>
+
+      {/* Last Updated */}
+      <div className="text-center text-sm text-slate-400">
+        Last updated: {lastUpdated?.toLocaleTimeString() || "—"}
+      </div>
+
       {/* Loading */}
       {isLoading && (
         <div className="flex flex-col items-center justify-center py-20">
@@ -89,7 +204,7 @@ export default function PicksTab({ onPickClick }: PicksTabProps = {}) {
 
       {/* Error */}
       {error && !isLoading && (
-        <div className="text-center py-20">
+        <div className="text-center py-10">
           <p className="text-red-400 mb-4">Error loading picks: {error}</p>
           <Button onClick={refresh} variant="outline">
             <RefreshCw className="w-4 h-4 mr-2" />
@@ -98,152 +213,168 @@ export default function PicksTab({ onPickClick }: PicksTabProps = {}) {
         </div>
       )}
 
-      {/* Main Content */}
-      {!isLoading && !error && (
-        <>
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                <Sparkles className="w-6 h-6 text-yellow-500" />
-                Live AI Picks
-              </h2>
-              <p className="text-sm text-gray-400 mt-1">
-                {picks.length} active picks • Last updated: {lastUpdated?.toLocaleTimeString() || "—"}
-              </p>
-            </div>
+      {/* No Picks */}
+      {!isLoading && !error && filteredPicks.length === 0 && (
+        <div className="text-center py-20">
+          <Sparkles className="w-16 h-16 mx-auto mb-4 text-yellow-500 opacity-30" />
+          <p className="text-xl text-gray-400">No live picks right now</p>
+          <p className="text-sm text-gray-500 mt-2">The AI is scanning 3,800+ stocks for the next explosive move...</p>
+        </div>
+      )}
 
-            <div className="flex flex-wrap gap-3">
-              <Select value={filterSentiment} onValueChange={(v) => setFilterSentiment(v as any)}>
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Picks</SelectItem>
-                  <SelectItem value="bullish">Bullish Only</SelectItem>
-                  <SelectItem value="bearish">Bearish Only</SelectItem>
-                </SelectContent>
-              </Select>
+      {/* Picks List */}
+      {!isLoading && !error && filteredPicks.length > 0 && (
+        <div className="space-y-4">
+          {filteredPicks.map((pick, index) => {
+            const isOpen = openPickId === pick.id;
+            const alreadyInWatchlist = isInWatchlist(pick.symbol);
+            const isBullish = pick.sentiment === "bullish";
+            const confidenceLevel = getConfidenceLevel(pick.confidence);
 
-              <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="confidence">Confidence</SelectItem>
-                  <SelectItem value="change">% Change</SelectItem>
-                  <SelectItem value="time">Newest First</SelectItem>
-                </SelectContent>
-              </Select>
+            const borderClass = isBullish
+              ? 'border-2 bg-gradient-to-br from-emerald-950/60 via-slate-900/40 to-emerald-900/30 border-emerald-700/40 hover:border-emerald-500/60'
+              : 'border-2 bg-gradient-to-br from-rose-950/60 via-slate-900/40 to-rose-900/30 border-rose-700/40 hover:border-rose-500/60';
 
-              <Button onClick={refresh} variant="outline" size="sm" disabled={isRefreshing}>
-                <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
-            </div>
-          </div>
-
-          {/* Picks Grid */}
-          {filteredPicks.length === 0 ? (
-            <div className="text-center py-20">
-              <Sparkles className="w-16 h-16 mx-auto mb-4 text-yellow-500 opacity-30" />
-              <p className="text-xl text-gray-400">No live picks right now</p>
-              <p className="text-sm text-gray-500 mt-2">The AI is scanning 3,800+ stocks for the next explosive move...</p>
-            </div>
-          ) : (
-            <div className="grid gap-4">
-              {filteredPicks.map((pick, index) => {
-                const isBullish = pick.sentiment === "bullish";
-                const changeSinceAlert = pick.change;
-                const alreadyInWatchlist = isInWatchlist(pick.symbol);
-
-                return (
-                  <motion.div
-                    key={pick.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                  >
-                    <Collapsible
-                      open={openPickId === pick.id}
-                      onOpenChange={(open) => setOpenPickId(open ? pick.id : null)}
-                    >
-                      <Card className="bg-slate-900/50 border-slate-700 hover:border-slate-600 transition-all">
-                        <CollapsibleTrigger asChild>
-                          <CardHeader 
-                            className="cursor-pointer"
-                            onClick={() => onPickClick?.(isBullish ? "bullish" : "bearish")}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-4">
-                                <img src={isBullish ? bullIcon : bearIcon} alt={isBullish ? "Bull" : "Bear"} className="w-10 h-10" />
-                                <div>
-                                  <CardTitle className="text-lg flex items-center gap-2">
-                                    {pick.symbol}
-                                    <span className="text-sm font-normal text-gray-400">{pick.name}</span>
-                                  </CardTitle>
-                                  <div className="flex items-center gap-4 mt-1">
-                                    <Badge variant={isBullish ? "default" : "destructive"}>
-                                      {isBullish ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-                                      {isBullish ? "BULLISH" : "BEARISH"}
-                                    </Badge>
-                                    <span className="text-sm text-gray-400">Confidence: {pick.confidence}%</span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-6">
-                                <div className="text-right">
-                                  <p className="text-2xl font-bold text-white">${pick.currentPrice.toFixed(2)}</p>
-                                  <p className={`text-sm ${changeSinceAlert >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                                    {changeSinceAlert >= 0 ? "+" : ""}{changeSinceAlert.toFixed(2)}%
-                                  </p>
-                                </div>
-                                <ChevronDown className={`w-5 h-5 transition-transform ${openPickId === pick.id ? "rotate-180" : ""}`} />
-                              </div>
+            return (
+              <motion.div
+                key={pick.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+              >
+                <Collapsible open={isOpen} onOpenChange={(open) => setOpenPickId(open ? pick.id : null)}>
+                  <Card className={`shadow-lg hover:shadow-2xl transition-all duration-300 ${borderClass}`}>
+                    <CollapsibleTrigger className="w-full">
+                      <CardContent className="py-4">
+                        <div className="space-y-3">
+                          {/* First Line: Symbol and Price Info */}
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-left flex-1 min-w-0">
+                              <div className="text-lg font-semibold text-slate-100">{pick.symbol}</div>
+                              <p className="text-slate-400 text-sm truncate">{pick.name}</p>
                             </div>
-                          </CardHeader>
-                        </CollapsibleTrigger>
 
-                        <CollapsibleContent>
-                          <CardContent className="pt-0 pb-4 space-y-4 border-t border-slate-700/50">
-                            {/* Your expanded content here */}
-                            
-                            <Button
-                              className={`w-full shadow-lg ${isBullish ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                addToWatchlist({
-                                  symbol: pick.symbol,
-                                  name: pick.name || pick.symbol,
-                                  entry_type: isBullish ? "long" : "short",
-                                  entry_price: pick.currentPrice,
-                                  target_price: isBullish ? pick.targetPriceHigh : pick.targetPriceLow,
-                                  ai_confidence_score: pick.confidence,
-                                  ai_recommendation: pick.aiSummary || pick.reasoning || "High-confidence AI pick",
-                                });
-                              }}
-                              disabled={isAdding || alreadyInWatchlist}
-                            >
-                              {alreadyInWatchlist ? (
-                                "Added to Watchlist"
-                              ) : (
-                                <>
-                                  <Plus className="w-4 h-4 mr-2" />
-                                  Add to Watchlist
-                                </>
-                              )}
-                            </Button>
-                          </CardContent>
-                        </CollapsibleContent>
-                      </Card>
-                    </Collapsible>
-                  </motion.div>
-                );
-              })}
-            </div>
-          )}
-        </>
+                            <div className="text-center shrink-0">
+                              <div className="text-xl text-slate-100">${pick.priceAtAlert > 0 ? pick.priceAtAlert.toFixed(2) : '—'}</div>
+                              <p className="text-slate-500 text-xs whitespace-nowrap">entry price</p>
+                            </div>
+
+                            <div className="text-center shrink-0">
+                              <div className={`text-xl ${isBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                ${pick.targetPriceLow?.toFixed(2) || '—'} - ${pick.targetPriceHigh?.toFixed(2) || '—'}
+                              </div>
+                              <p className="text-slate-500 text-xs whitespace-nowrap">target range</p>
+                            </div>
+
+                            {isOpen ? (
+                              <ChevronUp className="w-5 h-5 text-slate-400 shrink-0" />
+                            ) : (
+                              <ChevronDown className="w-5 h-5 text-slate-400 shrink-0" />
+                            )}
+                          </div>
+
+                          {/* Second Line: Confidence with Sentiment */}
+                          <div className="flex items-center justify-center gap-3">
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="text-xs text-slate-400">Confidence:</span>
+                              <Badge
+                                className={`text-sm px-3 py-1 ${confidenceLevel.color} bg-slate-800/50 border-slate-600`}
+                                variant="outline"
+                              >
+                                {confidenceLevel.label} ({pick.confidence}%)
+                              </Badge>
+                            </div>
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="text-xs text-slate-400">Sentiment:</span>
+                              <Badge
+                                className={`text-sm px-3 py-1 ${
+                                  isBullish
+                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                                    : 'bg-rose-500/20 text-rose-300 border-rose-500/50'
+                                }`}
+                                variant="outline"
+                              >
+                                {isBullish ? 'Bullish' : 'Bearish'}
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </CollapsibleTrigger>
+
+                    <CollapsibleContent>
+                      <CardContent className="pt-0 pb-4 space-y-4 border-t border-slate-700/50">
+                        {/* Chart Image */}
+                        {pick.chartUrl && (
+                          <div className="pt-4">
+                            <img
+                              src={pick.chartUrl}
+                              alt={`${pick.symbol} chart`}
+                              className="w-full rounded-lg border border-slate-700/50"
+                            />
+                          </div>
+                        )}
+
+                        {/* Target Prices */}
+                        <div className="grid grid-cols-2 gap-2 pt-4">
+                          <div className={`text-center p-3 rounded-lg ${isBullish ? 'bg-emerald-900/30 border border-emerald-700/30' : 'bg-rose-900/30 border border-rose-700/30'}`}>
+                            <p className="text-slate-400 text-xs mb-1">Target Low</p>
+                            <p className={isBullish ? 'text-emerald-400 text-lg font-semibold' : 'text-rose-400 text-lg font-semibold'}>
+                              ${pick.targetPriceLow?.toFixed(2) || '—'}
+                            </p>
+                          </div>
+                          <div className={`text-center p-3 rounded-lg ${isBullish ? 'bg-emerald-900/30 border border-emerald-700/30' : 'bg-rose-900/30 border border-rose-700/30'}`}>
+                            <p className="text-slate-400 text-xs mb-1">Target High</p>
+                            <p className={isBullish ? 'text-emerald-400 text-lg font-semibold' : 'text-rose-400 text-lg font-semibold'}>
+                              ${pick.targetPriceHigh?.toFixed(2) || '—'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* AI Analysis */}
+                        {(pick.aiSummary || pick.reasoning) && (
+                          <div className="p-4 bg-slate-800/30 rounded-lg">
+                            <p className="text-slate-400 mb-2 text-center text-sm font-medium">AI Analysis</p>
+                            <p className="text-sm leading-relaxed text-center text-slate-300">
+                              {pick.reasoning || pick.aiSummary}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Add to Watchlist Button */}
+                        <Button
+                          className={`w-full shadow-lg ${isBullish ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addToWatchlist({
+                              symbol: pick.symbol,
+                              name: pick.name || pick.symbol,
+                              entry_type: isBullish ? "long" : "short",
+                              entry_price: pick.currentPrice,
+                              target_price: isBullish ? pick.targetPriceHigh : pick.targetPriceLow,
+                              ai_confidence_score: pick.confidence,
+                              ai_recommendation: pick.aiSummary || pick.reasoning || "High-confidence AI pick",
+                            });
+                          }}
+                          disabled={isAdding || alreadyInWatchlist}
+                        >
+                          {alreadyInWatchlist ? (
+                            "Added to Watchlist"
+                          ) : (
+                            <>
+                              <Plus className="w-4 h-4 mr-2" />
+                              Add to Watchlist
+                            </>
+                          )}
+                        </Button>
+                      </CardContent>
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
+              </motion.div>
+            );
+          })}
+        </div>
       )}
     </div>
   );

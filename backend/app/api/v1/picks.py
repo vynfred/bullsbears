@@ -60,22 +60,52 @@ async def get_live_picks(
             
             rows = await conn.fetch(query, *params)
             
+            # Get chart URLs from shortlist_candidates
+            symbol_list = [row["symbol"] for row in rows]
+            chart_data = {}
+            price_data = {}
+
+            if symbol_list:
+                # Get latest shortlist date
+                date_row = await conn.fetchrow("SELECT MAX(date) as latest_date FROM shortlist_candidates")
+                if date_row and date_row['latest_date']:
+                    shortlist_date = date_row['latest_date']
+
+                    # Get chart URLs and prices for these symbols
+                    chart_rows = await conn.fetch("""
+                        SELECT symbol, chart_url, price_at_selection
+                        FROM shortlist_candidates
+                        WHERE date = $1 AND symbol = ANY($2)
+                    """, shortlist_date, symbol_list)
+
+                    for cr in chart_rows:
+                        chart_data[cr["symbol"]] = cr["chart_url"]
+                        price_data[cr["symbol"]] = float(cr["price_at_selection"]) if cr["price_at_selection"] else None
+
             # Transform to frontend format
             picks = []
             for row in rows:
+                symbol = row["symbol"]
+                # confidence is already stored as a decimal (0.85) or percentage (85) - check value
+                conf_value = float(row["confidence"]) if row["confidence"] else 0
+                # If confidence > 1, it's already a percentage; otherwise multiply by 100
+                confidence_pct = conf_value if conf_value > 1 else conf_value * 100
+
                 picks.append({
                     "id": row["id"],
-                    "symbol": row["symbol"],
+                    "symbol": symbol,
                     "direction": row["direction"],
-                    "confidence": float(row["confidence"]) * 100,  # Convert to percentage
+                    "confidence": confidence_pct,
                     "reasoning": row["reasoning"],
                     "target_low": float(row["target_low"]) if row["target_low"] else None,
                     "target_high": float(row["target_high"]) if row["target_high"] else None,
                     "context": row["pick_context"],
+                    "chart_url": chart_data.get(symbol),
+                    "entry_price": price_data.get(symbol),
                     "created_at": row["created_at"].isoformat() if row["created_at"] else None,
                     "expires_at": row["expires_at"].isoformat() if row["expires_at"] else None,
                 })
-            
+
             return picks
             
     except Exception as e:

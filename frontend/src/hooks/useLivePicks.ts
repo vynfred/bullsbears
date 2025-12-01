@@ -22,6 +22,7 @@ export interface LivePick {
   aiSummary: string;
   sentiment: 'bullish' | 'bearish';
   timestamp: Date;
+  chartUrl?: string;
 }
 
 interface UseLivePicksOptions {
@@ -93,9 +94,13 @@ export function useLivePicks({
 
     // Dynamic entry ranges based on volatility and confidence
     const volatilityMultiplier = alert.volatility || 0.02; // Default 2%
-    const confidenceAdjustment = (alert.confidence || 0.5) > 0.8 ? 0.5 : 1.0; // Tighter range for high confidence
+    const confidenceValue = alert.confidence || 0;
+    const confidenceAdjustment = confidenceValue > 80 ? 0.5 : 1.0; // Tighter range for high confidence
 
     const entryRange = volatilityMultiplier * confidenceAdjustment;
+
+    // Confidence is already a percentage from backend (e.g., 85 not 0.85)
+    const confidencePct = Math.round(confidenceValue);
 
     return {
       id: alert.id?.toString() || `${alert.symbol}-${Date.now()}`,
@@ -104,17 +109,18 @@ export function useLivePicks({
       priceAtAlert,
       currentPrice,
       change,
-      confidence: Math.round((alert.confidence || 0) * 100),
-      reasoning: alert.reasons?.[0] || 'AI pattern detected',
+      confidence: confidencePct,
+      reasoning: alert.reasoning || alert.reasons?.[0] || 'AI pattern detected',
       entryPriceMin: priceAtAlert * (1 - entryRange),
       entryPriceMax: priceAtAlert * (1 + entryRange),
-      targetPriceLow: alert.target_price_low || priceAtAlert * (sentiment === 'bullish' ? 1.10 : 0.90),
-      targetPriceMid: alert.target_price_mid || priceAtAlert * (sentiment === 'bullish' ? 1.20 : 0.80),
-      targetPriceHigh: alert.target_price_high || priceAtAlert * (sentiment === 'bullish' ? 1.35 : 0.65),
+      targetPriceLow: alert.target_low || priceAtAlert * (sentiment === 'bullish' ? 1.10 : 0.90),
+      targetPriceMid: alert.target_mid || ((alert.target_low || 0) + (alert.target_high || 0)) / 2 || priceAtAlert * (sentiment === 'bullish' ? 1.20 : 0.80),
+      targetPriceHigh: alert.target_high || priceAtAlert * (sentiment === 'bullish' ? 1.35 : 0.65),
       stopLoss: alert.stop_loss || priceAtAlert * (sentiment === 'bullish' ? 0.92 : 1.08),
-      aiSummary: `Confidence: ${Math.round((alert.confidence || 0) * 100)}%`,
+      aiSummary: alert.reasoning || `AI Confidence: ${confidencePct}%`,
       sentiment,
-      timestamp: new Date(alert.timestamp || Date.now()),
+      timestamp: new Date(alert.created_at || alert.timestamp || Date.now()),
+      chartUrl: alert.chart_url,
     };
   }, []);
 
