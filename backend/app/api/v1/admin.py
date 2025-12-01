@@ -707,22 +707,23 @@ async def list_groq_models():
         return resp.json()
 
 
-@router.post("/test-groq-vision")
-async def test_groq_vision():
-    """Test Groq Vision API with a single chart - verbose debug"""
-    import os
+@router.post("/test-vision")
+async def test_vision():
+    """Test Fireworks Vision API with a single chart - verbose debug"""
     import base64
     import httpx
     import json
     from pathlib import Path
     from app.core.database import get_asyncpg_pool
+    from app.core.config import settings
 
     debug_info = {}
 
     # Check API key
-    groq_key = os.getenv("GROQ_API_KEY")
-    debug_info["groq_key_set"] = bool(groq_key)
-    debug_info["groq_key_prefix"] = groq_key[:10] + "..." if groq_key else None
+    fireworks_key = settings.FIREWORKS_API_KEY
+    debug_info["fireworks_key_set"] = bool(fireworks_key)
+    debug_info["fireworks_key_prefix"] = fireworks_key[:10] + "..." if fireworks_key else None
+    debug_info["model"] = "accounts/fireworks/models/qwen2-vl-72b-instruct"
 
     # Get one chart URL
     db = await get_asyncpg_pool()
@@ -757,9 +758,9 @@ async def test_groq_vision():
     prompt = prompt_path.read_text(encoding="utf-8").strip()
     debug_info["prompt_loaded"] = True
 
-    # Call Groq
+    # Call Fireworks Vision (Qwen2.5-VL)
     payload = {
-        "model": "llama-3.2-11b-vision-preview",
+        "model": "accounts/fireworks/models/qwen2-vl-72b-instruct",
         "messages": [
             {
                 "role": "user",
@@ -776,16 +777,19 @@ async def test_groq_vision():
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
+                "https://api.fireworks.ai/inference/v1/chat/completions",
                 json=payload,
-                headers={"Authorization": f"Bearer {groq_key}"},
+                headers={
+                    "Authorization": f"Bearer {fireworks_key}",
+                    "Content-Type": "application/json"
+                },
             )
-            debug_info["groq_status"] = resp.status_code
-            debug_info["groq_response"] = resp.text[:500]
+            debug_info["fireworks_status"] = resp.status_code
+            debug_info["fireworks_response"] = resp.text[:500]
 
             if resp.status_code == 200:
                 content = resp.json()["choices"][0]["message"]["content"]
-                debug_info["groq_content"] = content
+                debug_info["fireworks_content"] = content
 
                 # Parse JSON
                 start = content.find("{")
@@ -797,9 +801,9 @@ async def test_groq_vision():
                 else:
                     return {"success": False, "message": "No JSON in response", "debug": debug_info}
             else:
-                return {"success": False, "message": f"Groq error: {resp.status_code}", "debug": debug_info}
+                return {"success": False, "message": f"Fireworks error: {resp.status_code}", "debug": debug_info}
     except Exception as e:
-        debug_info["groq_error"] = str(e)
+        debug_info["fireworks_error"] = str(e)
         return {"success": False, "message": str(e), "debug": debug_info}
 
 

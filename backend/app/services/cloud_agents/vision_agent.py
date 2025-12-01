@@ -1,7 +1,7 @@
 # backend/app/services/cloud_agents/vision_agent.py
 """
-Vision Agent – Groq Llama-3.2-11B-Vision (Phase 3)
-Fetches chart images from Firebase Storage → sends to Groq Vision API
+Vision Agent – Fireworks.ai Qwen2.5-VL (Phase 3)
+Fetches chart images from Firebase Storage → sends to Fireworks Vision API
 Returns 6 boolean pattern flags per chart
 """
 
@@ -9,19 +9,18 @@ import asyncio
 import base64
 import json
 import logging
-import os
 from pathlib import Path
 from typing import List, Dict, Any
 
 import httpx
+from app.core.config import settings
 from app.core.database import get_asyncpg_pool
 
 logger = logging.getLogger(__name__)
 
-# Groq Vision API
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-MODEL = "llama-3.2-11b-vision-preview"
+# Fireworks Vision API (Qwen2.5-VL-72B)
+FIREWORKS_URL = "https://api.fireworks.ai/inference/v1/chat/completions"
+MODEL = "accounts/fireworks/models/qwen2-vl-72b-instruct"
 
 # Hot-reloaded prompt
 PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "vision_prompt.txt"
@@ -42,7 +41,7 @@ async def run_vision_analysis(charts: List[Dict[str, Any]]) -> List[Dict[str, An
     Input: List of dicts with 'symbol' and 'chart_url' (Firebase Storage URL)
     Output: List with 'symbol' and 'vision_flags' (6 booleans)
     """
-    logger.info(f"Vision agent: analyzing {len(charts)} charts via Groq Vision")
+    logger.info(f"Vision agent: analyzing {len(charts)} charts via Fireworks Qwen2.5-VL")
 
     # Reload prompt each run (hot-reload)
     prompt = PROMPT_PATH.read_text(encoding="utf-8").strip()
@@ -82,7 +81,7 @@ async def _analyze_one(client: httpx.AsyncClient, item: Dict[str, Any], prompt: 
         logger.error(f"Failed to download chart for {symbol}: {e}")
         raise
 
-    # Send to Groq Vision API
+    # Send to Fireworks Vision API (Qwen2.5-VL)
     payload = {
         "model": MODEL,
         "messages": [
@@ -103,9 +102,12 @@ async def _analyze_one(client: httpx.AsyncClient, item: Dict[str, Any], prompt: 
 
     try:
         resp = await client.post(
-            GROQ_URL,
+            FIREWORKS_URL,
             json=payload,
-            headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+            headers={
+                "Authorization": f"Bearer {settings.FIREWORKS_API_KEY}",
+                "Content-Type": "application/json"
+            },
         )
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]
@@ -130,7 +132,7 @@ async def _analyze_one(client: httpx.AsyncClient, item: Dict[str, Any], prompt: 
             }
         }
     except Exception as e:
-        logger.error(f"Groq Vision failed for {symbol}: {e}")
+        logger.error(f"Fireworks Vision failed for {symbol}: {e}")
         raise
 
 
