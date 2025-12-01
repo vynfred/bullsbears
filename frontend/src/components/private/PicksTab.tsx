@@ -247,55 +247,52 @@ export default function PicksTab({ onPickClick }: PicksTabProps = {}) {
                     <CollapsibleTrigger className="w-full">
                       <CardContent className="py-4">
                         <div className="space-y-3">
-                          {/* First Line: Symbol and Price Info */}
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="text-left flex-1 min-w-0">
-                              <div className="text-lg font-semibold text-slate-100">{pick.symbol}</div>
+                          {/* Row 1: Symbol (left) + Confidence/Sentiment (right) */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="text-left min-w-0">
+                              <div className="text-xl font-bold text-slate-100">{pick.symbol}</div>
                               <p className="text-slate-400 text-sm truncate">{pick.name}</p>
                             </div>
 
-                            <div className="text-center shrink-0">
-                              <div className="text-xl text-slate-100">${pick.priceAtAlert > 0 ? pick.priceAtAlert.toFixed(2) : '—'}</div>
-                              <p className="text-slate-500 text-xs whitespace-nowrap">price when identified</p>
-                            </div>
-
-                            <div className="text-center shrink-0">
-                              <div className={`text-xl ${isBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                ${pick.targetPriceLow?.toFixed(2) || '—'} → ${pick.targetPriceHigh?.toFixed(2) || '—'}
-                              </div>
-                              <p className="text-slate-500 text-xs whitespace-nowrap">target range</p>
-                            </div>
-
-                            {isOpen ? (
-                              <ChevronUp className="w-5 h-5 text-slate-400 shrink-0" />
-                            ) : (
-                              <ChevronDown className="w-5 h-5 text-slate-400 shrink-0" />
-                            )}
-                          </div>
-
-                          {/* Second Line: Confidence with Sentiment */}
-                          <div className="flex items-center justify-center gap-3">
-                            <div className="flex flex-col items-center gap-1">
-                              <span className="text-xs text-slate-400">Confidence:</span>
+                            <div className="flex items-center gap-2 shrink-0">
                               <Badge
-                                className={`text-sm px-3 py-1 ${confidenceLevel.color} bg-slate-800/50 border-slate-600`}
+                                className={`text-xs px-2 py-1 ${confidenceLevel.color} bg-slate-800/50 border-slate-600`}
                                 variant="outline"
                               >
-                                {confidenceLevel.label} ({pick.confidence}%)
+                                {pick.confidence}%
                               </Badge>
-                            </div>
-                            <div className="flex flex-col items-center gap-1">
-                              <span className="text-xs text-slate-400">Sentiment:</span>
                               <Badge
-                                className={`text-sm px-3 py-1 ${
+                                className={`text-xs px-2 py-1 ${
                                   isBullish
                                     ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
                                     : 'bg-rose-500/20 text-rose-300 border-rose-500/50'
                                 }`}
                                 variant="outline"
                               >
-                                {isBullish ? 'Bullish' : 'Bearish'}
+                                {isBullish ? '↑ Bull' : '↓ Bear'}
                               </Badge>
+                              {isOpen ? (
+                                <ChevronUp className="w-5 h-5 text-slate-400" />
+                              ) : (
+                                <ChevronDown className="w-5 h-5 text-slate-400" />
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Row 2: Price When Picked + Target Range */}
+                          <div className="flex items-center justify-between gap-4 pt-1">
+                            <div className="text-left">
+                              <p className="text-slate-500 text-xs mb-0.5">Price When Picked</p>
+                              <div className="text-lg text-slate-100 font-medium">
+                                ${pick.priceAtAlert > 0 ? pick.priceAtAlert.toFixed(2) : '—'}
+                              </div>
+                            </div>
+
+                            <div className="text-right">
+                              <p className="text-slate-500 text-xs mb-0.5">Target Range</p>
+                              <div className={`text-lg font-medium ${isBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                ${pick.targetPriceLow?.toFixed(2) || '—'} → ${pick.targetPriceHigh?.toFixed(2) || '—'}
+                              </div>
                             </div>
                           </div>
                         </div>

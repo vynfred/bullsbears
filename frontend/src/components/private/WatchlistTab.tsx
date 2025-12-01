@@ -111,7 +111,7 @@ export default function WatchlistTab() {
             <CardContent>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-slate-500 text-xs uppercase">Price When Identified</p>
+                  <p className="text-slate-500 text-xs uppercase">Price When Picked</p>
                   <p className="text-slate-200 text-lg">${entry.entry_price.toFixed(2)}</p>
                 </div>
                 <div>
