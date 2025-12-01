@@ -1,6 +1,6 @@
 # backend/app/services/cloud_agents/vision_agent.py
 """
-Vision Agent – Fireworks.ai Qwen2.5-VL (Phase 3)
+Vision Agent – Fireworks.ai Qwen3-VL-30B-A3B (Phase 3)
 Fetches chart images from Firebase Storage → sends to Fireworks Vision API
 Returns 6 boolean pattern flags per chart
 """
@@ -18,9 +18,9 @@ from app.core.database import get_asyncpg_pool
 
 logger = logging.getLogger(__name__)
 
-# Fireworks Vision API (Qwen2.5-VL-7B)
+# Fireworks Vision API (Qwen3-VL-30B-A3B Thinking)
 FIREWORKS_URL = "https://api.fireworks.ai/inference/v1/chat/completions"
-MODEL = "accounts/fireworks/models/qwen2p5-vl-7b-instruct"
+MODEL = "accounts/fireworks/models/qwen3-vl-30b-a3b-thinking"
 
 # Hot-reloaded prompt
 PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "vision_prompt.txt"
@@ -41,7 +41,7 @@ async def run_vision_analysis(charts: List[Dict[str, Any]]) -> List[Dict[str, An
     Input: List of dicts with 'symbol' and 'chart_url' (Firebase Storage URL)
     Output: List with 'symbol' and 'vision_flags' (6 booleans)
     """
-    logger.info(f"Vision agent: analyzing {len(charts)} charts via Fireworks Qwen2.5-VL")
+    logger.info(f"Vision agent: analyzing {len(charts)} charts via Fireworks Qwen3-VL-30B-A3B")
 
     # Reload prompt each run (hot-reload)
     prompt = PROMPT_PATH.read_text(encoding="utf-8").strip()
@@ -81,7 +81,7 @@ async def _analyze_one(client: httpx.AsyncClient, item: Dict[str, Any], prompt: 
         logger.error(f"Failed to download chart for {symbol}: {e}")
         raise
 
-    # Send to Fireworks Vision API (Qwen2.5-VL)
+    # Send to Fireworks Vision API (Qwen3-VL-30B-A3B)
     payload = {
         "model": MODEL,
         "messages": [

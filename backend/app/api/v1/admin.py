@@ -723,7 +723,7 @@ async def test_vision():
     fireworks_key = settings.FIREWORKS_API_KEY
     debug_info["fireworks_key_set"] = bool(fireworks_key)
     debug_info["fireworks_key_prefix"] = fireworks_key[:10] + "..." if fireworks_key else None
-    debug_info["model"] = "accounts/fireworks/models/qwen2p5-vl-7b-instruct"
+    debug_info["model"] = "accounts/fireworks/models/qwen3-vl-30b-a3b-thinking"
 
     # Get one chart URL
     db = await get_asyncpg_pool()
@@ -758,9 +758,9 @@ async def test_vision():
     prompt = prompt_path.read_text(encoding="utf-8").strip()
     debug_info["prompt_loaded"] = True
 
-    # Call Fireworks Vision (Qwen2.5-VL-7B)
+    # Call Fireworks Vision (Qwen3-VL-30B-A3B)
     payload = {
-        "model": "accounts/fireworks/models/qwen2p5-vl-7b-instruct",
+        "model": "accounts/fireworks/models/qwen3-vl-30b-a3b-thinking",
         "messages": [
             {
                 "role": "user",

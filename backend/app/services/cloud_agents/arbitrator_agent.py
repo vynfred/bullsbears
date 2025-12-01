@@ -1,7 +1,7 @@
 # backend/app/services/cloud_agents/arbitrator_agent.py
 """
-Final Arbitrator Agent – BullsBears v5 (November 2025)
-One model to rule them all: qwen2.5-72b-instruct on Fireworks
+Final Arbitrator Agent – BullsBears v5 (December 2025)
+One model to rule them all: OpenAI gpt-oss-120b on Fireworks
 No rotation. No fallback. Maximum win rate + nightly learner compounding.
 """
 
@@ -18,7 +18,7 @@ PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "arbitrator_prompt.txt"
 BIAS_PATH   = Path(__file__).parent.parent / "prompts" / "arbitrator_bias.json"
 
 # Permanent winner – locked in forever
-MODEL = "accounts/fireworks/models/qwen2.5-72b-instruct"
+MODEL = "accounts/fireworks/models/gpt-oss-120b"
 
 
 async def get_final_picks(phase_data: dict) -> dict:
@@ -77,7 +77,7 @@ Select 3–6 final picks. Return valid JSON only.
         result = json.loads(content)
         result.setdefault("model_used", MODEL)
         result.setdefault("provider", "fireworks")
-        logger.info(f"Arbitrator success: {len(result.get('final_picks', []))} picks using qwen2.5-72b")
+        logger.info(f"Arbitrator success: {len(result.get('final_picks', []))} picks using gpt-oss-120b")
         return result
 
     except Exception as e:
