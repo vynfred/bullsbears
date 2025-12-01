@@ -257,6 +257,12 @@ class ChartGenerator:
                          fontsize=8, fontweight='bold', color=TEXT_COLOR,
                          verticalalignment='top')
 
+        # Add faint watermark in center of price chart
+        ax_price.text(0.5, 0.5, 'BullsBears.xyz', transform=ax_price.transAxes,
+                     fontsize=14, fontweight='bold', color='#FFFFFF',
+                     alpha=0.08, ha='center', va='center',
+                     fontfamily='sans-serif', style='italic')
+
         plt.subplots_adjust(left=0.02, right=0.88, top=0.98, bottom=0.02, hspace=0.05, wspace=0.1)
 
         buf = io.BytesIO()
