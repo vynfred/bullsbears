@@ -111,7 +111,9 @@ async def _store_social_results(results: List[Dict[str, Any]]):
                 logger.error("No shortlist found to update")
                 return
             shortlist_date = row['latest_date']
+            logger.info(f"Storing social results for date: {shortlist_date} (type: {type(shortlist_date)})")
 
+            updated_count = 0
             for r in results:
                 social_data = {
                     "headlines": r.get("headlines", []),
@@ -121,7 +123,7 @@ async def _store_social_results(results: List[Dict[str, Any]]):
                     "platform_consensus": r.get("platform_consensus", 0.0),
                 }
 
-                await conn.execute("""
+                result = await conn.execute("""
                     UPDATE shortlist_candidates
                     SET social_score = $1,
                         social_data = $2,
@@ -130,6 +132,10 @@ async def _store_social_results(results: List[Dict[str, Any]]):
                     WHERE date = $4 AND symbol = $5
                 """, r["social_score"], json.dumps(social_data), r.get("polymarket_prob"), shortlist_date, r["symbol"])
 
-        logger.info(f"Social results stored for {len(results)} symbols (date: {shortlist_date})")
+                # Check if row was actually updated
+                if "UPDATE 1" in result:
+                    updated_count += 1
+
+        logger.info(f"Social results: {updated_count}/{len(results)} rows updated (date: {shortlist_date})")
     except Exception as e:
         logger.error(f"Failed to store social results: {e}")

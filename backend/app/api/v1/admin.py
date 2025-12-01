@@ -839,9 +839,9 @@ async def shortlist_status():
                 WHERE date = $1
             """, latest_date)
 
-            # Get sample
+            # Get sample with full social data
             sample = await conn.fetch("""
-                SELECT symbol, direction, social_score,
+                SELECT symbol, direction, social_score, social_data,
                        vision_flags IS NOT NULL as has_vision
                 FROM shortlist_candidates
                 WHERE date = $1
