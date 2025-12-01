@@ -256,7 +256,7 @@ async def get_fib_targets_for_symbol(
     async with db_pool.acquire() as conn:
         # Get 90 days of OHLC data
         rows = await conn.fetch("""
-            SELECT high, low
+            SELECT high_price, low_price
             FROM prime_ohlc_90d
             WHERE symbol = $1
             ORDER BY date ASC
@@ -271,8 +271,8 @@ async def get_fib_targets_for_symbol(
                 direction=direction
             )
 
-        highs = [float(r['high']) for r in rows]
-        lows = [float(r['low']) for r in rows]
+        highs = [float(r['high_price']) for r in rows]
+        lows = [float(r['low_price']) for r in rows]
 
         return calculate_fib_targets(
             current_price=current_price,
@@ -282,5 +282,9 @@ async def get_fib_targets_for_symbol(
             min_pct=8.0,
             min_bars=12
         )
+
+
+def fib_retracement(start: float, end: float, level: float) -> float:
+    """Calculate Fibonacci retracement level"""
     return end - (end - start) * level
 
