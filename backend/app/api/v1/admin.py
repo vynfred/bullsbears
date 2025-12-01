@@ -689,6 +689,24 @@ async def trigger_vision_sync():
         return {"success": False, "message": str(e), "traceback": traceback.format_exc()}
 
 
+@router.get("/groq-models")
+async def list_groq_models():
+    """List available Groq models"""
+    import os
+    import httpx
+
+    groq_key = os.getenv("GROQ_API_KEY")
+    if not groq_key:
+        return {"error": "GROQ_API_KEY not set"}
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(
+            "https://api.groq.com/openai/v1/models",
+            headers={"Authorization": f"Bearer {groq_key}"}
+        )
+        return resp.json()
+
+
 @router.post("/test-groq-vision")
 async def test_groq_vision():
     """Test Groq Vision API with a single chart - verbose debug"""
