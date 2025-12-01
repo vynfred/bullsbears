@@ -1019,6 +1019,102 @@ async def trigger_arbitrator():
         return {"success": False, "message": f"Error: {str(e)}"}
 
 
+@router.post("/trigger-arbitrator-sync")
+async def trigger_arbitrator_sync():
+    """Run arbitrator synchronously (for debugging)"""
+    import json
+
+    debug_info = {}
+
+    try:
+        from app.services.system_state import is_system_on
+        if not await is_system_on():
+            return {"success": False, "message": "System is OFF", "debug": debug_info}
+
+        # Get shortlist with all data
+        db = await get_asyncpg_pool()
+        async with db.acquire() as conn:
+            # Get latest shortlist date
+            date_row = await conn.fetchrow("SELECT MAX(date) as latest_date FROM shortlist_candidates")
+            if not date_row or not date_row['latest_date']:
+                return {"success": False, "message": "No shortlist found", "debug": debug_info}
+            shortlist_date = date_row['latest_date']
+            debug_info["shortlist_date"] = str(shortlist_date)
+
+            shortlist = await conn.fetch("""
+                SELECT symbol, rank, direction, prescreen_score, vision_flags, social_score
+                FROM shortlist_candidates
+                WHERE date = $1
+                ORDER BY rank
+                LIMIT 75
+            """, shortlist_date)
+
+        debug_info["shortlist_count"] = len(shortlist)
+
+        if not shortlist:
+            return {"success": False, "message": "Empty shortlist", "debug": debug_info}
+
+        # Build phase_data for arbitrator
+        phase_data = {
+            "short_list": [dict(s) for s in shortlist],
+            "vision_flags": {s["symbol"]: json.loads(s["vision_flags"]) if s["vision_flags"] else {} for s in shortlist},
+            "social_scores": {s["symbol"]: float(s["social_score"]) if s["social_score"] else 0 for s in shortlist},
+            "market_context": {},
+        }
+
+        # Call arbitrator
+        from app.services.cloud_agents.arbitrator_agent import get_final_picks
+        result = await get_final_picks(phase_data)
+
+        debug_info["arbitrator_response"] = result
+
+        final_picks = result.get("final_picks", [])
+        if not final_picks:
+            return {"success": False, "message": "No picks returned", "debug": debug_info}
+
+        # Store picks
+        async with db.acquire() as conn:
+            for pick in final_picks:
+                symbol = pick.get("symbol")
+                await conn.execute("""
+                    INSERT INTO picks (
+                        symbol, direction, confidence, reasoning,
+                        target_low, target_high,
+                        pick_context, created_at, expires_at
+                    ) VALUES (
+                        $1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP,
+                        CURRENT_TIMESTAMP + INTERVAL '30 days'
+                    )
+                """,
+                    symbol,
+                    pick.get("direction", "bullish"),
+                    pick.get("confidence", 0.0),
+                    pick.get("reasoning", ""),
+                    pick.get("target_low"),
+                    pick.get("target_high"),
+                    json.dumps({"arbitrator": pick})
+                )
+
+                # Mark as picked
+                await conn.execute("""
+                    UPDATE shortlist_candidates
+                    SET was_picked = TRUE, picked_direction = $1
+                    WHERE date = $2 AND symbol = $3
+                """, pick.get("direction", "bullish"), shortlist_date, symbol)
+
+        return {
+            "success": True,
+            "picks_count": len(final_picks),
+            "picks": final_picks,
+            "debug": debug_info
+        }
+    except Exception as e:
+        debug_info["error"] = str(e)
+        import traceback
+        debug_info["traceback"] = traceback.format_exc()
+        return {"success": False, "message": str(e), "debug": debug_info}
+
+
 @router.post("/trigger-full-pipeline")
 async def trigger_full_pipeline_sequence():
     """Trigger the complete AI pipeline: Prescreen → Charts → Vision → Social → Arbitrator"""
