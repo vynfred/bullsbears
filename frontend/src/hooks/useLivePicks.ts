@@ -88,9 +88,11 @@ export function useLivePicks({
 
   // Transform API data to LivePick format
   const transformData = useCallback((alert: any, sentiment: 'bullish' | 'bearish'): LivePick => {
-    const priceAtAlert = alert.entry_price || alert.current_price || 0;
+    const priceAtAlert = alert.entry_price || 0;
+    // Use real-time current_price from FMP if available, otherwise fall back to entry price
     const currentPrice = alert.current_price || priceAtAlert;
-    const change = priceAtAlert > 0 ? ((currentPrice - priceAtAlert) / priceAtAlert) * 100 : 0;
+    // Use pre-calculated change_pct from backend if available (real-time from FMP)
+    const change = alert.change_pct ?? (priceAtAlert > 0 ? ((currentPrice - priceAtAlert) / priceAtAlert) * 100 : 0);
 
     // Dynamic entry ranges based on volatility and confidence
     const volatilityMultiplier = alert.volatility || 0.02; // Default 2%

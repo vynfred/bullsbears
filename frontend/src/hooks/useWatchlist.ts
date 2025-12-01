@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getDatabase, ref, onValue, push, remove, set } from 'firebase/database';
 import { useAuth } from './useAuth';
+import { api } from '@/lib/api';
 
 export interface WatchlistEntry {
   id: string;
@@ -44,6 +45,38 @@ export function useWatchlist(): UseWatchlistReturn {
   const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Fetch real-time prices for watchlist symbols
+  const fetchPrices = useCallback(async (entries: WatchlistEntry[]) => {
+    if (entries.length === 0) return entries;
+
+    try {
+      const symbols = entries.map(e => e.symbol);
+      const prices = await api.getQuotes(symbols);
+
+      return entries.map(entry => {
+        const quote = prices[entry.symbol];
+        if (quote) {
+          const currentPrice = quote.price || entry.entry_price;
+          const priceChange = currentPrice - entry.entry_price;
+          const priceChangePercent = entry.entry_price > 0
+            ? ((currentPrice - entry.entry_price) / entry.entry_price) * 100
+            : 0;
+
+          return {
+            ...entry,
+            current_price: currentPrice,
+            price_change: priceChange,
+            price_change_percent: priceChangePercent,
+          };
+        }
+        return entry;
+      });
+    } catch (err) {
+      console.warn('Failed to fetch watchlist prices:', err);
+      return entries;
+    }
+  }, []);
+
   // Subscribe to Firebase Realtime Database for watchlist updates
   useEffect(() => {
     if (!user?.uid) {
@@ -54,10 +87,10 @@ export function useWatchlist(): UseWatchlistReturn {
     const db = getDatabase();
     const watchlistRef = ref(db, `users/${user.uid}/watchlist`);
 
-    const unsubscribe = onValue(watchlistRef, (snapshot) => {
+    const unsubscribe = onValue(watchlistRef, async (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const entries: WatchlistEntry[] = Object.entries(data).map(([key, value]: [string, any]) => ({
+        let entries: WatchlistEntry[] = Object.entries(data).map(([key, value]: [string, any]) => ({
           id: key,
           symbol: value.symbol,
           name: value.name,
@@ -73,6 +106,10 @@ export function useWatchlist(): UseWatchlistReturn {
         }));
         // Sort by added_at descending (newest first)
         entries.sort((a, b) => new Date(b.added_at).getTime() - new Date(a.added_at).getTime());
+
+        // Fetch real-time prices from FMP
+        entries = await fetchPrices(entries);
+
         setWatchlistEntries(entries);
       } else {
         setWatchlistEntries([]);
@@ -84,7 +121,7 @@ export function useWatchlist(): UseWatchlistReturn {
     });
 
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, [user?.uid, fetchPrices]);
 
   const addToWatchlist = useCallback(async (request: {
     symbol: string;

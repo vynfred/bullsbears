@@ -168,4 +168,12 @@ export const api = {
   getBearishAlerts: async (limit: number = 10) => {
     return fetchWithError(`/api/v1/alerts/bearish?limit=${limit}`);
   },
+
+  // REAL-TIME QUOTES (FMP)
+  getQuotes: async (symbols: string[]): Promise<Record<string, { price: number; change?: number; changePercent?: number }>> => {
+    if (symbols.length === 0) return {};
+    const symbolsStr = symbols.join(',');
+    const data = await fetchWithError(`/api/v1/quotes?symbols=${encodeURIComponent(symbolsStr)}`);
+    return data || {};
+  },
 };

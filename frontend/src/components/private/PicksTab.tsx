@@ -279,13 +279,23 @@ export default function PicksTab({ onPickClick }: PicksTabProps = {}) {
                             </div>
                           </div>
 
-                          {/* Row 2: Price When Picked + Target Range */}
+                          {/* Row 2: Current Price + Change % */}
                           <div className="flex items-center justify-between gap-4 pt-1">
                             <div className="text-left">
-                              <p className="text-slate-500 text-xs mb-0.5">Price When Picked</p>
-                              <div className="text-lg text-slate-100 font-medium">
-                                ${pick.priceAtAlert > 0 ? pick.priceAtAlert.toFixed(2) : '—'}
+                              <p className="text-slate-500 text-xs mb-0.5">Current Price</p>
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg text-slate-100 font-medium">
+                                  ${pick.currentPrice > 0 ? pick.currentPrice.toFixed(2) : '—'}
+                                </span>
+                                {pick.change !== 0 && (
+                                  <span className={`text-sm font-medium ${pick.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    {pick.change >= 0 ? '+' : ''}{pick.change.toFixed(2)}%
+                                  </span>
+                                )}
                               </div>
+                              <p className="text-slate-600 text-xs">
+                                Picked @ ${pick.priceAtAlert > 0 ? pick.priceAtAlert.toFixed(2) : '—'}
+                              </p>
                             </div>
 
                             <div className="text-right">

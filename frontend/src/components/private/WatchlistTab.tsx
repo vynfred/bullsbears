@@ -111,23 +111,33 @@ export default function WatchlistTab() {
             <CardContent>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-slate-500 text-xs uppercase">Price When Picked</p>
-                  <p className="text-slate-200 text-lg">${entry.entry_price.toFixed(2)}</p>
+                  <p className="text-slate-500 text-xs uppercase">Current Price</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-200 text-lg">
+                      ${entry.current_price?.toFixed(2) || entry.entry_price.toFixed(2)}
+                    </span>
+                    {changePercent !== 0 && (
+                      <span className={`text-sm font-medium flex items-center gap-0.5 ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                        {isPositive ? '+' : ''}{changePercent.toFixed(2)}%
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-slate-600 text-xs">Picked @ ${entry.entry_price.toFixed(2)}</p>
                 </div>
                 <div>
                   <p className="text-slate-500 text-xs uppercase">Target</p>
                   <p className="text-slate-200 text-lg">${entry.target_price.toFixed(2)}</p>
                 </div>
                 <div>
-                  <p className="text-slate-500 text-xs uppercase">Change Since</p>
-                  <p className={`text-lg flex items-center gap-1 ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {isPositive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                    {isPositive ? '+' : ''}{changePercent.toFixed(2)}%
-                  </p>
-                </div>
-                <div>
                   <p className="text-slate-500 text-xs uppercase">Days Held</p>
                   <p className="text-slate-200 text-lg">{daysSinceAdded}d</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs uppercase">Sentiment</p>
+                  <p className={`text-lg ${isBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {isBullish ? '↑ Bullish' : '↓ Bearish'}
+                  </p>
                 </div>
               </div>
 

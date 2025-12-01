@@ -19,29 +19,31 @@ async def get_live_picks(
     min_confidence: int = Query(48, ge=0, le=100)
 ):
     """
-    Get live AI picks from database.
-    Returns picks from the last 24 hours that meet confidence threshold.
+    Get live AI picks from database with real-time prices from FMP.
+    Returns picks from the last 48 hours that meet confidence threshold.
     """
     try:
         from app.core.database import get_asyncpg_pool
-        
+        from app.core.config import settings
+        import httpx
+
         db = await get_asyncpg_pool()
         async with db.acquire() as conn:
             # Check if picks table exists
             exists = await conn.fetchval("""
                 SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
+                    SELECT FROM information_schema.tables
                     WHERE table_name = 'picks'
                 )
             """)
-            
+
             if not exists:
                 logger.warning("Picks table doesn't exist yet")
                 return []
-            
+
             # Build query based on filters
             query = """
-                SELECT 
+                SELECT
                     id, symbol, direction, confidence, reasoning,
                     target_low, target_high, pick_context,
                     created_at, expires_at
@@ -50,20 +52,20 @@ async def get_live_picks(
                 AND created_at >= $2
             """
             params = [min_confidence / 100.0, datetime.utcnow() - timedelta(hours=48)]
-            
+
             if sentiment:
                 query += " AND direction = $3"
                 params.append(sentiment)
-            
+
             query += " ORDER BY confidence DESC LIMIT $" + str(len(params) + 1)
             params.append(limit)
-            
+
             rows = await conn.fetch(query, *params)
-            
+
             # Get chart URLs from shortlist_candidates
             symbol_list = [row["symbol"] for row in rows]
             chart_data = {}
-            price_data = {}
+            price_at_pick = {}
 
             if symbol_list:
                 # Get latest shortlist date
@@ -80,7 +82,24 @@ async def get_live_picks(
 
                     for cr in chart_rows:
                         chart_data[cr["symbol"]] = cr["chart_url"]
-                        price_data[cr["symbol"]] = float(cr["price_at_selection"]) if cr["price_at_selection"] else None
+                        price_at_pick[cr["symbol"]] = float(cr["price_at_selection"]) if cr["price_at_selection"] else None
+
+            # Fetch real-time prices from FMP (batch quote)
+            current_prices = {}
+            if symbol_list and settings.FMP_API_KEY:
+                try:
+                    symbols_str = ",".join(symbol_list)
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        resp = await client.get(
+                            f"https://financialmodelingprep.com/api/v3/quote/{symbols_str}",
+                            params={"apikey": settings.FMP_API_KEY}
+                        )
+                        if resp.status_code == 200:
+                            quotes = resp.json()
+                            for q in quotes:
+                                current_prices[q["symbol"]] = float(q.get("price", 0))
+                except Exception as e:
+                    logger.warning(f"Failed to fetch FMP quotes: {e}")
 
             # Transform to frontend format
             picks = []
@@ -90,6 +109,14 @@ async def get_live_picks(
                 conf_value = float(row["confidence"]) if row["confidence"] else 0
                 # If confidence > 1, it's already a percentage; otherwise multiply by 100
                 confidence_pct = conf_value if conf_value > 1 else conf_value * 100
+
+                entry_price = price_at_pick.get(symbol)
+                current_price = current_prices.get(symbol) or entry_price
+
+                # Calculate % change since picked
+                change_pct = None
+                if entry_price and current_price and entry_price > 0:
+                    change_pct = ((current_price - entry_price) / entry_price) * 100
 
                 picks.append({
                     "id": row["id"],
@@ -101,13 +128,15 @@ async def get_live_picks(
                     "target_high": float(row["target_high"]) if row["target_high"] else None,
                     "context": row["pick_context"],
                     "chart_url": chart_data.get(symbol),
-                    "entry_price": price_data.get(symbol),
+                    "entry_price": entry_price,
+                    "current_price": current_price,
+                    "change_pct": round(change_pct, 2) if change_pct is not None else None,
                     "created_at": row["created_at"].isoformat() if row["created_at"] else None,
                     "expires_at": row["expires_at"].isoformat() if row["expires_at"] else None,
                 })
 
             return picks
-            
+
     except Exception as e:
         logger.error(f"Error fetching picks: {e}")
         # Return empty list instead of error for graceful frontend handling
