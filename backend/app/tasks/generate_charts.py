@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Generate charts for shortlist stocks → Firebase Storage → URL in PostgreSQL
+Generate annotated charts for shortlist stocks → Firebase Storage → URL in PostgreSQL
+Pretty charts with S/R lines + volume profile for frontend display
 Runs at 8:15 AM ET → CPU only → $0 cost
 """
 
@@ -9,9 +10,11 @@ import logging
 import io
 from datetime import date
 from typing import Dict
+import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Non-interactive backend for Render worker
 import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
 import pandas as pd
 
 from app.core.database import get_asyncpg_pool
@@ -20,21 +23,24 @@ from app.core.firebase import upload_chart_to_storage
 
 logger = logging.getLogger(__name__)
 
-# Dark theme — perfect for Groq Vision
-plt.style.use("dark_background")
-BACKGROUND = "#000000"
-GRID = "#333333"
-BULL = "#00ff88"
-BEAR = "#ff4444"
-VOL = "#666666"
+# BullsBears color scheme (from globals.css)
+BACKGROUND = "#0F1419"  # Dark background
+GRID = "#1E2A35"  # Subtle grid
+BULL = "#77E4C8"  # Mint green for bulls/up
+BEAR = "#FF8080"  # Red for bears/down
+NEUTRAL = "#BADFDB"  # Light mint
+SUPPORT = "#77E4C8"  # Support lines (mint)
+RESISTANCE = "#FF8080"  # Resistance lines (red)
+VOLUME_BULL = "rgba(119, 228, 200, 0.6)"
+VOLUME_BEAR = "rgba(255, 128, 128, 0.6)"
+TEXT_COLOR = "#E8EAED"  # Light text
 
 
 class ChartGenerator:
-    """Generate charts and upload to Firebase Storage"""
+    """Generate pretty annotated charts and upload to Firebase Storage"""
 
     def __init__(self):
         self.db = None
-        self.fig = plt.figure(figsize=(2.56, 2.56), dpi=100)
 
     async def initialize(self):
         self.db = await get_asyncpg_pool()
@@ -79,8 +85,8 @@ class ChartGenerator:
         for symbol in symbols:
             df = await self._fetch_90d(symbol)
             if df is not None and len(df) >= 30:
-                # Render chart to PNG bytes
-                png_bytes = self._render_chart(df)
+                # Render pretty annotated chart to PNG bytes
+                png_bytes = self._render_chart(df, symbol)
 
                 # Upload to Firebase Storage
                 chart_url = upload_chart_to_storage(symbol, date_str, png_bytes)
@@ -127,36 +133,131 @@ class ChartGenerator:
         df = df.sort_values("date").set_index("date")
         return df
 
-    def _render_chart(self, df: pd.DataFrame) -> bytes:
-        """Render 256×256 PNG → bytes"""
-        self.fig.clear()
-        ax1, ax2 = self.fig.subplots(2, 1, gridspec_kw={'height_ratios': [3, 1]})
+    def _calculate_support_resistance(self, df: pd.DataFrame) -> Dict:
+        """Calculate support and resistance levels using pivot points"""
+        highs = df["high_price"].values
+        lows = df["low_price"].values
 
-        # Candlesticks
-        for i, (_, row) in enumerate(df.iterrows()):
-            color = BULL if row["close_price"] >= row["open_price"] else BEAR
-            ax1.plot([i, i], [row["low_price"], row["high_price"]], color=color, lw=0.8)
-            rect = plt.Rectangle(
-                (i - 0.35, min(row["open_price"], row["close_price"])),
-                0.7, abs(row["close_price"] - row["open_price"]),
-                facecolor=color, edgecolor=color, lw=0.5
-            )
-            ax1.add_patch(rect)
+        # Use recent 30 days for S/R calculation
+        recent_highs = highs[-30:]
+        recent_lows = lows[-30:]
 
-        # Volume
-        ax2.bar(range(len(df)), df["volume"], color=VOL, width=0.8)
+        # Find local maxima/minima for S/R levels
+        resistance_levels = []
+        support_levels = []
 
-        # Clean styling
-        for ax in (ax1, ax2):
+        # Simple pivot point method
+        for i in range(2, len(recent_highs) - 2):
+            # Local high (resistance)
+            if recent_highs[i] > recent_highs[i-1] and recent_highs[i] > recent_highs[i-2] and \
+               recent_highs[i] > recent_highs[i+1] and recent_highs[i] > recent_highs[i+2]:
+                resistance_levels.append(recent_highs[i])
+            # Local low (support)
+            if recent_lows[i] < recent_lows[i-1] and recent_lows[i] < recent_lows[i-2] and \
+               recent_lows[i] < recent_lows[i+1] and recent_lows[i] < recent_lows[i+2]:
+                support_levels.append(recent_lows[i])
+
+        # If not enough levels found, use percentile method
+        if len(resistance_levels) < 2:
+            resistance_levels = [np.percentile(recent_highs, 80), np.percentile(recent_highs, 95)]
+        if len(support_levels) < 2:
+            support_levels = [np.percentile(recent_lows, 5), np.percentile(recent_lows, 20)]
+
+        # Sort and dedupe (keep top 2 of each)
+        resistance_levels = sorted(set(resistance_levels), reverse=True)[:2]
+        support_levels = sorted(set(support_levels))[:2]
+
+        return {"resistance": resistance_levels, "support": support_levels}
+
+    def _render_chart(self, df: pd.DataFrame, symbol: str = "") -> bytes:
+        """Render pretty annotated chart with S/R lines and volume profile"""
+        # Create figure with GridSpec for price chart + volume profile on right
+        fig = plt.figure(figsize=(4, 3), dpi=100, facecolor=BACKGROUND)
+        gs = GridSpec(3, 4, figure=fig, height_ratios=[3, 1, 0.1], width_ratios=[3, 0.5, 0.02, 0.3])
+
+        ax_price = fig.add_subplot(gs[0, 0])  # Main price chart
+        ax_vol = fig.add_subplot(gs[1, 0], sharex=ax_price)  # Volume bars
+        ax_profile = fig.add_subplot(gs[0, 3])  # Volume profile (right side)
+
+        # Set backgrounds
+        for ax in [ax_price, ax_vol, ax_profile]:
             ax.set_facecolor(BACKGROUND)
-            ax.grid(True, color=GRID, alpha=0.3, lw=0.4)
-            ax.set_xticks([])
-            ax.set_yticks([])
 
-        plt.subplots_adjust(left=0, right=1, top=1, bottom=0, hspace=0)
+        # Calculate S/R levels
+        sr_levels = self._calculate_support_resistance(df)
+
+        # Draw candlesticks
+        for i, (_, row) in enumerate(df.iterrows()):
+            is_bull = row["close_price"] >= row["open_price"]
+            color = BULL if is_bull else BEAR
+
+            # Wick
+            ax_price.plot([i, i], [row["low_price"], row["high_price"]],
+                         color=color, lw=1, solid_capstyle='round')
+            # Body
+            body_bottom = min(row["open_price"], row["close_price"])
+            body_height = abs(row["close_price"] - row["open_price"])
+            rect = plt.Rectangle((i - 0.35, body_bottom), 0.7, max(body_height, 0.01),
+                                 facecolor=color, edgecolor=color, lw=0.5)
+            ax_price.add_patch(rect)
+
+        # Draw S/R lines
+        for level in sr_levels["resistance"]:
+            ax_price.axhline(y=level, color=RESISTANCE, linestyle='--',
+                            lw=1, alpha=0.7, label='R')
+        for level in sr_levels["support"]:
+            ax_price.axhline(y=level, color=SUPPORT, linestyle='--',
+                            lw=1, alpha=0.7, label='S')
+
+        # Volume bars with color
+        colors = [BULL if df.iloc[i]["close_price"] >= df.iloc[i]["open_price"] else BEAR
+                  for i in range(len(df))]
+        ax_vol.bar(range(len(df)), df["volume"], color=colors, width=0.8, alpha=0.7)
+
+        # Volume profile (horizontal bars on right)
+        price_range = np.linspace(df["low_price"].min(), df["high_price"].max(), 20)
+        vol_profile = np.zeros(len(price_range) - 1)
+        for i, (_, row) in enumerate(df.iterrows()):
+            for j in range(len(price_range) - 1):
+                if price_range[j] <= row["close_price"] <= price_range[j + 1]:
+                    vol_profile[j] += row["volume"]
+
+        # Normalize and plot volume profile
+        if vol_profile.max() > 0:
+            vol_profile = vol_profile / vol_profile.max()
+        price_mids = (price_range[:-1] + price_range[1:]) / 2
+        ax_profile.barh(price_mids, vol_profile, height=(price_range[1] - price_range[0]) * 0.9,
+                       color=NEUTRAL, alpha=0.5)
+        ax_profile.set_ylim(ax_price.get_ylim())
+
+        # Styling
+        ax_price.grid(True, color=GRID, alpha=0.3, lw=0.5)
+        ax_vol.grid(True, color=GRID, alpha=0.2, lw=0.5)
+        ax_price.set_xlim(-1, len(df))
+
+        # Remove ticks for cleaner look
+        ax_price.set_xticks([])
+        ax_vol.set_xticks([])
+        ax_profile.set_xticks([])
+        ax_profile.set_yticks([])
+
+        # Price labels on right side of price chart
+        ax_price.yaxis.set_label_position("right")
+        ax_price.yaxis.tick_right()
+        ax_price.tick_params(axis='y', colors=TEXT_COLOR, labelsize=6)
+        ax_vol.set_yticks([])
+
+        # Add symbol label
+        if symbol:
+            ax_price.text(0.02, 0.98, symbol, transform=ax_price.transAxes,
+                         fontsize=8, fontweight='bold', color=TEXT_COLOR,
+                         verticalalignment='top')
+
+        plt.subplots_adjust(left=0.02, right=0.88, top=0.98, bottom=0.02, hspace=0.05, wspace=0.1)
 
         buf = io.BytesIO()
-        plt.savefig(buf, format="png", bbox_inches="tight", pad_inches=0)
+        plt.savefig(buf, format="png", facecolor=BACKGROUND, edgecolor='none')
+        plt.close(fig)
         buf.seek(0)
         return buf.read()
 
