@@ -41,16 +41,35 @@ async def get_live_picks(
                 logger.warning("Picks table doesn't exist yet")
                 return []
 
-            # Build query based on filters
-            query = """
-                SELECT
-                    id, symbol, direction, confidence, reasoning,
-                    target_low, target_high, pick_context,
-                    created_at, expires_at
-                FROM picks
-                WHERE confidence >= $1
-                AND created_at >= $2
-            """
+            # Build query based on filters - include pretty_chart_url if column exists
+            # Check for pretty_chart_url column
+            has_pretty_chart = await conn.fetchval("""
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'picks' AND column_name = 'pretty_chart_url'
+                )
+            """)
+
+            if has_pretty_chart:
+                query = """
+                    SELECT
+                        id, symbol, direction, confidence, reasoning,
+                        target_low, target_high, pick_context, pretty_chart_url,
+                        created_at, expires_at
+                    FROM picks
+                    WHERE confidence >= $1
+                    AND created_at >= $2
+                """
+            else:
+                query = """
+                    SELECT
+                        id, symbol, direction, confidence, reasoning,
+                        target_low, target_high, pick_context,
+                        created_at, expires_at
+                    FROM picks
+                    WHERE confidence >= $1
+                    AND created_at >= $2
+                """
             params = [min_confidence / 100.0, datetime.utcnow() - timedelta(hours=48)]
 
             if sentiment:
@@ -118,7 +137,7 @@ async def get_live_picks(
                 if entry_price and current_price and entry_price > 0:
                     change_pct = ((current_price - entry_price) / entry_price) * 100
 
-                picks.append({
+                pick_data = {
                     "id": row["id"],
                     "symbol": symbol,
                     "direction": row["direction"],
@@ -133,7 +152,13 @@ async def get_live_picks(
                     "change_pct": round(change_pct, 2) if change_pct is not None else None,
                     "created_at": row["created_at"].isoformat() if row["created_at"] else None,
                     "expires_at": row["expires_at"].isoformat() if row["expires_at"] else None,
-                })
+                }
+
+                # Add pretty_chart_url if column exists
+                if has_pretty_chart and row.get("pretty_chart_url"):
+                    pick_data["pretty_chart_url"] = row["pretty_chart_url"]
+
+                picks.append(pick_data)
 
             return picks
 
