@@ -14,7 +14,7 @@ from app.core.config import settings
 from app.services.cloud_agents.arbitrator_agent import get_final_picks
 from app.core.database import get_asyncpg_pool
 from app.services.system_state import is_system_on
-from app.services.fib_calculator import get_fib_targets_for_symbol
+from app.services.fib_calculator import calculate_confluence_targets
 
 logger = logging.getLogger(__name__)
 
@@ -105,23 +105,34 @@ def run_arbitrator():
                         logger.warning(f"Candidate data missing for {symbol}")
                         continue
 
-                    # Calculate Fibonacci-based targets (no AI hallucination)
+                    # Calculate confluence-based targets (v5 - deterministic math)
                     current_price = float(candidate['price_at_selection']) if candidate['price_at_selection'] else 0
-                    fib_targets = await get_fib_targets_for_symbol(
+                    conf_targets = await calculate_confluence_targets(
                         symbol=symbol,
                         current_price=current_price,
                         direction=direction,
                         db_pool=db
                     )
 
-                    # Use Fib extension targets
-                    target_low = fib_targets.target_1   # Primary target (~70-75% hit rate)
-                    target_high = fib_targets.target_2  # Moonshot target (~40-50% hit rate)
-                    stop_loss = fib_targets.stop_loss
+                    # Primary target always shown, moonshot conditional on confluence score
+                    primary_target = conf_targets.primary_target
+                    moonshot_target = conf_targets.moonshot_target  # None if conditions not met
+                    stop_loss = conf_targets.stop_loss
 
                     logger.info(f"{symbol} ({direction}): price=${current_price:.2f}, "
-                               f"targets=${target_low:.2f}-${target_high:.2f}, "
-                               f"stop=${stop_loss:.2f}, valid={fib_targets.valid}")
+                               f"primary=${primary_target:.2f}, moonshot={f'${moonshot_target:.2f}' if moonshot_target else 'N/A'}, "
+                               f"confluence={conf_targets.confluence_score}/4 {conf_targets.confluence_methods}")
+
+                    # Serialize weekly pivots for charting
+                    weekly_pivots_dict = None
+                    if conf_targets.weekly_pivots:
+                        weekly_pivots_dict = {
+                            "pivot": conf_targets.weekly_pivots.pivot,
+                            "r1": conf_targets.weekly_pivots.r1,
+                            "r2": conf_targets.weekly_pivots.r2,
+                            "s1": conf_targets.weekly_pivots.s1,
+                            "s2": conf_targets.weekly_pivots.s2
+                        }
 
                     pick_context = {
                         "technical": json.loads(candidate['technical_snapshot'] or '{}'),
@@ -135,39 +146,55 @@ def run_arbitrator():
                             "polymarket_prob": float(candidate['polymarket_prob']) if candidate['polymarket_prob'] else None,
                         },
                         "arbitrator": {
-                            "model": "gpt-oss-120b",
+                            "model": "qwen2.5-72b-instruct",
                             "confidence": pick.get("confidence", 0.0),
                             "reasoning": pick.get("reasoning", "")
                         },
-                        "fib_analysis": {
-                            "swing_low": fib_targets.swing_low,
-                            "swing_high": fib_targets.swing_high,
-                            "target_1": fib_targets.target_1,
-                            "target_2": fib_targets.target_2,
-                            "stop_loss": fib_targets.stop_loss,
-                            "valid_setup": fib_targets.valid,
-                            "invalidation_reason": fib_targets.invalidation_reason
+                        "confluence_analysis": {
+                            "swing_low": conf_targets.swing_low,
+                            "swing_high": conf_targets.swing_high,
+                            "primary_target": conf_targets.primary_target,
+                            "moonshot_target": conf_targets.moonshot_target,
+                            "stop_loss": conf_targets.stop_loss,
+                            "confluence_score": conf_targets.confluence_score,
+                            "confluence_methods": conf_targets.confluence_methods,
+                            "gann_alignment": conf_targets.gann_alignment,
+                            "rsi_divergence": conf_targets.rsi_divergence.detected if conf_targets.rsi_divergence else False,
+                            "rsi_divergence_type": conf_targets.rsi_divergence.divergence_type if conf_targets.rsi_divergence else None,
+                            "atr_pct": conf_targets.atr_pct,
+                            "valid_setup": conf_targets.valid,
+                            "invalidation_reason": conf_targets.invalidation_reason
                         },
                         "market_context": phase_data.get("market_context", {})
                     }
 
-                    # Insert final pick with Fib targets
+                    # Insert final pick with confluence data
                     pick_id = await conn.fetchval("""
                         INSERT INTO picks (
                             symbol, direction, confidence, reasoning,
                             target_low, target_high,
+                            primary_target, moonshot_target,
+                            confluence_score, confluence_methods, rsi_divergence, gann_alignment,
+                            weekly_pivots,
                             pick_context, created_at, expires_at
                         ) VALUES (
-                            $1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP,
-                            CURRENT_TIMESTAMP + INTERVAL '30 days'
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '30 days'
                         ) RETURNING id
                     """,
                         symbol,
                         direction,
                         pick.get("confidence", 0.0),
                         pick.get("reasoning", ""),
-                        target_low,
-                        target_high,
+                        primary_target,  # Keep target_low for backward compat
+                        moonshot_target if moonshot_target else primary_target * 1.15,  # target_high fallback
+                        primary_target,
+                        moonshot_target,
+                        conf_targets.confluence_score,
+                        conf_targets.confluence_methods,
+                        conf_targets.rsi_divergence.detected if conf_targets.rsi_divergence else False,
+                        conf_targets.gann_alignment,
+                        json.dumps(weekly_pivots_dict) if weekly_pivots_dict else None,
                         json.dumps(pick_context)
                     )
 
@@ -184,15 +211,19 @@ def run_arbitrator():
                         INSERT INTO pick_outcomes_detailed (
                             pick_id, symbol, direction,
                             entry_price, target_low, target_high,
+                            primary_target, moonshot_target, confluence_score,
                             outcome, created_at
-                        ) VALUES ($1, $2, $3, $4, $5, $6, 'pending', CURRENT_TIMESTAMP)
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', CURRENT_TIMESTAMP)
                     """,
                         pick_id,
                         symbol,
                         direction,
                         current_price,
-                        target_low,
-                        target_high
+                        primary_target,  # Keep target_low for backward compat
+                        moonshot_target if moonshot_target else primary_target * 1.15,
+                        primary_target,
+                        moonshot_target,
+                        conf_targets.confluence_score
                     )
 
             logger.info(f"Arbitrator complete: {len(final_picks)} picks saved")

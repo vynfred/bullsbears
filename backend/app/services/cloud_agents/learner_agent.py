@@ -17,9 +17,13 @@ LEARNER_PROMPT_PATH = PROMPTS_DIR / "learner_prompt.txt"
 
 
 async def run_weekly_learner(week_start: date, week_end: date):
+    """
+    Weekly learner - analyzes 30-day matured outcomes to improve weights/bias.
+    Now includes confluence tracking for v5 target system.
+    """
     logger.info(f"Weekly learner running: {week_start} → {week_end}")
 
-    # 1. Pull real data from your Render PostgreSQL (matches bullsbears_production.sql)
+    # 1. Pull real data from Render PostgreSQL with confluence + outcome data
     pool = await get_asyncpg_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
@@ -32,10 +36,26 @@ async def run_weekly_learner(week_start: date, week_end: date):
                 sc.selected,
                 fp.direction,
                 sc.price_at_selection AS price_at_pick,
-                hd_30.close_price AS price_30d_later
+                hd_30.close_price AS price_30d_later,
+                -- Confluence data from picks table
+                p.confluence_score,
+                p.confluence_methods,
+                p.rsi_divergence,
+                p.gann_alignment,
+                p.primary_target,
+                p.moonshot_target,
+                -- Outcome tracking
+                pod.hit_primary_target,
+                pod.hit_moonshot_target,
+                pod.max_gain_pct
             FROM shortlist_candidates sc
             LEFT JOIN final_picks fp
                 ON fp.shortlist_id = sc.id
+            LEFT JOIN picks p
+                ON p.symbol = sc.symbol
+                AND p.created_at::date = sc.date::date
+            LEFT JOIN pick_outcomes_detailed pod
+                ON pod.pick_id = p.id
             LEFT JOIN historical_data hd_30
                 ON hd_30.symbol = sc.symbol
                 AND hd_30.date = sc.date::date + INTERVAL '30 days'
@@ -43,13 +63,18 @@ async def run_weekly_learner(week_start: date, week_end: date):
             ORDER BY sc.date DESC
         """, week_start, week_end)
 
-    # 2. Build clean candidate list with actual 30-day % moves
+    # 2. Build candidate list with 30-day moves + confluence metrics
     candidates = []
     for r in rows:
         if r["price_at_pick"] and r["price_30d_later"] and r["price_at_pick"] > 0:
             pct_30d = round((r["price_30d_later"] - r["price_at_pick"]) / r["price_at_pick"] * 100, 2)
         else:
             pct_30d = None
+
+        # Parse confluence methods (stored as TEXT[])
+        confluence_methods = r["confluence_methods"] or []
+        if isinstance(confluence_methods, str):
+            confluence_methods = json.loads(confluence_methods) if confluence_methods else []
 
         candidates.append({
             "symbol": r["symbol"],
@@ -59,7 +84,15 @@ async def run_weekly_learner(week_start: date, week_end: date):
             "polymarket": round(float(r["polymarket_prob"] or 0), 3),
             "picked": bool(r["selected"]),
             "direction": r["direction"],
-            "pct_30d": pct_30d
+            "pct_30d": pct_30d,
+            # Confluence tracking (v5)
+            "confluence_score": int(r["confluence_score"] or 0),
+            "confluence_methods": confluence_methods,
+            "rsi_divergence": bool(r["rsi_divergence"]),
+            "gann_alignment": bool(r["gann_alignment"]),
+            "hit_primary": bool(r["hit_primary_target"]),
+            "hit_moonshot": bool(r["hit_moonshot_target"]),
+            "max_gain_pct": float(r["max_gain_pct"]) if r["max_gain_pct"] else None
         })
 
     if not candidates:
