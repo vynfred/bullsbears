@@ -99,14 +99,20 @@ export const api = {
 
   // LIVE PICKS
   getLivePicks: async (params: {
-    sentiment: 'bullish' | 'bearish';
-    limit: number;
-    min_confidence: number;
+    sentiment?: 'bullish' | 'bearish';
+    limit?: number;
+    min_confidence?: number;
+    period?: 'today' | '7d' | 'all' | 'active';
+    outcome?: 'wins' | 'losses';
   }): Promise<any[]> => {
-    const { sentiment, limit, min_confidence } = params;
-    return fetchWithError(
-      `/api/v1/picks/live?sentiment=${sentiment}&limit=${limit}&min_confidence=${min_confidence}`
-    );
+    const queryParams = new URLSearchParams();
+    if (params.sentiment) queryParams.append('sentiment', params.sentiment);
+    if (params.limit) queryParams.append('limit', params.limit.toString());
+    if (params.min_confidence !== undefined) queryParams.append('min_confidence', params.min_confidence.toString());
+    if (params.period) queryParams.append('period', params.period);
+    if (params.outcome) queryParams.append('outcome', params.outcome);
+
+    return fetchWithError(`/api/v1/picks/live?${queryParams.toString()}`);
   },
 
   // WATCHLIST (requires auth)

@@ -23,6 +23,19 @@ export interface LivePick {
   sentiment: 'bullish' | 'bearish';
   timestamp: Date;
   chartUrl?: string;
+  prettyChartUrl?: string;
+  // Confluence v5 fields
+  primaryTarget?: number;
+  moonshotTarget?: number;
+  confluenceScore?: number;
+  rsiDivergence?: boolean;
+  gannAlignment?: boolean;
+  weeklyPivots?: Record<string, number>;
+  // Outcome tracking
+  hitPrimaryTarget?: boolean;
+  hitMoonshotTarget?: boolean;
+  maxGainPct?: number;
+  outcomeStatus?: 'active' | 'win' | 'moonshot' | 'loss';
 }
 
 interface UseLivePicksOptions {
@@ -33,6 +46,8 @@ interface UseLivePicksOptions {
   minConfidence?: number;
   enableSSE?: boolean;
   cacheTimeout?: number;
+  period?: 'today' | '7d' | 'all' | 'active';
+  outcome?: 'wins' | 'losses';
 }
 
 interface CacheEntry {
@@ -45,9 +60,11 @@ export function useLivePicks({
   bearishLimit = 25,
   refreshInterval = 5 * 60 * 1000,
   enabled = true,
-  minConfidence = 0.48,
+  minConfidence = 0,
   enableSSE = true,
   cacheTimeout = 30 * 1000, // 30 seconds
+  period = 'today',
+  outcome,
 }: UseLivePicksOptions = {}) {
   const [picks, setPicks] = useState<LivePick[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,6 +73,8 @@ export function useLivePicks({
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isRealTime, setIsRealTime] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+  const [activePeriod, setActivePeriod] = useState<typeof period>(period);
+  const [activeOutcome, setActiveOutcome] = useState<typeof outcome>(outcome);
 
   // Refs for cleanup
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -123,15 +142,36 @@ export function useLivePicks({
       sentiment,
       timestamp: new Date(alert.created_at || alert.timestamp || Date.now()),
       chartUrl: alert.chart_url,
+      prettyChartUrl: alert.pretty_chart_url,
+      // Confluence v5 fields
+      primaryTarget: alert.primary_target,
+      moonshotTarget: alert.moonshot_target,
+      confluenceScore: alert.confluence_score,
+      rsiDivergence: alert.rsi_divergence,
+      gannAlignment: alert.gann_alignment,
+      weeklyPivots: alert.weekly_pivots,
+      // Outcome tracking
+      hitPrimaryTarget: alert.hit_primary_target,
+      hitMoonshotTarget: alert.hit_moonshot_target,
+      maxGainPct: alert.max_gain_pct,
+      outcomeStatus: alert.outcome_status,
     };
   }, []);
 
-  // Fetch picks from API
-  const fetchPicks = useCallback(async (useCache = true): Promise<LivePick[]> => {
+  // Fetch picks from API with filters
+  const fetchPicks = useCallback(async (
+    useCache = true,
+    filterPeriod?: typeof activePeriod,
+    filterOutcome?: typeof activeOutcome
+  ): Promise<LivePick[]> => {
     if (!enabled) return [];
 
-    // Check cache first
-    if (useCache) {
+    // Use provided filters or fall back to active state
+    const currentPeriod = filterPeriod || activePeriod;
+    const currentOutcome = filterOutcome || activeOutcome;
+
+    // Skip cache if filters changed
+    if (useCache && !filterPeriod && !filterOutcome) {
       const cached = getCachedData();
       if (cached) {
         console.log('🔥 Using cached picks data');
@@ -143,8 +183,20 @@ export function useLivePicks({
       const minConfidencePercent = Math.round(minConfidence * 100);
 
       const [bullishData, bearishData] = await Promise.all([
-        api.getLivePicks({ sentiment: 'bullish', limit: bullishLimit, min_confidence: minConfidencePercent }),
-        api.getLivePicks({ sentiment: 'bearish', limit: bearishLimit, min_confidence: minConfidencePercent }),
+        api.getLivePicks({
+          sentiment: 'bullish',
+          limit: bullishLimit,
+          min_confidence: minConfidencePercent,
+          period: currentPeriod,
+          outcome: currentOutcome,
+        }),
+        api.getLivePicks({
+          sentiment: 'bearish',
+          limit: bearishLimit,
+          min_confidence: minConfidencePercent,
+          period: currentPeriod,
+          outcome: currentOutcome,
+        }),
       ]);
 
       const bullishPicks = bullishData.map(a => transformData(a, 'bullish'));
@@ -153,13 +205,13 @@ export function useLivePicks({
 
       // Cache the result
       setCachedData(allPicks);
-      
+
       return allPicks;
     } catch (err) {
       console.error('Failed to fetch picks:', err);
       throw err;
     }
-  }, [bullishLimit, bearishLimit, minConfidence, enabled, getCachedData, setCachedData, transformData]);
+  }, [bullishLimit, bearishLimit, minConfidence, enabled, activePeriod, activeOutcome, getCachedData, setCachedData, transformData]);
 
   // Setup Server-Sent Events
   const setupSSE = useCallback(() => {
@@ -248,7 +300,7 @@ export function useLivePicks({
   const refresh = useCallback(async () => {
     setIsRefreshing(true);
     clearCache();
-    
+
     try {
       const data = await fetchPicks(false);
       setPicks(data);
@@ -260,6 +312,42 @@ export function useLivePicks({
       setIsRefreshing(false);
     }
   }, [fetchPicks, clearCache]);
+
+  // Change period filter
+  const setPeriod = useCallback(async (newPeriod: typeof activePeriod) => {
+    setActivePeriod(newPeriod);
+    setIsLoading(true);
+    clearCache();
+
+    try {
+      const data = await fetchPicks(false, newPeriod, activeOutcome);
+      setPicks(data);
+      setLastUpdated(new Date());
+      setError(null);
+    } catch (err) {
+      setError('Failed to load picks');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchPicks, clearCache, activeOutcome]);
+
+  // Change outcome filter
+  const setOutcome = useCallback(async (newOutcome?: 'wins' | 'losses') => {
+    setActiveOutcome(newOutcome);
+    setIsLoading(true);
+    clearCache();
+
+    try {
+      const data = await fetchPicks(false, activePeriod, newOutcome);
+      setPicks(data);
+      setLastUpdated(new Date());
+      setError(null);
+    } catch (err) {
+      setError('Failed to load picks');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchPicks, clearCache, activePeriod]);
 
   // Test connection
   const testConnection = useCallback(async () => {
@@ -310,10 +398,18 @@ export function useLivePicks({
   const bullishPicks = picks.filter(p => p.sentiment === 'bullish');
   const bearishPicks = picks.filter(p => p.sentiment === 'bearish');
 
+  // Count by outcome
+  const winsPicks = picks.filter(p => p.outcomeStatus === 'win' || p.outcomeStatus === 'moonshot');
+  const lossPicks = picks.filter(p => p.outcomeStatus === 'loss');
+  const activePicks = picks.filter(p => p.outcomeStatus === 'active');
+
   return {
     picks,
     bullishPicks,
     bearishPicks,
+    winsPicks,
+    lossPicks,
+    activePicks,
     isLoading,
     isRefreshing,
     error,
@@ -322,7 +418,16 @@ export function useLivePicks({
     totalPicks: picks.length,
     bullishCount: bullishPicks.length,
     bearishCount: bearishPicks.length,
-    
+    winsCount: winsPicks.length,
+    lossCount: lossPicks.length,
+    activeCount: activePicks.length,
+
+    // Filters
+    period: activePeriod,
+    setPeriod,
+    outcome: activeOutcome,
+    setOutcome,
+
     // Advanced features
     isRealTime,
     connectionStatus,

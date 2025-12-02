@@ -6,10 +6,8 @@ import {
   ChevronDown,
   ChevronUp,
   Plus,
-  Clock,
   Sparkles,
   RefreshCw,
-  ArrowUpDown
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,66 +21,49 @@ import { useWatchlist } from "@/hooks/useWatchlist";
 const bullIcon = "/assets/bull-icon.png";
 const bearIcon = "/assets/bear-icon.png";
 
-interface PicksTabProps {
-  onPickClick?: (type: "bullish" | "bearish") => void;
-}
-
-type SortOption = "confidence" | "bullish" | "bearish" | "entry";
-
-export default function PicksTab({ onPickClick }: PicksTabProps = {}) {
+export default function PicksTab() {
   const {
     picks,
     isLoading,
     isRefreshing,
     error,
     lastUpdated,
-    refresh
+    refresh,
+    period,
+    setPeriod,
+    outcome,
+    setOutcome,
   } = useLivePicks({
     bullishLimit: 25,
     bearishLimit: 25,
     refreshInterval: 5 * 60 * 1000,
     enabled: true,
-    minConfidence: 0.48
+    minConfidence: 0,
+    period: 'today',
   });
 
   const {
-    watchlistEntries,
     addToWatchlist,
     isAdding,
     isInWatchlist,
   } = useWatchlist();
 
-  const [sortBy, setSortBy] = useState<SortOption>("confidence");
   const [filterSentiment, setFilterSentiment] = useState<"all" | "bullish" | "bearish">("all");
   const [openPickId, setOpenPickId] = useState<string | null>(null);
 
   const filteredPicks = useMemo(() => {
     let picksToShow = picks;
 
-    // Apply sentiment filter
+    // Apply sentiment filter (local, client-side)
     if (filterSentiment === "bullish") {
       picksToShow = picks.filter(p => p.sentiment === "bullish");
     } else if (filterSentiment === "bearish") {
       picksToShow = picks.filter(p => p.sentiment === "bearish");
     }
 
-    // Apply sort
-    if (sortBy === "bullish") {
-      picksToShow = picksToShow.filter(p => p.sentiment === "bullish");
-    } else if (sortBy === "bearish") {
-      picksToShow = picksToShow.filter(p => p.sentiment === "bearish");
-    }
-
-    return [...picksToShow].sort((a, b) => {
-      if (sortBy === "confidence") return b.confidence - a.confidence;
-      if (sortBy === "entry") {
-        const aDiff = Math.abs(a.change);
-        const bDiff = Math.abs(b.change);
-        return aDiff - bDiff;
-      }
-      return b.confidence - a.confidence;
-    });
-  }, [picks, filterSentiment, sortBy]);
+    // Sort by confidence descending
+    return [...picksToShow].sort((a, b) => b.confidence - a.confidence);
+  }, [picks, filterSentiment]);
 
   const bullishCount = picks.filter(p => p.sentiment === "bullish").length;
   const bearishCount = picks.filter(p => p.sentiment === "bearish").length;
@@ -91,13 +72,6 @@ export default function PicksTab({ onPickClick }: PicksTabProps = {}) {
     if (confidence >= 80) return { label: "High", color: "text-emerald-400" };
     if (confidence >= 65) return { label: "Medium", color: "text-yellow-400" };
     return { label: "Low", color: "text-orange-400" };
-  };
-
-  const formatTimeToTarget = (hours?: number) => {
-    if (!hours) return "—";
-    const days = Math.floor(hours / 24);
-    const h = Math.floor(hours % 24);
-    return days > 0 ? `${days}d ${h}h` : `${h}h`;
   };
 
   return (
@@ -170,22 +144,51 @@ export default function PicksTab({ onPickClick }: PicksTabProps = {}) {
         </motion.div>
       </div>
 
-      {/* Filter and Sort Options */}
-      <div className="flex items-center justify-center gap-3">
-        <Select value={filterSentiment} onValueChange={(v) => setFilterSentiment(v as typeof filterSentiment)}>
-          <SelectTrigger className="w-[140px] bg-slate-800 border-slate-600 text-slate-100">
+      {/* Filter Options */}
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        {/* Period Filter */}
+        <Select value={period} onValueChange={(v) => setPeriod(v as typeof period)}>
+          <SelectTrigger className="w-[120px] bg-slate-800 border-slate-600 text-slate-100 text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-slate-900 border-slate-700">
-            <SelectItem value="all" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">All Picks</SelectItem>
-            <SelectItem value="bullish" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">Bullish Only</SelectItem>
-            <SelectItem value="bearish" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">Bearish Only</SelectItem>
+            <SelectItem value="today" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">Today</SelectItem>
+            <SelectItem value="7d" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">Past 7 Days</SelectItem>
+            <SelectItem value="active" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">Active (30d)</SelectItem>
+            <SelectItem value="all" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">All Time</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Sentiment Filter */}
+        <Select value={filterSentiment} onValueChange={(v) => setFilterSentiment(v as typeof filterSentiment)}>
+          <SelectTrigger className="w-[120px] bg-slate-800 border-slate-600 text-slate-100 text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-slate-900 border-slate-700">
+            <SelectItem value="all" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">All</SelectItem>
+            <SelectItem value="bullish" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">Bullish</SelectItem>
+            <SelectItem value="bearish" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">Bearish</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Outcome Filter */}
+        <Select value={outcome || "all"} onValueChange={(v) => setOutcome(v === "all" ? undefined : v as "wins" | "losses")}>
+          <SelectTrigger className="w-[100px] bg-slate-800 border-slate-600 text-slate-100 text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-slate-900 border-slate-700">
+            <SelectItem value="all" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">All</SelectItem>
+            <SelectItem value="wins" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">
+              <span className="flex items-center gap-1">🏆 Wins</span>
+            </SelectItem>
+            <SelectItem value="losses" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">
+              <span className="flex items-center gap-1">💔 Losses</span>
+            </SelectItem>
           </SelectContent>
         </Select>
 
         <Button onClick={refresh} variant="outline" size="sm" disabled={isRefreshing} className="bg-slate-800 border-slate-600">
-          <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
-          Refresh
+          <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
         </Button>
       </div>
 
@@ -230,10 +233,33 @@ export default function PicksTab({ onPickClick }: PicksTabProps = {}) {
             const alreadyInWatchlist = isInWatchlist(pick.symbol);
             const isBullish = pick.sentiment === "bullish";
             const confidenceLevel = getConfidenceLevel(pick.confidence);
+            const outcomeStatus = pick.outcomeStatus || 'active';
 
-            const borderClass = isBullish
-              ? 'border-2 bg-gradient-to-br from-emerald-950/60 via-slate-900/40 to-emerald-900/30 border-emerald-700/40 hover:border-emerald-500/60'
-              : 'border-2 bg-gradient-to-br from-rose-950/60 via-slate-900/40 to-rose-900/30 border-rose-700/40 hover:border-rose-500/60';
+            // Outcome-based styling
+            // Active: Green (bull) / Red (bear)
+            // Win (primary/target2): Gold
+            // Moonshot: Gold with sparkle animation
+            // Loss/Miss: Purple
+            let borderClass = '';
+            let shouldSparkle = false;
+            let outcomeLabel = '';
+
+            if (outcomeStatus === 'moonshot') {
+              borderClass = 'border-2 bg-gradient-to-br from-yellow-950/60 via-amber-900/40 to-yellow-900/30 border-yellow-500/60 hover:border-yellow-400/80';
+              shouldSparkle = true;
+              outcomeLabel = '🌙 Moonshot Hit!';
+            } else if (outcomeStatus === 'win') {
+              borderClass = 'border-2 bg-gradient-to-br from-yellow-950/60 via-amber-900/40 to-yellow-900/30 border-yellow-600/50 hover:border-yellow-500/70';
+              outcomeLabel = '🎯 Target Hit!';
+            } else if (outcomeStatus === 'loss') {
+              borderClass = 'border-2 bg-gradient-to-br from-purple-950/60 via-slate-900/40 to-purple-900/30 border-purple-700/40 hover:border-purple-500/60';
+              outcomeLabel = '❌ Expired';
+            } else {
+              // Active - use bull/bear colors
+              borderClass = isBullish
+                ? 'border-2 bg-gradient-to-br from-emerald-950/60 via-slate-900/40 to-emerald-900/30 border-emerald-700/40 hover:border-emerald-500/60'
+                : 'border-2 bg-gradient-to-br from-rose-950/60 via-slate-900/40 to-rose-900/30 border-rose-700/40 hover:border-rose-500/60';
+            }
 
             return (
               <motion.div
@@ -243,6 +269,21 @@ export default function PicksTab({ onPickClick }: PicksTabProps = {}) {
                 transition={{ delay: index * 0.05 }}
               >
                 <Collapsible open={isOpen} onOpenChange={(open) => setOpenPickId(open ? pick.id : null)}>
+                  <motion.div
+                    animate={shouldSparkle ? {
+                      boxShadow: [
+                        '0 0 20px rgba(234, 179, 8, 0.3)',
+                        '0 0 40px rgba(234, 179, 8, 0.6)',
+                        '0 0 20px rgba(234, 179, 8, 0.3)',
+                      ],
+                    } : {}}
+                    transition={{
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                    className="rounded-lg"
+                  >
                   <Card className={`shadow-lg hover:shadow-2xl transition-all duration-300 ${borderClass}`}>
                     <CollapsibleTrigger className="w-full">
                       <CardContent className="py-4">
@@ -250,11 +291,35 @@ export default function PicksTab({ onPickClick }: PicksTabProps = {}) {
                           {/* Row 1: Symbol (left) + Confidence/Sentiment (right) */}
                           <div className="flex items-start justify-between gap-2">
                             <div className="text-left min-w-0">
-                              <div className="text-xl font-bold text-slate-100">{pick.symbol}</div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xl font-bold text-slate-100">{pick.symbol}</span>
+                                {outcomeLabel && (
+                                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                    outcomeStatus === 'moonshot' ? 'bg-yellow-500/30 text-yellow-300' :
+                                    outcomeStatus === 'win' ? 'bg-amber-500/30 text-amber-300' :
+                                    outcomeStatus === 'loss' ? 'bg-purple-500/30 text-purple-300' : ''
+                                  }`}>
+                                    {outcomeLabel}
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-slate-400 text-sm truncate">{pick.name}</p>
                             </div>
 
                             <div className="flex items-center gap-2 shrink-0">
+                              {/* Confluence Score Badge */}
+                              {pick.confluenceScore !== undefined && pick.confluenceScore > 0 && (
+                                <Badge
+                                  className={`text-xs px-2 py-1 ${
+                                    pick.confluenceScore >= 3 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50' :
+                                    pick.confluenceScore >= 2 ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' :
+                                    'bg-slate-500/20 text-slate-300 border-slate-500/50'
+                                  }`}
+                                  variant="outline"
+                                >
+                                  {pick.confluenceScore}/4
+                                </Badge>
+                              )}
                               <Badge
                                 className={`text-xs px-2 py-1 ${confidenceLevel.color} bg-slate-800/50 border-slate-600`}
                                 variant="outline"
@@ -395,6 +460,7 @@ export default function PicksTab({ onPickClick }: PicksTabProps = {}) {
                       </CardContent>
                     </CollapsibleContent>
                   </Card>
+                  </motion.div>
                 </Collapsible>
               </motion.div>
             );
