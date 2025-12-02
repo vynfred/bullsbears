@@ -296,7 +296,7 @@ def update_firebase_sync(path: str, data: Dict[str, Any]):
 def upload_chart_to_storage(symbol: str, date_str: str, png_bytes: bytes, folder: str = "charts") -> Optional[str]:
     """
     Upload chart PNG to Firebase Storage and return public URL.
-    Path: {folder}/{YYYY-MM-DD}/{symbol}.png
+    Path: {folder}/{YYYY-MM-DD}/{symbol}_v{timestamp}.png
 
     Args:
         symbol: Stock ticker
@@ -304,17 +304,27 @@ def upload_chart_to_storage(symbol: str, date_str: str, png_bytes: bytes, folder
         png_bytes: PNG image bytes
         folder: Storage folder (default: "charts", can be "pretty" for annotated charts)
     """
+    import time
+
     if storage_bucket is None:
         logger.error("Firebase Storage not initialized")
         return None
 
     try:
-        # Create blob path
-        blob_path = f"{folder}/{date_str}/{symbol}.png"
+        # Create blob path with version timestamp for cache busting
+        version = int(time.time())
+        blob_path = f"{folder}/{date_str}/{symbol}_v{version}.png"
         blob = storage_bucket.blob(blob_path)
 
-        # Upload PNG bytes
-        blob.upload_from_string(png_bytes, content_type="image/png")
+        # Upload PNG bytes with no-cache headers
+        blob.upload_from_string(
+            png_bytes,
+            content_type="image/png"
+        )
+
+        # Set cache control to no-cache
+        blob.cache_control = "no-cache, no-store, must-revalidate"
+        blob.patch()
 
         # Make public
         blob.make_public()
