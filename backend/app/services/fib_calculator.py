@@ -233,10 +233,37 @@ def calculate_fib_targets(
         # Check if price is below 0.618 retracement (bearish structure)
         is_valid = current_price < fib_618_retracement
 
+        # Dynamic ratios for low-priced stocks (< $1 use smaller extensions)
+        if current_price < 1.0:
+            ext_1 = 0.382  # Smaller extension for penny stocks
+            ext_2 = 0.5
+        else:
+            ext_1 = 0.618  # Standard extensions
+            ext_2 = 1.0
+
         # Extension targets below swing_low
-        target_1 = swing_low - swing_range * 0.618  # -0.618 extension (primary, ~70-75% hit rate)
-        target_2 = swing_low - swing_range * 1.0    # -1.0 extension (aggressive)
+        target_1 = swing_low - swing_range * ext_1
+        target_2 = swing_low - swing_range * ext_2
         stop_loss = swing_high * 1.03  # Just above swing high
+
+        # Apply minimum price floor (can't go below $0.01)
+        target_1 = max(0.01, target_1)
+        target_2 = max(0.01, target_2)
+
+        # Relative check: invalidate if target < 10% of current price (too aggressive)
+        invalidation_reason = None
+        if target_1 < current_price * 0.1:
+            is_valid = False
+            invalidation_reason = f"Target 1 ${target_1:.2f} is <10% of price ${current_price:.2f} - too aggressive"
+            # Adjust to more reasonable target
+            target_1 = current_price * 0.85  # 15% downside max
+            target_2 = current_price * 0.75  # 25% downside max
+        elif target_2 < current_price * 0.1:
+            # Just fix target_2 if it's the problem
+            target_2 = max(target_1 * 0.85, current_price * 0.70)
+
+        if not is_valid and invalidation_reason is None:
+            invalidation_reason = f"Price ${current_price:.2f} above 0.618 retracement ${fib_618_retracement:.2f}"
 
         return FibTargets(
             direction=direction,
@@ -247,8 +274,27 @@ def calculate_fib_targets(
             target_2=target_2,
             stop_loss=stop_loss,
             valid=is_valid,
-            invalidation_reason=None if is_valid else f"Price ${current_price:.2f} above 0.618 retracement ${fib_618_retracement:.2f}"
+            invalidation_reason=invalidation_reason
         )
+
+
+def calculate_atr(highs: List[float], lows: List[float], closes: List[float], period: int = 14) -> float:
+    """Calculate Average True Range (ATR)"""
+    if len(highs) < period + 1:
+        # Fallback: simple high-low range
+        return sum(h - l for h, l in zip(highs[-period:], lows[-period:])) / min(len(highs), period)
+
+    true_ranges = []
+    for i in range(1, len(highs)):
+        high_low = highs[i] - lows[i]
+        high_close = abs(highs[i] - closes[i-1])
+        low_close = abs(lows[i] - closes[i-1])
+        true_ranges.append(max(high_low, high_close, low_close))
+
+    if len(true_ranges) < period:
+        return sum(true_ranges) / len(true_ranges) if true_ranges else 0
+
+    return sum(true_ranges[-period:]) / period
 
 
 async def get_fib_targets_for_symbol(
@@ -259,6 +305,7 @@ async def get_fib_targets_for_symbol(
 ) -> FibTargets:
     """
     Fetch OHLC data and calculate Fib targets for a symbol.
+    Applies ATR-based buffer and validation for realistic targets.
 
     Args:
         symbol: Stock ticker
@@ -270,9 +317,9 @@ async def get_fib_targets_for_symbol(
         FibTargets with calculated levels
     """
     async with db_pool.acquire() as conn:
-        # Get 90 days of OHLC data
+        # Get 90 days of OHLC data including close for ATR
         rows = await conn.fetch("""
-            SELECT high_price, low_price
+            SELECT high_price, low_price, close_price
             FROM prime_ohlc_90d
             WHERE symbol = $1
             ORDER BY date ASC
@@ -289,8 +336,10 @@ async def get_fib_targets_for_symbol(
 
         highs = [float(r['high_price']) for r in rows]
         lows = [float(r['low_price']) for r in rows]
+        closes = [float(r['close_price']) for r in rows]
 
-        return calculate_fib_targets(
+        # Calculate base Fib targets
+        targets = calculate_fib_targets(
             current_price=current_price,
             highs=highs,
             lows=lows,
@@ -298,6 +347,27 @@ async def get_fib_targets_for_symbol(
             min_pct=8.0,
             min_bars=12
         )
+
+        # Apply ATR buffer for bearish targets
+        if direction == 'bearish':
+            atr = calculate_atr(highs, lows, closes, period=14)
+
+            # Add ATR * 0.5 buffer to prevent targets too close to zero
+            if atr > 0:
+                targets.target_1 = max(0.01, targets.target_1 + atr * 0.3)
+                targets.target_2 = max(0.01, targets.target_2 + atr * 0.5)
+
+            # Final sanity check: targets must be below current price for bearish
+            if targets.target_1 >= current_price:
+                targets.target_1 = current_price * 0.90
+            if targets.target_2 >= current_price:
+                targets.target_2 = current_price * 0.80
+
+            # Ensure target_2 < target_1 for bearish (target_2 is deeper)
+            if targets.target_2 > targets.target_1:
+                targets.target_2 = targets.target_1 * 0.85
+
+        return targets
 
 
 def fib_retracement(start: float, end: float, level: float) -> float:

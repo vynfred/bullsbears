@@ -242,13 +242,30 @@ class PrettyChartGenerator:
         return rsi
 
     def _load_icon(self, is_bullish: bool) -> Optional[np.ndarray]:
-        """Load and tint bull/bear icon"""
+        """Load and tint bull/bear icon with matching color"""
         try:
             icon_path = BULL_ICON_PATH if is_bullish else BEAR_ICON_PATH
             if os.path.exists(icon_path):
                 img = Image.open(icon_path).convert("RGBA")
-                img = img.resize((40, 40), Image.Resampling.LANCZOS)
-                return np.array(img)
+                img = img.resize((32, 32), Image.Resampling.LANCZOS)
+
+                # Apply color tint (green for bull, red for bear)
+                data = np.array(img)
+                # Get RGB channels
+                r, g, b, a = data[:,:,0], data[:,:,1], data[:,:,2], data[:,:,3]
+
+                if is_bullish:
+                    # Tint green (#22C55E -> RGB: 34, 197, 94)
+                    data[:,:,0] = np.clip(r * 0.13, 0, 255).astype(np.uint8)  # R
+                    data[:,:,1] = np.clip(g * 0.77 + 50, 0, 255).astype(np.uint8)  # G
+                    data[:,:,2] = np.clip(b * 0.37, 0, 255).astype(np.uint8)  # B
+                else:
+                    # Tint red (#EF4444 -> RGB: 239, 68, 68)
+                    data[:,:,0] = np.clip(r * 0.94 + 50, 0, 255).astype(np.uint8)  # R
+                    data[:,:,1] = np.clip(g * 0.27, 0, 255).astype(np.uint8)  # G
+                    data[:,:,2] = np.clip(b * 0.27, 0, 255).astype(np.uint8)  # B
+
+                return data
         except Exception as e:
             logger.warning(f"Could not load icon: {e}")
         return None
@@ -360,14 +377,7 @@ class PrettyChartGenerator:
             ax_price.text(label_x, target_high, f'Target 2: ${target_high:.2f}',
                          color=target_color, fontsize=10, fontweight='bold', va='center', zorder=10)
 
-        # MOON TARGET box
-        if moon_target:
-            moon_height = price_range * 0.05
-            moon_box = Rectangle((box_start_x, moon_target - moon_height/2), box_width, moon_height,
-                                 facecolor=target_color, edgecolor=target_color, alpha=0.25, lw=2, ls='--', zorder=4)
-            ax_price.add_patch(moon_box)
-            ax_price.text(label_x, moon_target, f'Moon: ${moon_target:.2f}',
-                         color=target_color, fontsize=9, va='center', alpha=0.9, zorder=10)
+        # Moon target removed - rarely useful and causes overlap
 
         # STOP LOSS line and annotation
         if stop_loss:
@@ -416,34 +426,43 @@ class PrettyChartGenerator:
         ax_rsi.set_xticks([])
         ax_vol.set_yticks([])
 
-        # Header with bull/bear icon
+        # Header: symbol + direction with icon NEXT to text
         direction_text = "BULLISH" if is_bullish else "BEARISH"
         header_color = BULL_TARGET_ZONE if is_bullish else BEAR_TARGET_ZONE
 
-        # Try to load actual icon
+        # First add the text
+        ax_price.text(0.02, 0.96, f'{symbol} · 90D ·',
+                     transform=ax_price.transAxes, fontsize=14, fontweight='bold',
+                     color=TEXT_COLOR, va='top', ha='left')
+
+        # Try to load and place icon next to direction text
         icon_arr = self._load_icon(is_bullish)
         if icon_arr is not None:
             try:
-                imagebox = OffsetImage(icon_arr, zoom=0.5)
-                ab = AnnotationBbox(imagebox, (0.08, 0.96), frameon=False,
+                imagebox = OffsetImage(icon_arr, zoom=0.6)
+                # Position icon right after "SYMBOL · 90D · " text
+                ab = AnnotationBbox(imagebox, (0.22, 0.955), frameon=False,
                                    xycoords='axes fraction', box_alignment=(0.5, 0.5))
                 ax_price.add_artist(ab)
-                ax_price.text(0.12, 0.96, f'{symbol} · 90D · {direction_text}',
+                # Direction text after icon
+                ax_price.text(0.26, 0.96, direction_text,
                              transform=ax_price.transAxes, fontsize=14, fontweight='bold',
                              color=header_color, va='top', ha='left')
-            except Exception:
-                ax_price.text(0.02, 0.96, f'{symbol} · 90D · {direction_text}',
+            except Exception as e:
+                logger.warning(f"Icon placement failed: {e}")
+                ax_price.text(0.22, 0.96, direction_text,
                              transform=ax_price.transAxes, fontsize=14, fontweight='bold',
                              color=header_color, va='top', ha='left')
         else:
-            ax_price.text(0.02, 0.96, f'{symbol} · 90D · {direction_text}',
+            ax_price.text(0.22, 0.96, direction_text,
                          transform=ax_price.transAxes, fontsize=14, fontweight='bold',
                          color=header_color, va='top', ha='left')
 
-        # Gradient watermark
-        ax_price.text(0.4, 0.5, 'BullsBears.xyz', transform=ax_price.transAxes,
-                     fontsize=32, fontweight='bold', color=GRADIENT_START,
-                     alpha=0.08, ha='center', va='center', style='italic')
+        # Gradient watermark - DEAD CENTER of entire figure
+        # Use figure coordinates for true center
+        fig.text(0.45, 0.55, 'BullsBears.xyz',
+                fontsize=36, fontweight='bold', color=GRADIENT_START,
+                alpha=0.08, ha='center', va='center', style='italic')
 
         # Bottom attribution
         ax_vol.text(0.99, 0.02, 'BullsBears.xyz · 3-30 day swing',
