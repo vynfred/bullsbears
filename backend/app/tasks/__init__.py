@@ -13,6 +13,7 @@ from .run_arbitrator import run_arbitrator
 from .publish_to_firebase import publish_to_firebase
 from .run_learner import run_learner
 from .statistics_tasks import update_statistics_cache
+from .monitor_pick_outcomes import monitor_pick_outcomes
 
 __all__ = [
     "fmp_delta_update",
@@ -25,4 +26,5 @@ __all__ = [
     "publish_to_firebase",
     "run_learner",
     "update_statistics_cache",
+    "monitor_pick_outcomes",
 ]

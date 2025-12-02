@@ -6,6 +6,7 @@ Uses Render Redis (internal REDIS_URL) — zero config, zero cost
 
 import os
 from celery import Celery
+from celery.schedules import crontab
 
 # Use REDIS_URL from Render environment (internal)
 REDIS_URL = os.environ["REDIS_URL"]
@@ -31,6 +32,7 @@ celery_app = Celery(
         "app.tasks.publish_to_firebase",
         "app.tasks.run_learner",
         "app.tasks.statistics_tasks",
+        "app.tasks.monitor_pick_outcomes",
     ],
 )
 
@@ -65,6 +67,22 @@ celery_app.conf.update(
 
 # Auto-discover tasks in app/tasks/
 celery_app.autodiscover_tasks()
+
+# Celery Beat Schedule - Scheduled Tasks
+celery_app.conf.beat_schedule = {
+    # Monitor pick outcomes - run daily at 4:30 PM ET (after market close)
+    "monitor-pick-outcomes-daily": {
+        "task": "app.tasks.monitor_pick_outcomes.monitor_pick_outcomes",
+        "schedule": crontab(hour=16, minute=30),
+        "options": {"queue": "default"},
+    },
+    # Also run at 10 AM ET to catch overnight moves
+    "monitor-pick-outcomes-morning": {
+        "task": "app.tasks.monitor_pick_outcomes.monitor_pick_outcomes",
+        "schedule": crontab(hour=10, minute=0),
+        "options": {"queue": "default"},
+    },
+}
 
 # Optional: for local testing
 if __name__ == "__main__":

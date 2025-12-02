@@ -1255,6 +1255,27 @@ async def clear_all_picks():
         return {"success": False, "message": str(e), "traceback": traceback.format_exc()}
 
 
+@router.post("/trigger-outcome-monitor")
+async def trigger_outcome_monitor():
+    """
+    Manually trigger the pick outcome monitor.
+    Checks all active picks for target hits and updates summaries.
+    """
+    try:
+        from app.tasks.monitor_pick_outcomes import monitor_pick_outcomes
+
+        # Run synchronously for immediate feedback
+        result = monitor_pick_outcomes()
+        return {
+            "success": True,
+            "message": "Outcome monitor completed",
+            "result": result
+        }
+    except Exception as e:
+        import traceback
+        return {"success": False, "message": str(e), "traceback": traceback.format_exc()}
+
+
 @router.post("/trigger-full-pipeline")
 async def trigger_full_pipeline_sequence():
     """Trigger the complete AI pipeline: Prescreen → Charts → Vision → Social → Arbitrator"""
