@@ -15,12 +15,18 @@ logger = logging.getLogger(__name__)
 @router.get("/live")
 async def get_live_picks(
     sentiment: Optional[str] = Query(None, description="Filter by bullish or bearish"),
+    period: Optional[str] = Query("today", description="Filter: today, 7d, all, active"),
+    outcome: Optional[str] = Query(None, description="Filter: wins, losses"),
     limit: int = Query(25, ge=1, le=100),
-    min_confidence: int = Query(48, ge=0, le=100)
+    min_confidence: int = Query(0, ge=0, le=100)
 ):
     """
     Get live AI picks from database with real-time prices from FMP.
-    Returns picks from the last 48 hours that meet confidence threshold.
+
+    Filters:
+    - period: today (default), 7d (last 7 days), all (all time), active (within 30-day window)
+    - sentiment: bullish, bearish
+    - outcome: wins (hit target), losses (expired without hit)
     """
     try:
         from app.core.database import get_asyncpg_pool
@@ -41,42 +47,45 @@ async def get_live_picks(
                 logger.warning("Picks table doesn't exist yet")
                 return []
 
-            # Build query based on filters - include pretty_chart_url if column exists
-            # Check for pretty_chart_url column
-            has_pretty_chart = await conn.fetchval("""
-                SELECT EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_name = 'picks' AND column_name = 'pretty_chart_url'
-                )
-            """)
+            # Build dynamic query with confluence columns
+            query = """
+                SELECT
+                    p.id, p.symbol, p.direction, p.confidence, p.reasoning,
+                    p.target_low, p.target_high, p.pick_context, p.pretty_chart_url,
+                    p.primary_target, p.moonshot_target,
+                    p.confluence_score, p.rsi_divergence, p.gann_alignment,
+                    p.weekly_pivots,
+                    p.created_at, p.expires_at,
+                    pod.hit_primary_target, pod.hit_moonshot_target, pod.max_gain_pct
+                FROM picks p
+                LEFT JOIN pick_outcomes_detailed pod ON pod.pick_id = p.id
+                WHERE p.confidence >= $1
+            """
+            params = [min_confidence / 100.0]
+            param_idx = 2
 
-            if has_pretty_chart:
-                query = """
-                    SELECT
-                        id, symbol, direction, confidence, reasoning,
-                        target_low, target_high, pick_context, pretty_chart_url,
-                        created_at, expires_at
-                    FROM picks
-                    WHERE confidence >= $1
-                    AND created_at >= $2
-                """
-            else:
-                query = """
-                    SELECT
-                        id, symbol, direction, confidence, reasoning,
-                        target_low, target_high, pick_context,
-                        created_at, expires_at
-                    FROM picks
-                    WHERE confidence >= $1
-                    AND created_at >= $2
-                """
-            params = [min_confidence / 100.0, datetime.utcnow() - timedelta(hours=48)]
+            # Period filter
+            if period == "today":
+                query += f" AND p.created_at::date = CURRENT_DATE"
+            elif period == "7d":
+                query += f" AND p.created_at >= CURRENT_DATE - INTERVAL '7 days'"
+            elif period == "active":
+                query += f" AND p.expires_at > CURRENT_TIMESTAMP"
+            # "all" has no date filter
 
+            # Direction/sentiment filter
             if sentiment:
-                query += " AND direction = $3"
+                query += f" AND p.direction = ${param_idx}"
                 params.append(sentiment)
+                param_idx += 1
 
-            query += " ORDER BY confidence DESC LIMIT $" + str(len(params) + 1)
+            # Outcome filter
+            if outcome == "wins":
+                query += f" AND (pod.hit_primary_target = TRUE OR pod.hit_moonshot_target = TRUE)"
+            elif outcome == "losses":
+                query += f" AND p.expires_at < CURRENT_TIMESTAMP AND (pod.hit_primary_target IS NULL OR pod.hit_primary_target = FALSE)"
+
+            query += f" ORDER BY p.created_at DESC LIMIT ${param_idx}"
             params.append(limit)
 
             rows = await conn.fetch(query, *params)
@@ -137,6 +146,20 @@ async def get_live_picks(
                 if entry_price and current_price and entry_price > 0:
                     change_pct = ((current_price - entry_price) / entry_price) * 100
 
+                # Determine outcome status for styling
+                hit_primary = row.get("hit_primary_target") or False
+                hit_moonshot = row.get("hit_moonshot_target") or False
+                is_expired = row["expires_at"] and row["expires_at"] < datetime.utcnow()
+
+                if hit_moonshot:
+                    outcome_status = "moonshot"  # Gold with sparkles
+                elif hit_primary:
+                    outcome_status = "win"  # Gold
+                elif is_expired and not hit_primary:
+                    outcome_status = "loss"  # Purple
+                else:
+                    outcome_status = "active"  # Green/Red based on direction
+
                 pick_data = {
                     "id": row["id"],
                     "symbol": symbol,
@@ -145,18 +168,28 @@ async def get_live_picks(
                     "reasoning": row["reasoning"],
                     "target_low": float(row["target_low"]) if row["target_low"] else None,
                     "target_high": float(row["target_high"]) if row["target_high"] else None,
+                    # Confluence v5 fields
+                    "primary_target": float(row["primary_target"]) if row.get("primary_target") else None,
+                    "moonshot_target": float(row["moonshot_target"]) if row.get("moonshot_target") else None,
+                    "confluence_score": int(row["confluence_score"]) if row.get("confluence_score") else 0,
+                    "rsi_divergence": bool(row.get("rsi_divergence")),
+                    "gann_alignment": bool(row.get("gann_alignment")),
+                    "weekly_pivots": row.get("weekly_pivots"),
+                    # Outcome tracking
+                    "hit_primary_target": hit_primary,
+                    "hit_moonshot_target": hit_moonshot,
+                    "max_gain_pct": float(row["max_gain_pct"]) if row.get("max_gain_pct") else None,
+                    "outcome_status": outcome_status,
+                    # Price/chart data
                     "context": row["pick_context"],
                     "chart_url": chart_data.get(symbol),
+                    "pretty_chart_url": row.get("pretty_chart_url"),
                     "entry_price": entry_price,
                     "current_price": current_price,
                     "change_pct": round(change_pct, 2) if change_pct is not None else None,
                     "created_at": row["created_at"].isoformat() if row["created_at"] else None,
                     "expires_at": row["expires_at"].isoformat() if row["expires_at"] else None,
                 }
-
-                # Add pretty_chart_url if column exists
-                if has_pretty_chart and row.get("pretty_chart_url"):
-                    pick_data["pretty_chart_url"] = row["pretty_chart_url"]
 
                 picks.append(pick_data)
 
