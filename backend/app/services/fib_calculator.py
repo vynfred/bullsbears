@@ -110,10 +110,14 @@ def get_last_completed_swing(
     if len(swings) < 2:
         # Fallback: use simple min/max of recent data
         lookback = min(30, len(highs))
+        if lookback == 0:
+            return None, None
         swing_low = min(lows[-lookback:])
         swing_high = max(highs[-lookback:])
 
-        # Ensure minimum swing size
+        # Ensure minimum swing size (avoid divide by zero)
+        if swing_low <= 0:
+            return None, None
         swing_range_pct = (swing_high - swing_low) / swing_low * 100
         if swing_range_pct < min_pct:
             return None, None
@@ -121,6 +125,18 @@ def get_last_completed_swing(
         return swing_low, swing_high
 
     # Get last two swings to form completed swing
+    # Find the most recent high and low from the swings
+    recent_swings = swings[-4:] if len(swings) >= 4 else swings  # Last 4 swings max
+
+    swing_highs = [s.price for s in recent_swings if s.is_high]
+    swing_lows = [s.price for s in recent_swings if not s.is_high]
+
+    if swing_highs and swing_lows:
+        return min(swing_lows), max(swing_highs)
+
+    # Fallback to simple min/max
+    lookback = min(30, len(highs))
+    return min(lows[-lookback:]), max(highs[-lookback:])
 
 
 def fib_extension(swing_low: float, swing_high: float, level: float) -> float:
