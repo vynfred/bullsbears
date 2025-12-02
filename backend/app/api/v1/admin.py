@@ -1173,6 +1173,18 @@ async def trigger_arbitrator_sync():
         return {"success": False, "message": str(e), "debug": debug_info}
 
 
+@router.post("/trigger-pretty-charts")
+async def trigger_pretty_charts():
+    """Regenerate pretty charts for existing picks"""
+    try:
+        from app.tasks.generate_pretty_charts import generate_pretty_charts_for_picks
+        result = await generate_pretty_charts_for_picks()
+        return {"success": True, "result": result}
+    except Exception as e:
+        import traceback
+        return {"success": False, "message": str(e), "traceback": traceback.format_exc()}
+
+
 @router.post("/trigger-full-pipeline")
 async def trigger_full_pipeline_sequence():
     """Trigger the complete AI pipeline: Prescreen → Charts → Vision → Social → Arbitrator"""
