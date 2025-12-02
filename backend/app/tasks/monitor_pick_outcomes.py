@@ -40,12 +40,14 @@ async def _monitor_outcomes():
         # Get all picks that need checking:
         # 1. Active picks (not expired, not yet resolved)
         # 2. Recently expired picks (within last 24h, needs miss summary)
+        # Note: entry_price comes from picks.pick_context->>'price_at_alert' or pod.entry_price
         picks = await conn.fetch("""
             SELECT
                 p.id, p.symbol, p.direction, p.reasoning,
                 p.primary_target, p.moonshot_target,
+                p.pick_context,
                 p.created_at, p.expires_at,
-                pod.id as pod_id, pod.entry_price,
+                pod.id as pod_id,
                 pod.hit_primary_target, pod.hit_moonshot_target,
                 pod.max_gain_pct, pod.outcome
             FROM picks p
@@ -90,7 +92,19 @@ async def _monitor_outcomes():
                     logger.warning(f"No price for {symbol}")
                     continue
                 
-                entry_price = float(pick["entry_price"]) if pick["entry_price"] else None
+                # Get entry price from pick_context JSON (price_at_alert)
+                pick_context = pick["pick_context"] or {}
+                entry_price = None
+                if isinstance(pick_context, dict):
+                    entry_price = pick_context.get("price_at_alert")
+                elif isinstance(pick_context, str):
+                    import json
+                    try:
+                        ctx = json.loads(pick_context)
+                        entry_price = ctx.get("price_at_alert")
+                    except:
+                        pass
+                entry_price = float(entry_price) if entry_price else None
                 primary_target = float(pick["primary_target"]) if pick["primary_target"] else None
                 moonshot_target = float(pick["moonshot_target"]) if pick["moonshot_target"] else None
                 direction = pick["direction"]
