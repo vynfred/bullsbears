@@ -187,6 +187,39 @@ class PrettyChartGenerator:
         df["volume"] = df["volume"].astype(float)
         return df.set_index("date")
 
+    def _calculate_support_resistance(self, df: pd.DataFrame) -> Dict:
+        """Calculate support and resistance levels using pivot points"""
+        import numpy as np
+        highs = df["high_price"].values
+        lows = df["low_price"].values
+
+        # Use recent 30 days for S/R calculation
+        recent_highs = highs[-30:]
+        recent_lows = lows[-30:]
+
+        resistance_levels = []
+        support_levels = []
+
+        # Simple pivot point method
+        for i in range(2, len(recent_highs) - 2):
+            if recent_highs[i] > recent_highs[i-1] and recent_highs[i] > recent_highs[i-2] and \
+               recent_highs[i] > recent_highs[i+1] and recent_highs[i] > recent_highs[i+2]:
+                resistance_levels.append(recent_highs[i])
+            if recent_lows[i] < recent_lows[i-1] and recent_lows[i] < recent_lows[i-2] and \
+               recent_lows[i] < recent_lows[i+1] and recent_lows[i] < recent_lows[i+2]:
+                support_levels.append(recent_lows[i])
+
+        # Fallback to percentile method
+        if len(resistance_levels) < 2:
+            resistance_levels = [np.percentile(recent_highs, 80), np.percentile(recent_highs, 95)]
+        if len(support_levels) < 2:
+            support_levels = [np.percentile(recent_lows, 5), np.percentile(recent_lows, 20)]
+
+        resistance_levels = sorted(set(resistance_levels), reverse=True)[:2]
+        support_levels = sorted(set(support_levels))[:2]
+
+        return {"resistance": resistance_levels, "support": support_levels}
+
     def _render_pretty_chart(
         self,
         df: pd.DataFrame,
@@ -198,7 +231,9 @@ class PrettyChartGenerator:
         moon_target: Optional[float],
         stop_loss: Optional[float]
     ) -> bytes:
-        """Render beautiful annotated chart with target zones"""
+        """Render beautiful annotated chart with S/R lines and target triangle"""
+        from matplotlib.patches import Polygon
+        import numpy as np
 
         fig, (ax_price, ax_vol) = plt.subplots(
             2, 1, figsize=(12, 8), dpi=150,
@@ -213,11 +248,9 @@ class PrettyChartGenerator:
         target_color = BULL_TARGET_ZONE if is_bullish else BEAR_TARGET_ZONE
         stop_color = STOP_LOSS_BULL if is_bullish else STOP_LOSS_BEAR
 
-        # Get x positions (numeric for candlesticks)
         dates = df.index.tolist()
         x_pos = range(len(dates))
 
-        # Price range for y-axis
         price_min = df["low_price"].min()
         price_max = df["high_price"].max()
 
@@ -231,76 +264,115 @@ class PrettyChartGenerator:
         y_min = min(all_levels) * 0.95
         y_max = max(all_levels) * 1.05
 
+        # Calculate S/R levels
+        sr_levels = self._calculate_support_resistance(df)
+
+        # Draw S/R lines FIRST (behind everything)
+        for level in sr_levels["resistance"]:
+            ax_price.axhline(y=level, color='#FF8080', linestyle='--', lw=1.2, alpha=0.5, zorder=1)
+        for level in sr_levels["support"]:
+            ax_price.axhline(y=level, color='#77E4C8', linestyle='--', lw=1.2, alpha=0.5, zorder=1)
+
         # Draw candlesticks
         for i, (idx, row) in enumerate(df.iterrows()):
             is_bull = row["close_price"] >= row["open_price"]
             color = BULL_CANDLE if is_bull else BEAR_CANDLE
 
-            # Wick
-            ax_price.plot([i, i], [row["low_price"], row["high_price"]],
-                         color=color, lw=1.5)
-            # Body
+            ax_price.plot([i, i], [row["low_price"], row["high_price"]], color=color, lw=1.5, zorder=2)
             body_bottom = min(row["open_price"], row["close_price"])
             body_height = abs(row["close_price"] - row["open_price"])
             rect = Rectangle((i - 0.35, body_bottom), 0.7, max(body_height, 0.01),
-                             facecolor=color, edgecolor=color)
+                             facecolor=color, edgecolor=color, zorder=3)
             ax_price.add_patch(rect)
 
-        # Draw target zones (shaded)
-        x_full = [-1, len(df)]
+        # Draw TARGET TRIANGLE from entry point
+        entry_x = len(df) - 1  # Entry at last candle
+        triangle_end_x = len(df) + 12  # Triangle extends into future
 
-        if target_low and target_high:
-            # Primary target zone
-            ax_price.fill_between(x_full, target_low, target_high,
-                                 color=target_color, alpha=0.15, label='Target Zone')
-            ax_price.axhline(y=target_low, color=target_color, lw=1.5, ls='--', alpha=0.8)
-            ax_price.axhline(y=target_high, color=target_color, lw=1.5, ls='--', alpha=0.8)
-
-            # Annotate targets
-            ax_price.text(len(df) + 1, target_low, f'Target 1: ${target_low:.2f}',
-                         color=target_color, fontsize=9, fontweight='bold', va='center')
-            ax_price.text(len(df) + 1, target_high, f'Target 2: ${target_high:.2f}',
-                         color=target_color, fontsize=9, fontweight='bold', va='center')
-
-        if moon_target:
-            # Moon target (extended zone)
+        if entry_price and (target_low or target_high or moon_target):
+            # Determine triangle vertices based on direction
             if is_bullish:
-                ax_price.fill_between(x_full, target_high or moon_target * 0.9, moon_target,
-                                     color=target_color, alpha=0.08)
+                # Bullish: triangle points upward from entry
+                top_target = moon_target if moon_target else (target_high if target_high else target_low)
+                bottom_target = stop_loss if stop_loss else entry_price * 0.92
+
+                # Main target zone triangle (entry → target range)
+                if target_low and target_high:
+                    tri_points = [
+                        (entry_x, entry_price),  # Start at entry
+                        (triangle_end_x, target_high),  # Upper target
+                        (triangle_end_x, target_low),  # Lower target
+                    ]
+                    triangle = Polygon(tri_points, closed=True, facecolor=target_color,
+                                      alpha=0.2, edgecolor=target_color, lw=1.5, zorder=4)
+                    ax_price.add_patch(triangle)
+
+                # Moon extension (lighter triangle above)
+                if moon_target and target_high:
+                    moon_tri = [
+                        (entry_x, entry_price),
+                        (triangle_end_x, moon_target),
+                        (triangle_end_x, target_high),
+                    ]
+                    moon_triangle = Polygon(moon_tri, closed=True, facecolor=target_color,
+                                           alpha=0.08, edgecolor=target_color, lw=1, ls=':', zorder=4)
+                    ax_price.add_patch(moon_triangle)
+
             else:
-                ax_price.fill_between(x_full, moon_target, target_low or moon_target * 1.1,
-                                     color=target_color, alpha=0.08)
-            ax_price.axhline(y=moon_target, color=target_color, lw=1, ls=':', alpha=0.6)
-            ax_price.text(len(df) + 1, moon_target, f'🌙 Moon: ${moon_target:.2f}',
-                         color=target_color, fontsize=8, va='center', alpha=0.8)
+                # Bearish: triangle points downward from entry
+                if target_low and target_high:
+                    tri_points = [
+                        (entry_x, entry_price),
+                        (triangle_end_x, target_low),  # Lower target (deeper drop)
+                        (triangle_end_x, target_high),  # Upper target (smaller drop)
+                    ]
+                    triangle = Polygon(tri_points, closed=True, facecolor=target_color,
+                                      alpha=0.2, edgecolor=target_color, lw=1.5, zorder=4)
+                    ax_price.add_patch(triangle)
+
+                # Moon extension (deeper drop)
+                if moon_target and target_low:
+                    moon_tri = [
+                        (entry_x, entry_price),
+                        (triangle_end_x, moon_target),
+                        (triangle_end_x, target_low),
+                    ]
+                    moon_triangle = Polygon(moon_tri, closed=True, facecolor=target_color,
+                                           alpha=0.08, edgecolor=target_color, lw=1, ls=':', zorder=4)
+                    ax_price.add_patch(moon_triangle)
+
+        # Annotations on right side (outside triangle)
+        annotation_x = triangle_end_x + 1
+
+        if target_low:
+            ax_price.text(annotation_x, target_low, f'Target 1: ${target_low:.2f}',
+                         color=target_color, fontsize=9, fontweight='bold', va='center', zorder=10)
+        if target_high:
+            ax_price.text(annotation_x, target_high, f'Target 2: ${target_high:.2f}',
+                         color=target_color, fontsize=9, fontweight='bold', va='center', zorder=10)
+        if moon_target:
+            ax_price.text(annotation_x, moon_target, f'🌙 Moon: ${moon_target:.2f}',
+                         color=target_color, fontsize=8, va='center', alpha=0.8, zorder=10)
 
         if stop_loss:
-            # Stop loss zone
-            if is_bullish:
-                ax_price.fill_between(x_full, y_min, stop_loss,
-                                     color=stop_color, alpha=0.1)
-            else:
-                ax_price.fill_between(x_full, stop_loss, y_max,
-                                     color=stop_color, alpha=0.1)
-            ax_price.axhline(y=stop_loss, color=stop_color, lw=2, ls='-', alpha=0.9)
-            ax_price.text(len(df) + 1, stop_loss, f'⛔ Stop: ${stop_loss:.2f}',
-                         color=stop_color, fontsize=9, fontweight='bold', va='center')
+            ax_price.axhline(y=stop_loss, color=stop_color, lw=2, ls='-', alpha=0.7, zorder=5)
+            ax_price.text(annotation_x, stop_loss, f'⛔ Stop: ${stop_loss:.2f}',
+                         color=stop_color, fontsize=9, fontweight='bold', va='center', zorder=10)
 
         if entry_price:
-            # Entry price marker
-            ax_price.axhline(y=entry_price, color=ENTRY_COLOR, lw=2, ls='-')
-            ax_price.scatter([len(df) - 1], [entry_price], color=ENTRY_COLOR,
-                            s=100, zorder=5, marker='>')
-            ax_price.text(len(df) + 1, entry_price, f'Entry: ${entry_price:.2f}',
-                         color=ENTRY_COLOR, fontsize=9, fontweight='bold', va='center')
+            ax_price.scatter([entry_x], [entry_price], color=ENTRY_COLOR,
+                            s=120, zorder=6, marker='o', edgecolors='white', linewidths=1.5)
+            ax_price.text(annotation_x, entry_price, f'Entry: ${entry_price:.2f}',
+                         color=ENTRY_COLOR, fontsize=9, fontweight='bold', va='center', zorder=10)
 
         # Volume bars
         colors = [BULL_CANDLE if df.iloc[i]["close_price"] >= df.iloc[i]["open_price"]
                   else BEAR_CANDLE for i in range(len(df))]
         ax_vol.bar(x_pos, df["volume"], color=colors, width=0.8, alpha=0.6)
 
-        # Styling
-        ax_price.set_xlim(-1, len(df) + 8)  # Extra space for annotations
+        # Styling - extend x to fit triangle + annotations
+        chart_right_edge = triangle_end_x + 12  # Room for labels
+        ax_price.set_xlim(-1, chart_right_edge)
         ax_price.set_ylim(y_min, y_max)
         ax_price.grid(True, color=GRID, alpha=0.3, lw=0.5)
         ax_vol.grid(True, color=GRID, alpha=0.2, lw=0.5)
@@ -316,7 +388,7 @@ class PrettyChartGenerator:
         tick_labels = [dates[i].strftime('%b %d') for i in tick_positions]
         ax_vol.set_xticks(tick_positions)
         ax_vol.set_xticklabels(tick_labels, fontsize=9, color=TEXT_COLOR)
-        ax_vol.set_xlim(-1, len(df) + 8)
+        ax_vol.set_xlim(-1, chart_right_edge)
 
         ax_price.set_xticks([])
         ax_vol.set_yticks([])
