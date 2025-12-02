@@ -1185,6 +1185,76 @@ async def trigger_pretty_charts():
         return {"success": False, "message": str(e), "traceback": traceback.format_exc()}
 
 
+@router.post("/migrate-confluence")
+async def migrate_confluence_columns():
+    """Add confluence columns to picks and pick_outcomes_detailed tables"""
+    try:
+        from app.core.database import get_asyncpg_pool
+
+        db = await get_asyncpg_pool()
+        async with db.acquire() as conn:
+            # Add columns to picks table
+            picks_columns = [
+                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS confluence_score SMALLINT DEFAULT 0",
+                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS confluence_methods TEXT[] DEFAULT '{}'",
+                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS rsi_divergence BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS primary_target NUMERIC(10, 2)",
+                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS moonshot_target NUMERIC(10, 2)",
+                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS gann_alignment BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS weekly_pivots JSONB",
+            ]
+
+            for sql in picks_columns:
+                await conn.execute(sql)
+
+            # Add columns to pick_outcomes_detailed table
+            outcomes_columns = [
+                "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS confluence_score SMALLINT",
+                "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS hit_primary_target BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS hit_moonshot_target BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS primary_target NUMERIC(10, 2)",
+                "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS moonshot_target NUMERIC(10, 2)",
+            ]
+
+            for sql in outcomes_columns:
+                await conn.execute(sql)
+
+            return {
+                "success": True,
+                "message": "Confluence columns added successfully",
+                "picks_columns_added": len(picks_columns),
+                "outcomes_columns_added": len(outcomes_columns)
+            }
+    except Exception as e:
+        import traceback
+        return {"success": False, "message": str(e), "traceback": traceback.format_exc()}
+
+
+@router.post("/clear-picks")
+async def clear_all_picks():
+    """Clear ALL picks data - complete reset"""
+    try:
+        from app.core.database import get_asyncpg_pool
+
+        db = await get_asyncpg_pool()
+        async with db.acquire() as conn:
+            # Clear pick_outcomes_detailed first (foreign key)
+            outcomes_deleted = await conn.execute("DELETE FROM pick_outcomes_detailed")
+
+            # Clear picks table
+            picks_deleted = await conn.execute("DELETE FROM picks")
+
+            return {
+                "success": True,
+                "message": "All picks cleared successfully",
+                "picks_deleted": picks_deleted,
+                "outcomes_deleted": outcomes_deleted
+            }
+    except Exception as e:
+        import traceback
+        return {"success": False, "message": str(e), "traceback": traceback.format_exc()}
+
+
 @router.post("/trigger-full-pipeline")
 async def trigger_full_pipeline_sequence():
     """Trigger the complete AI pipeline: Prescreen → Charts → Vision → Social → Arbitrator"""
