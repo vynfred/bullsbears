@@ -1,7 +1,10 @@
 # render.yaml - BullsBears v5 Infrastructure
 # ============================================
 # Web Service: FastAPI backend
-# Cron Jobs: Daily pipeline (8:00 AM ET) + Weekly learner (4:10 AM ET Monday)
+# Cron Jobs:
+#   - Daily pipeline (8:00 AM ET weekdays)
+#   - Outcome monitor (10 AM + 4:30 PM ET weekdays)
+#   - Weekly learner (4:10 AM ET Saturdays)
 # ============================================
 
 services:
@@ -30,6 +33,32 @@ services:
     buildCommand: pip install -r requirements.txt
     schedule: "0 13 * * 1-5"
     startCommand: python scripts/run_daily_pipeline.py
+
+  # Outcome Monitor Cron Job - Morning
+  # Runs at 10:00 AM ET (15:00 UTC) on weekdays
+  # Checks picks for target hits and updates summaries
+  - type: cron
+    name: bullsbears-outcome-monitor-am
+    env: python
+    region: virginia
+    repo: https://github.com/vynfred/bullsbears
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    schedule: "0 15 * * 1-5"
+    startCommand: python scripts/run_outcome_monitor.py
+
+  # Outcome Monitor Cron Job - Afternoon
+  # Runs at 4:30 PM ET (21:30 UTC) on weekdays
+  # Checks picks for target hits after market close
+  - type: cron
+    name: bullsbears-outcome-monitor-pm
+    env: python
+    region: virginia
+    repo: https://github.com/vynfred/bullsbears
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    schedule: "30 21 * * 1-5"
+    startCommand: python scripts/run_outcome_monitor.py
 
   # Weekly Learner Cron Job
   # Runs at 4:10 AM ET (9:10 UTC) on Saturdays
