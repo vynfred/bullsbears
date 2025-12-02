@@ -39,6 +39,8 @@ BACKGROUND = "#0F1419"
 GRID = "#1E2A35"
 BULL_CANDLE = "#77E4C8"  # Mint green
 BEAR_CANDLE = "#FF8080"  # Red
+BULL_TEXT_COLOR = "#77E4C8"  # Mint green for bullish text
+BEAR_TEXT_COLOR = "#FF8080"  # Red for bearish text
 BULL_TARGET_ZONE = "#22C55E"  # Green for bullish targets
 BEAR_TARGET_ZONE = "#EF4444"  # Red for bearish targets
 STOP_LOSS_BULL = "#EF4444"  # Red stop for bullish
@@ -46,13 +48,14 @@ STOP_LOSS_BEAR = "#22C55E"  # Green stop for bearish
 IDENTIFIED_COLOR = "#00FFFF"  # Cyan for identified price
 RSI_COLOR = "#00FFFF"  # Cyan for RSI line
 TEXT_COLOR = "#E8EAED"
+SYMBOL_COLOR = "#FCF9EA"  # Cream color for symbol
 # Gradient colors from logo
 GRADIENT_START = "#77E4C8"  # Mint
 GRADIENT_END = "#22C55E"  # Green
 
-# Icon paths (relative to backend directory)
-BULL_ICON_PATH = os.path.join(os.path.dirname(__file__), "../../../frontend/public/assets/bull-icon.png")
-BEAR_ICON_PATH = os.path.join(os.path.dirname(__file__), "../../../assets/bear-icon.png")
+# Icon paths - use pre-colored icons from assets folder
+BULL_ICON_PATH = os.path.join(os.path.dirname(__file__), "../../../assets/green-bull-icon.png")
+BEAR_ICON_PATH = os.path.join(os.path.dirname(__file__), "../../../assets/red-bear-icon.png")
 
 
 class PrettyChartGenerator:
@@ -242,30 +245,16 @@ class PrettyChartGenerator:
         return rsi
 
     def _load_icon(self, is_bullish: bool) -> Optional[np.ndarray]:
-        """Load and tint bull/bear icon with matching color"""
+        """Load pre-colored bull/bear icon from assets"""
         try:
             icon_path = BULL_ICON_PATH if is_bullish else BEAR_ICON_PATH
+            logger.info(f"Loading icon from: {icon_path}")
             if os.path.exists(icon_path):
                 img = Image.open(icon_path).convert("RGBA")
-                img = img.resize((32, 32), Image.Resampling.LANCZOS)
-
-                # Apply color tint (green for bull, red for bear)
-                data = np.array(img)
-                # Get RGB channels
-                r, g, b, a = data[:,:,0], data[:,:,1], data[:,:,2], data[:,:,3]
-
-                if is_bullish:
-                    # Tint green (#22C55E -> RGB: 34, 197, 94)
-                    data[:,:,0] = np.clip(r * 0.13, 0, 255).astype(np.uint8)  # R
-                    data[:,:,1] = np.clip(g * 0.77 + 50, 0, 255).astype(np.uint8)  # G
-                    data[:,:,2] = np.clip(b * 0.37, 0, 255).astype(np.uint8)  # B
-                else:
-                    # Tint red (#EF4444 -> RGB: 239, 68, 68)
-                    data[:,:,0] = np.clip(r * 0.94 + 50, 0, 255).astype(np.uint8)  # R
-                    data[:,:,1] = np.clip(g * 0.27, 0, 255).astype(np.uint8)  # G
-                    data[:,:,2] = np.clip(b * 0.27, 0, 255).astype(np.uint8)  # B
-
-                return data
+                img = img.resize((28, 28), Image.Resampling.LANCZOS)
+                return np.array(img)
+            else:
+                logger.warning(f"Icon file not found: {icon_path}")
         except Exception as e:
             logger.warning(f"Could not load icon: {e}")
         return None
@@ -354,7 +343,11 @@ class PrettyChartGenerator:
                          bbox=dict(boxstyle='round,pad=0.3', facecolor=BACKGROUND, edgecolor=IDENTIFIED_COLOR, alpha=0.9, lw=1.5))
 
         # TARGET ZONE BOXES with gradient fill
-        if target_low and target_high:
+        # Validate targets - must be positive and sensible
+        valid_target_low = target_low if (target_low and target_low > 0.01) else None
+        valid_target_high = target_high if (target_high and target_high > 0.01) else None
+
+        if valid_target_low and valid_target_high:
             # Create gradient colormap
             if is_bullish:
                 colors_grad = [(0.13, 0.77, 0.37, 0.1), (0.13, 0.77, 0.37, 0.5)]  # Green gradient
@@ -363,18 +356,18 @@ class PrettyChartGenerator:
 
             # Target 1 box (thick gradient)
             t1_height = price_range * 0.06
-            t1_box = Rectangle((box_start_x, target_low - t1_height/2), box_width, t1_height,
+            t1_box = Rectangle((box_start_x, valid_target_low - t1_height/2), box_width, t1_height,
                                facecolor=target_color, edgecolor=target_color, alpha=0.4, lw=3, zorder=4)
             ax_price.add_patch(t1_box)
-            ax_price.text(label_x, target_low, f'Target 1: ${target_low:.2f}',
+            ax_price.text(label_x, valid_target_low, f'Target 1: ${valid_target_low:.2f}',
                          color=target_color, fontsize=10, fontweight='bold', va='center', zorder=10)
 
             # Target 2 box (thick gradient)
             t2_height = price_range * 0.06
-            t2_box = Rectangle((box_start_x, target_high - t2_height/2), box_width, t2_height,
+            t2_box = Rectangle((box_start_x, valid_target_high - t2_height/2), box_width, t2_height,
                                facecolor=target_color, edgecolor=target_color, alpha=0.5, lw=3, zorder=4)
             ax_price.add_patch(t2_box)
-            ax_price.text(label_x, target_high, f'Target 2: ${target_high:.2f}',
+            ax_price.text(label_x, valid_target_high, f'Target 2: ${valid_target_high:.2f}',
                          color=target_color, fontsize=10, fontweight='bold', va='center', zorder=10)
 
         # Moon target removed - rarely useful and causes overlap
@@ -426,37 +419,45 @@ class PrettyChartGenerator:
         ax_rsi.set_xticks([])
         ax_vol.set_yticks([])
 
-        # Header: symbol + direction with icon NEXT to text
+        # Header format: SYMBOL (cream) · 90D · [icon] BEARISH/BULLISH (colored)
         direction_text = "BULLISH" if is_bullish else "BEARISH"
-        header_color = BULL_TARGET_ZONE if is_bullish else BEAR_TARGET_ZONE
+        direction_color = BULL_TEXT_COLOR if is_bullish else BEAR_TEXT_COLOR
 
-        # First add the text
-        ax_price.text(0.02, 0.96, f'{symbol} · 90D ·',
+        # Symbol in cream color
+        ax_price.text(0.02, 0.96, f'{symbol}',
+                     transform=ax_price.transAxes, fontsize=14, fontweight='bold',
+                     color=SYMBOL_COLOR, va='top', ha='left')
+
+        # " · 90D · " separator
+        ax_price.text(0.08, 0.96, ' · 90D ·',
                      transform=ax_price.transAxes, fontsize=14, fontweight='bold',
                      color=TEXT_COLOR, va='top', ha='left')
 
-        # Try to load and place icon next to direction text
+        # Try to load and place icon inline, then direction text
         icon_arr = self._load_icon(is_bullish)
+        icon_x = 0.185  # Position after "90D ·"
+        text_x = 0.215  # Position after icon
+
         if icon_arr is not None:
             try:
-                imagebox = OffsetImage(icon_arr, zoom=0.6)
-                # Position icon right after "SYMBOL · 90D · " text
-                ab = AnnotationBbox(imagebox, (0.22, 0.955), frameon=False,
+                imagebox = OffsetImage(icon_arr, zoom=0.8)
+                # Position icon inline with text
+                ab = AnnotationBbox(imagebox, (icon_x, 0.955), frameon=False,
                                    xycoords='axes fraction', box_alignment=(0.5, 0.5))
                 ax_price.add_artist(ab)
-                # Direction text after icon
-                ax_price.text(0.26, 0.96, direction_text,
+                # Direction text right after icon
+                ax_price.text(text_x, 0.96, direction_text,
                              transform=ax_price.transAxes, fontsize=14, fontweight='bold',
-                             color=header_color, va='top', ha='left')
+                             color=direction_color, va='top', ha='left')
             except Exception as e:
                 logger.warning(f"Icon placement failed: {e}")
-                ax_price.text(0.22, 0.96, direction_text,
+                ax_price.text(icon_x, 0.96, direction_text,
                              transform=ax_price.transAxes, fontsize=14, fontweight='bold',
-                             color=header_color, va='top', ha='left')
+                             color=direction_color, va='top', ha='left')
         else:
-            ax_price.text(0.22, 0.96, direction_text,
+            ax_price.text(icon_x, 0.96, direction_text,
                          transform=ax_price.transAxes, fontsize=14, fontweight='bold',
-                         color=header_color, va='top', ha='left')
+                         color=direction_color, va='top', ha='left')
 
         # Gradient watermark - DEAD CENTER of entire figure
         # Use figure coordinates for true center
