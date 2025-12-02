@@ -1262,10 +1262,15 @@ async def trigger_outcome_monitor():
     Checks all active picks for target hits and updates summaries.
     """
     try:
-        from app.tasks.monitor_pick_outcomes import monitor_pick_outcomes
+        from app.tasks.monitor_pick_outcomes import _monitor_outcomes
+        from app.services.system_state import is_system_on
 
-        # Run synchronously for immediate feedback
-        result = monitor_pick_outcomes()
+        # Check if system is on
+        if not await is_system_on():
+            return {"success": False, "message": "System is OFF"}
+
+        # Run the async function directly (we're already in async context)
+        result = await _monitor_outcomes()
         return {
             "success": True,
             "message": "Outcome monitor completed",
