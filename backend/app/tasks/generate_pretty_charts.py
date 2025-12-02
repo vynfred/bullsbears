@@ -2,11 +2,12 @@
 """
 Generate beautiful shareable charts for final picks with:
 - 90-day candlestick history
-- Target zones (low, high, moon) shaded
+- Target zones with gradient shading
+- RSI(14) indicator with 30/70 bands
 - Stop loss level
-- Entry price marker
-- Annotated labels
-- Timeframe in top-left, dates at bottom, prices on right
+- Entry price marker ("IDENTIFIED AT")
+- Bull/Bear icons from assets
+- Gradient watermark
 
 Runs right after arbitrator finalizes picks
 """
@@ -14,14 +15,18 @@ Runs right after arbitrator finalizes picks
 import asyncio
 import logging
 import io
+import os
 from datetime import date, datetime
 from typing import Dict, Optional
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Rectangle, FancyBboxPatch
+from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.dates import DateFormatter, AutoDateLocator
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from PIL import Image
 import pandas as pd
 
 from app.core.database import get_asyncpg_pool
@@ -38,9 +43,16 @@ BULL_TARGET_ZONE = "#22C55E"  # Green for bullish targets
 BEAR_TARGET_ZONE = "#EF4444"  # Red for bearish targets
 STOP_LOSS_BULL = "#EF4444"  # Red stop for bullish
 STOP_LOSS_BEAR = "#22C55E"  # Green stop for bearish
-ENTRY_COLOR = "#F59E0B"  # Amber for entry
+IDENTIFIED_COLOR = "#00FFFF"  # Cyan for identified price
+RSI_COLOR = "#00FFFF"  # Cyan for RSI line
 TEXT_COLOR = "#E8EAED"
-WATERMARK_COLOR = "#FFFFFF"
+# Gradient colors from logo
+GRADIENT_START = "#77E4C8"  # Mint
+GRADIENT_END = "#22C55E"  # Green
+
+# Icon paths (relative to backend directory)
+BULL_ICON_PATH = os.path.join(os.path.dirname(__file__), "../../../frontend/public/assets/bull-icon.png")
+BEAR_ICON_PATH = os.path.join(os.path.dirname(__file__), "../../../assets/bear-icon.png")
 
 
 class PrettyChartGenerator:
@@ -220,6 +232,27 @@ class PrettyChartGenerator:
 
         return {"resistance": resistance_levels, "support": support_levels}
 
+    def _calculate_rsi(self, df: pd.DataFrame, period: int = 14) -> pd.Series:
+        """Calculate RSI(14) indicator"""
+        delta = df["close_price"].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        return rsi
+
+    def _load_icon(self, is_bullish: bool) -> Optional[np.ndarray]:
+        """Load and tint bull/bear icon"""
+        try:
+            icon_path = BULL_ICON_PATH if is_bullish else BEAR_ICON_PATH
+            if os.path.exists(icon_path):
+                img = Image.open(icon_path).convert("RGBA")
+                img = img.resize((40, 40), Image.Resampling.LANCZOS)
+                return np.array(img)
+        except Exception as e:
+            logger.warning(f"Could not load icon: {e}")
+        return None
+
     def _render_pretty_chart(
         self,
         df: pd.DataFrame,
@@ -231,15 +264,15 @@ class PrettyChartGenerator:
         moon_target: Optional[float],
         stop_loss: Optional[float]
     ) -> bytes:
-        """Render beautiful annotated chart with S/R lines, target boxes, and buy zone"""
-        import numpy as np
+        """Render chart with gradient target zones, RSI, and bull/bear icons"""
+        from matplotlib.gridspec import GridSpec
 
         is_bullish = direction == "bullish"
         target_color = BULL_TARGET_ZONE if is_bullish else BEAR_TARGET_ZONE
         stop_color = STOP_LOSS_BULL if is_bullish else STOP_LOSS_BEAR
 
         dates = df.index.tolist()
-        x_pos = range(len(dates))
+        x_pos = list(range(len(dates)))
 
         price_min = df["low_price"].min()
         price_max = df["high_price"].max()
@@ -252,26 +285,28 @@ class PrettyChartGenerator:
         if stop_loss: all_levels.append(stop_loss)
         if entry_price: all_levels.append(entry_price)
 
-        # Dynamic Y scaling with extra padding for annotations
         price_range = max(all_levels) - min(all_levels)
-        y_min = min(all_levels) - price_range * 0.1
-        y_max = max(all_levels) + price_range * 0.15  # Extra top space for labels
+        y_min = min(all_levels) - price_range * 0.12
+        y_max = max(all_levels) + price_range * 0.18
 
-        # Dynamic figure height based on price range
-        base_height = 8
-        fig, (ax_price, ax_vol) = plt.subplots(
-            2, 1, figsize=(14, base_height), dpi=150,
-            gridspec_kw={'height_ratios': [4, 1], 'hspace': 0.05},
-            facecolor=BACKGROUND
-        )
+        # Calculate RSI
+        rsi = self._calculate_rsi(df)
 
-        ax_price.set_facecolor(BACKGROUND)
-        ax_vol.set_facecolor(BACKGROUND)
+        # Create figure with 3 subplots: price, RSI, volume
+        fig = plt.figure(figsize=(14, 10), dpi=150, facecolor=BACKGROUND)
+        gs = GridSpec(3, 1, figure=fig, height_ratios=[5, 1.2, 0.8], hspace=0.08)
+
+        ax_price = fig.add_subplot(gs[0])
+        ax_rsi = fig.add_subplot(gs[1], sharex=ax_price)
+        ax_vol = fig.add_subplot(gs[2], sharex=ax_price)
+
+        for ax in [ax_price, ax_rsi, ax_vol]:
+            ax.set_facecolor(BACKGROUND)
 
         # Calculate S/R levels
         sr_levels = self._calculate_support_resistance(df)
 
-        # Draw S/R lines FIRST (behind everything)
+        # Draw S/R lines
         for level in sr_levels["resistance"]:
             ax_price.axhline(y=level, color='#FF8080', linestyle='--', lw=1.2, alpha=0.5, zorder=1)
         for level in sr_levels["support"]:
@@ -281,7 +316,6 @@ class PrettyChartGenerator:
         for i, (idx, row) in enumerate(df.iterrows()):
             is_bull = row["close_price"] >= row["open_price"]
             color = BULL_CANDLE if is_bull else BEAR_CANDLE
-
             ax_price.plot([i, i], [row["low_price"], row["high_price"]], color=color, lw=1.5, zorder=2)
             body_bottom = min(row["open_price"], row["close_price"])
             body_height = abs(row["close_price"] - row["open_price"])
@@ -290,117 +324,87 @@ class PrettyChartGenerator:
             ax_price.add_patch(rect)
 
         # Zone box positions
-        entry_x = len(df) - 1
         box_start_x = len(df) + 2
-        box_end_x = len(df) + 25
+        box_end_x = len(df) + 28
         box_width = box_end_x - box_start_x
         label_x = box_end_x + 1
 
-        # Calculate buy zone (around entry price)
+        # IDENTIFIED AT line (thick dashed cyan)
         if entry_price:
-            buy_zone_height = entry_price * 0.03  # 3% range around entry
-            buy_zone_low = entry_price - buy_zone_height
-            buy_zone_high = entry_price + buy_zone_height
+            ax_price.axhline(y=entry_price, color=IDENTIFIED_COLOR, linestyle='--', lw=3, alpha=0.9, zorder=5)
+            ax_price.text(2, entry_price, f'IDENTIFIED AT ${entry_price:.2f}', color=IDENTIFIED_COLOR,
+                         fontsize=9, fontweight='bold', va='bottom', ha='left', zorder=10,
+                         bbox=dict(boxstyle='round,pad=0.3', facecolor=BACKGROUND, edgecolor=IDENTIFIED_COLOR, alpha=0.9, lw=1.5))
 
-            # Draw BUY ZONE box
-            buy_box = Rectangle(
-                (box_start_x, buy_zone_low), box_width, buy_zone_high - buy_zone_low,
-                facecolor=ENTRY_COLOR, edgecolor=ENTRY_COLOR, alpha=0.15, lw=2, zorder=4
-            )
-            ax_price.add_patch(buy_box)
-
-            # Buy Zone label inside box
-            ax_price.text(
-                box_start_x + box_width / 2, entry_price, 'Buy Zone',
-                color=ENTRY_COLOR, fontsize=10, fontweight='bold',
-                ha='center', va='center', zorder=10
-            )
-
-            # Entry price annotation on right
-            ax_price.text(label_x, entry_price, f'Entry: ${entry_price:.2f}',
-                         color=ENTRY_COLOR, fontsize=9, fontweight='bold', va='center', zorder=10)
-
-            # Entry marker on chart
-            ax_price.scatter([entry_x], [entry_price], color=ENTRY_COLOR,
-                            s=120, zorder=6, marker='o', edgecolors='white', linewidths=1.5)
-
-        # Draw BREAKOUT LINE if we have targets (the line where price needs to break)
-        if entry_price and (target_low or target_high):
-            breakout_level = entry_price
-            if is_bullish and sr_levels["resistance"]:
-                # For bullish, breakout is nearest resistance above entry
-                above_entry = [r for r in sr_levels["resistance"] if r > entry_price]
-                if above_entry:
-                    breakout_level = min(above_entry)
-            elif not is_bullish and sr_levels["support"]:
-                # For bearish, breakout is nearest support below entry
-                below_entry = [s for s in sr_levels["support"] if s < entry_price]
-                if below_entry:
-                    breakout_level = max(below_entry)
-
-            # Draw breakout line
-            ax_price.axhline(y=breakout_level, color='#FFD700', linestyle='-', lw=1.5, alpha=0.8, zorder=5)
-            ax_price.text(2, breakout_level, 'Breakout', color='#FFD700', fontsize=8,
-                         fontweight='bold', va='bottom', ha='left', zorder=10,
-                         bbox=dict(boxstyle='round,pad=0.2', facecolor=BACKGROUND, edgecolor='none', alpha=0.8))
-
-        # TARGET ZONE BOXES
+        # TARGET ZONE BOXES with gradient fill
         if target_low and target_high:
-            # Target 1 box (lower target)
-            t1_box = Rectangle(
-                (box_start_x, target_low - price_range * 0.02), box_width, price_range * 0.04,
-                facecolor=target_color, edgecolor=target_color, alpha=0.2, lw=2, zorder=4
-            )
+            # Create gradient colormap
+            if is_bullish:
+                colors_grad = [(0.13, 0.77, 0.37, 0.1), (0.13, 0.77, 0.37, 0.5)]  # Green gradient
+            else:
+                colors_grad = [(0.94, 0.27, 0.27, 0.1), (0.94, 0.27, 0.27, 0.5)]  # Red gradient
+
+            # Target 1 box (thick gradient)
+            t1_height = price_range * 0.06
+            t1_box = Rectangle((box_start_x, target_low - t1_height/2), box_width, t1_height,
+                               facecolor=target_color, edgecolor=target_color, alpha=0.4, lw=3, zorder=4)
             ax_price.add_patch(t1_box)
             ax_price.text(label_x, target_low, f'Target 1: ${target_low:.2f}',
-                         color=target_color, fontsize=9, fontweight='bold', va='center', zorder=10)
+                         color=target_color, fontsize=10, fontweight='bold', va='center', zorder=10)
 
-            # Target 2 box (higher target)
-            t2_box = Rectangle(
-                (box_start_x, target_high - price_range * 0.02), box_width, price_range * 0.04,
-                facecolor=target_color, edgecolor=target_color, alpha=0.25, lw=2, zorder=4
-            )
+            # Target 2 box (thick gradient)
+            t2_height = price_range * 0.06
+            t2_box = Rectangle((box_start_x, target_high - t2_height/2), box_width, t2_height,
+                               facecolor=target_color, edgecolor=target_color, alpha=0.5, lw=3, zorder=4)
             ax_price.add_patch(t2_box)
             ax_price.text(label_x, target_high, f'Target 2: ${target_high:.2f}',
-                         color=target_color, fontsize=9, fontweight='bold', va='center', zorder=10)
+                         color=target_color, fontsize=10, fontweight='bold', va='center', zorder=10)
 
         # MOON TARGET box
         if moon_target:
-            moon_box = Rectangle(
-                (box_start_x, moon_target - price_range * 0.015), box_width, price_range * 0.03,
-                facecolor=target_color, edgecolor=target_color, alpha=0.1, lw=1.5, ls='--', zorder=4
-            )
+            moon_height = price_range * 0.05
+            moon_box = Rectangle((box_start_x, moon_target - moon_height/2), box_width, moon_height,
+                                 facecolor=target_color, edgecolor=target_color, alpha=0.25, lw=2, ls='--', zorder=4)
             ax_price.add_patch(moon_box)
-            ax_price.text(label_x, moon_target, f'🌙 Moon: ${moon_target:.2f}',
-                         color=target_color, fontsize=8, va='center', alpha=0.9, zorder=10)
+            ax_price.text(label_x, moon_target, f'Moon: ${moon_target:.2f}',
+                         color=target_color, fontsize=9, va='center', alpha=0.9, zorder=10)
 
         # STOP LOSS line and annotation
         if stop_loss:
-            ax_price.axhline(y=stop_loss, color=stop_color, lw=2, ls='-', alpha=0.8, zorder=5)
-            # Position label above or below line to avoid overlap
-            label_offset = price_range * 0.03
+            ax_price.axhline(y=stop_loss, color=stop_color, lw=2.5, ls='-', alpha=0.9, zorder=5)
+            label_offset = price_range * 0.04
             label_y = stop_loss - label_offset if is_bullish else stop_loss + label_offset
-            ax_price.text(label_x, label_y, f'⛔ Stop: ${stop_loss:.2f}',
-                         color=stop_color, fontsize=9, fontweight='bold', va='center', zorder=10)
+            ax_price.text(label_x, label_y, f'Stop Loss: ${stop_loss:.2f}',
+                         color=stop_color, fontsize=10, fontweight='bold', va='center', zorder=10)
+
+        # RSI subplot
+        ax_rsi.plot(x_pos, rsi.values, color=RSI_COLOR, lw=1.2, zorder=3)
+        ax_rsi.axhline(y=70, color='#FF8080', linestyle='--', lw=1, alpha=0.6)
+        ax_rsi.axhline(y=30, color='#77E4C8', linestyle='--', lw=1, alpha=0.6)
+        ax_rsi.fill_between(x_pos, 30, 70, color=GRID, alpha=0.3)
+        ax_rsi.set_ylim(0, 100)
+        ax_rsi.set_ylabel('RSI(14)', color=TEXT_COLOR, fontsize=9)
+        ax_rsi.tick_params(axis='y', colors=TEXT_COLOR, labelsize=8)
+        ax_rsi.yaxis.tick_right()
+        ax_rsi.grid(True, color=GRID, alpha=0.3, lw=0.5)
 
         # Volume bars
-        colors = [BULL_CANDLE if df.iloc[i]["close_price"] >= df.iloc[i]["open_price"]
-                  else BEAR_CANDLE for i in range(len(df))]
-        ax_vol.bar(x_pos, df["volume"], color=colors, width=0.8, alpha=0.6)
+        vol_colors = [BULL_CANDLE if df.iloc[i]["close_price"] >= df.iloc[i]["open_price"]
+                      else BEAR_CANDLE for i in range(len(df))]
+        ax_vol.bar(x_pos, df["volume"], color=vol_colors, width=0.8, alpha=0.6)
+        ax_vol.set_ylabel('Vol', color=TEXT_COLOR, fontsize=9)
 
         # Styling
-        chart_right_edge = label_x + 15
+        chart_right_edge = label_x + 18
         ax_price.set_xlim(-1, chart_right_edge)
         ax_price.set_ylim(y_min, y_max)
         ax_price.grid(True, color=GRID, alpha=0.3, lw=0.5)
         ax_vol.grid(True, color=GRID, alpha=0.2, lw=0.5)
 
-        # Price axis on right
         ax_price.yaxis.tick_right()
-        ax_price.yaxis.set_label_position("right")
         ax_price.tick_params(axis='y', colors=TEXT_COLOR, labelsize=10)
 
-        # Date axis at bottom
+        # Date axis
         n_ticks = 6
         tick_positions = np.linspace(0, len(df) - 1, n_ticks, dtype=int)
         tick_labels = [dates[i].strftime('%b %d') for i in tick_positions]
@@ -409,23 +413,39 @@ class PrettyChartGenerator:
         ax_vol.set_xlim(-1, chart_right_edge)
 
         ax_price.set_xticks([])
+        ax_rsi.set_xticks([])
         ax_vol.set_yticks([])
 
         # Header with bull/bear icon
-        direction_icon = "🐂" if is_bullish else "🐻"
         direction_text = "BULLISH" if is_bullish else "BEARISH"
-        icon_color = BULL_TARGET_ZONE if is_bullish else BEAR_TARGET_ZONE
+        header_color = BULL_TARGET_ZONE if is_bullish else BEAR_TARGET_ZONE
 
-        ax_price.text(0.02, 0.98, f'{symbol} · 90D · {direction_icon} {direction_text}',
-                     transform=ax_price.transAxes, fontsize=14, fontweight='bold',
-                     color=TEXT_COLOR, va='top', ha='left')
+        # Try to load actual icon
+        icon_arr = self._load_icon(is_bullish)
+        if icon_arr is not None:
+            try:
+                imagebox = OffsetImage(icon_arr, zoom=0.5)
+                ab = AnnotationBbox(imagebox, (0.08, 0.96), frameon=False,
+                                   xycoords='axes fraction', box_alignment=(0.5, 0.5))
+                ax_price.add_artist(ab)
+                ax_price.text(0.12, 0.96, f'{symbol} · 90D · {direction_text}',
+                             transform=ax_price.transAxes, fontsize=14, fontweight='bold',
+                             color=header_color, va='top', ha='left')
+            except Exception:
+                ax_price.text(0.02, 0.96, f'{symbol} · 90D · {direction_text}',
+                             transform=ax_price.transAxes, fontsize=14, fontweight='bold',
+                             color=header_color, va='top', ha='left')
+        else:
+            ax_price.text(0.02, 0.96, f'{symbol} · 90D · {direction_text}',
+                         transform=ax_price.transAxes, fontsize=14, fontweight='bold',
+                         color=header_color, va='top', ha='left')
 
-        # Watermark
+        # Gradient watermark
         ax_price.text(0.4, 0.5, 'BullsBears.xyz', transform=ax_price.transAxes,
-                     fontsize=28, fontweight='bold', color=WATERMARK_COLOR,
-                     alpha=0.06, ha='center', va='center', style='italic')
+                     fontsize=32, fontweight='bold', color=GRADIENT_START,
+                     alpha=0.08, ha='center', va='center', style='italic')
 
-        # Bottom-right attribution
+        # Bottom attribution
         ax_vol.text(0.99, 0.02, 'BullsBears.xyz · 3-30 day swing',
                    transform=ax_vol.transAxes, fontsize=8, color=TEXT_COLOR,
                    alpha=0.5, ha='right', va='bottom')
