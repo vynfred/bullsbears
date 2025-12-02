@@ -85,23 +85,44 @@ class PrettyChartGenerator:
             entry_price = float(pick["entry_price"]) if pick["entry_price"] else None
 
             # Get targets from pick_context (includes moon target and stop loss)
-            pick_context = pick["pick_context"] or {}
+            # Handle both JSONB (dict) and JSON string formats
+            pick_context = pick["pick_context"]
+            if isinstance(pick_context, str):
+                import json
+                try:
+                    pick_context = json.loads(pick_context)
+                except (json.JSONDecodeError, TypeError):
+                    pick_context = {}
+            elif pick_context is None:
+                pick_context = {}
             fib_data = pick_context.get("fib", {})
 
             target_low = float(pick["target_low"]) if pick["target_low"] else None
             target_high = float(pick["target_high"]) if pick["target_high"] else None
 
             # Extract moon target and stop loss from fib calculation
-            # We need to recalculate or store these - for now use estimation
-            if direction == "bullish" and target_high:
-                moon_target = target_high * 1.15  # Approximate 1.618 from 1.0
-                stop_loss = fib_data.get("swing_low", entry_price * 0.92 if entry_price else None)
-            elif direction == "bearish" and target_low:
-                moon_target = target_low * 0.85  # Approximate -1.0 from -0.618
-                stop_loss = fib_data.get("swing_high", entry_price * 1.08 if entry_price else None)
-            else:
-                moon_target = None
-                stop_loss = None
+            # fib_data contains: target_1 (primary), target_2 (moon), stop_loss
+            moon_target = fib_data.get("target_2")
+            stop_loss = fib_data.get("stop_loss")
+
+            # Ensure numeric types
+            if moon_target is not None:
+                moon_target = float(moon_target)
+            if stop_loss is not None:
+                stop_loss = float(stop_loss)
+
+            # Fallback to estimation if fib data missing
+            if moon_target is None:
+                if direction == "bullish" and target_high:
+                    moon_target = target_high * 1.15
+                elif direction == "bearish" and target_low:
+                    moon_target = target_low * 0.85
+
+            if stop_loss is None:
+                if direction == "bullish":
+                    stop_loss = fib_data.get("swing_low") or (entry_price * 0.92 if entry_price else None)
+                else:
+                    stop_loss = fib_data.get("swing_high") or (entry_price * 1.08 if entry_price else None)
 
             # Fetch OHLC data
             df = await self._fetch_90d(symbol)
