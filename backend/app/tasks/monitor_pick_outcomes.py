@@ -37,25 +37,18 @@ async def _monitor_outcomes():
     results = {"checked": 0, "hits": 0, "misses": 0, "errors": 0}
 
     async with pool.acquire() as conn:
-        # Get all picks that need checking:
-        # 1. Active picks (not expired, not yet resolved)
-        # 2. Recently expired picks (within last 24h, needs miss summary)
-        # Note: entry_price comes from picks.pick_context->>'price_at_alert' or pod.entry_price
+        # Get all picks that need checking - active picks within 30-day window
+        # Don't rely on pick_outcomes_detailed since it may not have all columns
         picks = await conn.fetch("""
             SELECT
                 p.id, p.symbol, p.direction, p.reasoning,
                 p.primary_target, p.moonshot_target,
                 p.pick_context,
-                p.created_at, p.expires_at,
-                pod.id as pod_id,
-                pod.hit_primary_target, pod.hit_moonshot_target,
-                pod.max_gain_pct, pod.outcome
+                p.created_at, p.expires_at
             FROM picks p
-            LEFT JOIN pick_outcomes_detailed pod ON pod.pick_id = p.id
             WHERE
-                -- Active or recently expired (needs resolution)
-                (p.expires_at > NOW() - INTERVAL '24 hours')
-                AND (pod.outcome IS NULL OR pod.outcome = 'pending')
+                -- Active (not expired) or recently expired (within 24h for resolution)
+                p.expires_at > NOW() - INTERVAL '24 hours'
         """)
 
         if not picks:
@@ -87,11 +80,11 @@ async def _monitor_outcomes():
                 results["checked"] += 1
                 symbol = pick["symbol"]
                 current_price = price_map.get(symbol)
-                
+
                 if not current_price:
                     logger.warning(f"No price for {symbol}")
                     continue
-                
+
                 # Get entry price from pick_context JSON (price_at_alert)
                 pick_context = pick["pick_context"] or {}
                 entry_price = None
@@ -108,8 +101,8 @@ async def _monitor_outcomes():
                 primary_target = float(pick["primary_target"]) if pick["primary_target"] else None
                 moonshot_target = float(pick["moonshot_target"]) if pick["moonshot_target"] else None
                 direction = pick["direction"]
-                is_expired = pick["expires_at"] and pick["expires_at"] < datetime.utcnow()
-                
+                is_expired = pick["expires_at"] and pick["expires_at"] < datetime.now(tz=None)
+
                 # Calculate gain percentage from entry
                 if entry_price and entry_price > 0:
                     if direction == "bullish":
@@ -118,31 +111,27 @@ async def _monitor_outcomes():
                         gain_pct = ((entry_price - current_price) / entry_price) * 100
                 else:
                     gain_pct = 0
-                
-                # Check target hits
-                hit_primary = pick["hit_primary_target"] or False
-                hit_moonshot = pick["hit_moonshot_target"] or False
-                
-                if not hit_primary and primary_target:
+
+                # Check target hits - start fresh since we're not tracking prior state
+                hit_primary = False
+                hit_moonshot = False
+
+                if primary_target:
                     if direction == "bullish" and current_price >= primary_target:
                         hit_primary = True
                     elif direction == "bearish" and current_price <= primary_target:
                         hit_primary = True
-                
-                if not hit_moonshot and moonshot_target:
+
+                if moonshot_target:
                     if direction == "bullish" and current_price >= moonshot_target:
                         hit_moonshot = True
                     elif direction == "bearish" and current_price <= moonshot_target:
                         hit_moonshot = True
-                
-                # Track max gain
-                old_max = float(pick["max_gain_pct"]) if pick["max_gain_pct"] else 0
-                new_max = max(old_max, gain_pct)
-                
-                # Determine outcome and update summary
-                new_outcome = pick["outcome"]
-                new_reasoning = pick["reasoning"]
-                
+
+                # Determine outcome
+                new_outcome = None
+                new_reasoning = None
+
                 if hit_moonshot:
                     new_outcome = "moonshot"
                     new_reasoning = _build_win_summary(symbol, "moonshot", moonshot_target, gain_pct)
@@ -151,30 +140,18 @@ async def _monitor_outcomes():
                     new_outcome = "win"
                     new_reasoning = _build_win_summary(symbol, "primary", primary_target, gain_pct)
                     results["hits"] += 1
-                elif is_expired and not hit_primary:
+                elif is_expired:
                     new_outcome = "loss"
                     new_reasoning = _build_loss_summary(symbol, direction, entry_price, current_price, primary_target)
                     results["misses"] += 1
-                
-                # Update pick_outcomes_detailed
-                if pick["pod_id"]:
-                    await conn.execute("""
-                        UPDATE pick_outcomes_detailed
-                        SET hit_primary_target = $1,
-                            hit_moonshot_target = $2,
-                            max_gain_pct = $3,
-                            outcome = $4,
-                            resolved_at = CASE WHEN $4 != 'pending' THEN NOW() ELSE resolved_at END
-                        WHERE id = $5
-                    """, hit_primary, hit_moonshot, new_max, new_outcome, pick["pod_id"])
-                
-                # Update reasoning in picks table if outcome changed
-                if new_outcome != pick["outcome"] and new_outcome != "pending":
+
+                # Update picks table with new reasoning if outcome determined
+                if new_outcome and new_reasoning:
                     await conn.execute("""
                         UPDATE picks SET reasoning = $1 WHERE id = $2
                     """, new_reasoning, pick["id"])
                     logger.info(f"Updated {symbol}: {new_outcome} - {new_reasoning[:80]}...")
-                    
+
             except Exception as e:
                 logger.error(f"Error processing {pick['symbol']}: {e}")
                 results["errors"] += 1
