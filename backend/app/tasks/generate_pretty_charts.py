@@ -53,9 +53,9 @@ SYMBOL_COLOR = "#FCF9EA"  # Cream color for symbol
 GRADIENT_START = "#77E4C8"  # Mint
 GRADIENT_END = "#22C55E"  # Green
 
-# Icon paths - use pre-colored icons from assets folder
-BULL_ICON_PATH = os.path.join(os.path.dirname(__file__), "../../../assets/green-bull-icon.png")
-BEAR_ICON_PATH = os.path.join(os.path.dirname(__file__), "../../../assets/red-bear-icon.png")
+# Icon paths - use BullsBears side icons from assets folder
+BULL_ICON_PATH = os.path.join(os.path.dirname(__file__), "../../../assets/BullsBears-Side-Bull-Icon.png")
+BEAR_ICON_PATH = os.path.join(os.path.dirname(__file__), "../../../assets/BullsBears-Side-Bear-Icon.png")
 
 
 class PrettyChartGenerator:

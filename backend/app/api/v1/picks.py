@@ -1,15 +1,86 @@
 # backend/app/api/v1/picks.py
 """
 Picks API - Serves live AI picks to frontend
+Auto-checks target hits on every price fetch (replaces scheduled cron)
 """
 
 from fastapi import APIRouter, HTTPException, Query
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import logging
 
 router = APIRouter(prefix="/picks", tags=["picks"])
 logger = logging.getLogger(__name__)
+
+
+async def _check_and_update_target_hits(conn, rows: List, current_prices: Dict[str, float]):
+    """
+    Check if any picks hit their targets based on fresh FMP prices.
+    Updates database immediately when targets are hit.
+
+    For BULLISH picks: price >= primary_target = win
+    For BEARISH picks: price <= primary_target = win (price dropped to target)
+    """
+    updates = []
+
+    for row in rows:
+        pick_id = row["id"]
+        symbol = row["symbol"]
+        direction = row["direction"]
+        current_price = current_prices.get(symbol)
+
+        if not current_price:
+            continue
+
+        # Skip if already marked as hit
+        if row.get("hit_primary_target") or row.get("hit_moonshot_target"):
+            continue
+
+        primary_target = float(row["primary_target"]) if row.get("primary_target") else None
+        moonshot_target = float(row["moonshot_target"]) if row.get("moonshot_target") else None
+
+        hit_primary = False
+        hit_moonshot = False
+
+        if direction == "bullish":
+            # Bullish: price needs to GO UP to hit target
+            if primary_target and current_price >= primary_target:
+                hit_primary = True
+            if moonshot_target and current_price >= moonshot_target:
+                hit_moonshot = True
+        else:
+            # Bearish: price needs to GO DOWN to hit target
+            if primary_target and current_price <= primary_target:
+                hit_primary = True
+            if moonshot_target and current_price <= moonshot_target:
+                hit_moonshot = True
+
+        if hit_primary or hit_moonshot:
+            updates.append({
+                "pick_id": pick_id,
+                "symbol": symbol,
+                "hit_primary": hit_primary,
+                "hit_moonshot": hit_moonshot,
+                "price_at_hit": current_price
+            })
+
+    # Batch update hits in database
+    for upd in updates:
+        try:
+            # Update or create outcome record
+            await conn.execute("""
+                INSERT INTO pick_outcomes_detailed (pick_id, hit_primary_target, hit_moonshot_target, price_at_hit, hit_at)
+                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+                ON CONFLICT (pick_id) DO UPDATE SET
+                    hit_primary_target = EXCLUDED.hit_primary_target OR pick_outcomes_detailed.hit_primary_target,
+                    hit_moonshot_target = EXCLUDED.hit_moonshot_target OR pick_outcomes_detailed.hit_moonshot_target,
+                    price_at_hit = COALESCE(EXCLUDED.price_at_hit, pick_outcomes_detailed.price_at_hit),
+                    hit_at = COALESCE(pick_outcomes_detailed.hit_at, EXCLUDED.hit_at)
+            """, upd["pick_id"], upd["hit_primary"], upd["hit_moonshot"], upd["price_at_hit"])
+
+            logger.info(f"🎯 TARGET HIT: {upd['symbol']} - primary={upd['hit_primary']}, moonshot={upd['hit_moonshot']} @ ${upd['price_at_hit']:.2f}")
+        except Exception as e:
+            logger.error(f"Failed to update target hit for {upd['symbol']}: {e}")
 
 
 @router.get("/live")
@@ -128,6 +199,12 @@ async def get_live_picks(
                                 current_prices[q["symbol"]] = float(q.get("price", 0))
                 except Exception as e:
                     logger.warning(f"Failed to fetch FMP quotes: {e}")
+
+            # ═══════════════════════════════════════════════════════════════════
+            # AUTO-CHECK TARGET HITS on every price fetch (replaces cron job)
+            # ═══════════════════════════════════════════════════════════════════
+            if current_prices:
+                await _check_and_update_target_hits(conn, rows, current_prices)
 
             # Transform to frontend format
             picks = []

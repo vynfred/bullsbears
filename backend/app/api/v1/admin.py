@@ -1220,6 +1220,8 @@ async def migrate_confluence_columns():
                 "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS hit_moonshot_target BOOLEAN DEFAULT FALSE",
                 "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS primary_target NUMERIC(10, 2)",
                 "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS moonshot_target NUMERIC(10, 2)",
+                "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS price_at_hit NUMERIC(10, 2)",
+                "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS hit_at TIMESTAMP",
             ]
 
             for sql in outcomes_columns:
@@ -1255,6 +1257,38 @@ async def clear_all_picks():
                 "message": "All picks cleared successfully",
                 "picks_deleted": picks_deleted,
                 "outcomes_deleted": outcomes_deleted
+            }
+    except Exception as e:
+        import traceback
+        return {"success": False, "message": str(e), "traceback": traceback.format_exc()}
+
+
+@router.post("/dedupe-picks")
+async def dedupe_picks():
+    """Remove duplicate picks, keeping only the latest for each symbol"""
+    try:
+        from app.core.database import get_asyncpg_pool
+
+        db = await get_asyncpg_pool()
+        async with db.acquire() as conn:
+            # Find duplicates and delete all but the latest per symbol
+            result = await conn.execute("""
+                DELETE FROM picks
+                WHERE id NOT IN (
+                    SELECT DISTINCT ON (symbol) id
+                    FROM picks
+                    ORDER BY symbol, created_at DESC
+                )
+            """)
+
+            # Get remaining picks count
+            remaining = await conn.fetchval("SELECT COUNT(*) FROM picks")
+
+            return {
+                "success": True,
+                "message": f"Duplicates removed. {remaining} unique picks remain.",
+                "duplicates_removed": result,
+                "remaining_picks": remaining
             }
     except Exception as e:
         import traceback
