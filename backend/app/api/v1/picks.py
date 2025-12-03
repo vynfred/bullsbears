@@ -202,6 +202,32 @@ async def get_live_picks(
         raise HTTPException(status_code=500, detail=f"Error fetching picks: {str(e)}")
 
 
+@router.get("/debug")
+async def debug_picks():
+    """Debug endpoint to see raw query results"""
+    try:
+        from app.core.database import get_asyncpg_pool
+
+        db = await get_asyncpg_pool()
+        async with db.acquire() as conn:
+            # Simple query - no joins
+            rows = await conn.fetch("""
+                SELECT id, symbol, direction, confidence, created_at
+                FROM picks
+                ORDER BY created_at DESC
+                LIMIT 5
+            """)
+
+            return {
+                "count": len(rows),
+                "picks": [dict(r) for r in rows],
+                "debug": "Raw query without joins"
+            }
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "traceback": traceback.format_exc()}
+
+
 @router.get("/today")
 async def get_todays_picks():
     """Get today's picks summary for dashboard badge"""
