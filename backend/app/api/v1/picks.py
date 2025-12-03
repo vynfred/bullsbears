@@ -64,21 +64,37 @@ async def _check_and_update_target_hits(conn, rows: List, current_prices: Dict[s
                 "price_at_hit": current_price
             })
 
+    # Log pending updates
+    if updates:
+        logger.info(f"🎯 Found {len(updates)} target hits to update: {[u['symbol'] for u in updates]}")
+
     # Batch update hits in database
     for upd in updates:
         try:
-            # Update or create outcome record
-            await conn.execute("""
-                INSERT INTO pick_outcomes_detailed (pick_id, hit_primary_target, hit_moonshot_target, price_at_hit, hit_at)
-                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-                ON CONFLICT (pick_id) DO UPDATE SET
-                    hit_primary_target = EXCLUDED.hit_primary_target OR pick_outcomes_detailed.hit_primary_target,
-                    hit_moonshot_target = EXCLUDED.hit_moonshot_target OR pick_outcomes_detailed.hit_moonshot_target,
-                    price_at_hit = COALESCE(EXCLUDED.price_at_hit, pick_outcomes_detailed.price_at_hit),
-                    hit_at = COALESCE(pick_outcomes_detailed.hit_at, EXCLUDED.hit_at)
-            """, upd["pick_id"], upd["hit_primary"], upd["hit_moonshot"], upd["price_at_hit"])
+            # First check if row exists
+            existing = await conn.fetchrow(
+                "SELECT id FROM pick_outcomes_detailed WHERE pick_id = $1",
+                upd["pick_id"]
+            )
 
-            logger.info(f"🎯 TARGET HIT: {upd['symbol']} - primary={upd['hit_primary']}, moonshot={upd['hit_moonshot']} @ ${upd['price_at_hit']:.2f}")
+            if existing:
+                # Update existing row
+                await conn.execute("""
+                    UPDATE pick_outcomes_detailed
+                    SET hit_primary_target = $2,
+                        hit_moonshot_target = $3,
+                        price_at_hit = $4,
+                        hit_at = CURRENT_TIMESTAMP
+                    WHERE pick_id = $1
+                """, upd["pick_id"], upd["hit_primary"], upd["hit_moonshot"], upd["price_at_hit"])
+            else:
+                # Insert new row
+                await conn.execute("""
+                    INSERT INTO pick_outcomes_detailed (pick_id, hit_primary_target, hit_moonshot_target, price_at_hit, hit_at)
+                    VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+                """, upd["pick_id"], upd["hit_primary"], upd["hit_moonshot"], upd["price_at_hit"])
+
+            logger.info(f"🎯 TARGET HIT: {upd['symbol']} (pick_id={upd['pick_id']}) - primary={upd['hit_primary']}, moonshot={upd['hit_moonshot']} @ ${upd['price_at_hit']:.2f}")
         except Exception as e:
             logger.error(f"Failed to update target hit for {upd['symbol']}: {e}")
 
