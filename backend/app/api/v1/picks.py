@@ -48,7 +48,7 @@ async def get_live_picks(
                 return []
 
             # Build dynamic query - only select columns that exist
-            # Note: confluence columns may not exist in older schemas
+            # Note: pick_outcomes_detailed may not have all columns yet
             query = """
                 SELECT
                     p.id, p.symbol, p.direction, p.confidence, p.reasoning,
@@ -56,7 +56,7 @@ async def get_live_picks(
                     p.primary_target, p.moonshot_target,
                     p.confluence_score,
                     p.created_at, p.expires_at,
-                    pod.hit_primary_target, pod.hit_moonshot_target, pod.max_gain_pct
+                    pod.hit_primary_target, pod.hit_moonshot_target
                 FROM picks p
                 LEFT JOIN pick_outcomes_detailed pod ON pod.pick_id = p.id
                 WHERE p.confidence >= $1
@@ -178,7 +178,6 @@ async def get_live_picks(
                     # Outcome tracking
                     "hit_primary_target": hit_primary,
                     "hit_moonshot_target": hit_moonshot,
-                    "max_gain_pct": float(row["max_gain_pct"]) if row.get("max_gain_pct") else None,
                     "outcome_status": outcome_status,
                     # Price/chart data
                     "context": row["pick_context"],
