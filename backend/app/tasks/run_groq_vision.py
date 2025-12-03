@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="tasks.run_groq_vision")
-def run_groq_vision():
-    """Celery task to run vision analysis on chart images"""
+def run_groq_vision(prev_result=None):
+    """Celery task to run vision analysis on chart images. Accepts prev_result for chain compatibility."""
     return asyncio.run(_run_vision())
 
 

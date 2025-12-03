@@ -20,11 +20,12 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="tasks.run_arbitrator")
-def run_arbitrator():
+def run_arbitrator(prev_result=None):
     """
     Celery task - runs at 8:20 AM ET
     Selects 3–6 final picks using qwen2.5-72b-instruct on Fireworks
     Learner improves it every night via arbitrator_bias.json + prompt
+    Accepts prev_result for chain compatibility.
     """
 
     async def _run():

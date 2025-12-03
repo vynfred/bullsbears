@@ -14,13 +14,14 @@ from app.services.system_state import is_system_on
 logger = logging.getLogger(__name__)
 
 @celery_app.task(name="tasks.run_prescreen")
-def run_prescreen():
+def run_prescreen(prev_result=None):
     """
     Celery task - runs at 8:10 AM ET via Render cron
     Filters ACTIVE tier (~1,700 stocks) → SHORT_LIST (exactly 75 stocks)
     Uses qwen2.5-72b-instruct on Fireworks.ai
+    Accepts prev_result for chain compatibility.
     """
-    
+
     # Run prescreen - single Fireworks API call
     async def _run():
         # Check if system is ON

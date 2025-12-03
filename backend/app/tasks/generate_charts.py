@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Generate annotated charts for shortlist stocks → Firebase Storage → URL in PostgreSQL
-Pretty charts with S/R lines + volume profile for frontend display
+Generate enhanced charts for shortlist stocks → Firebase Storage → URL in PostgreSQL
+Includes RSI(14) indicator for vision AI analysis
 Runs at 8:15 AM ET → CPU only → $0 cost
 """
 
@@ -31,8 +31,9 @@ BEAR = "#FF8080"  # Red for bears/down
 NEUTRAL = "#BADFDB"  # Light mint
 SUPPORT = "#77E4C8"  # Support lines (mint)
 RESISTANCE = "#FF8080"  # Resistance lines (red)
-VOLUME_BULL = "rgba(119, 228, 200, 0.6)"
-VOLUME_BEAR = "rgba(255, 128, 128, 0.6)"
+RSI_COLOR = "#00FFFF"  # Cyan for RSI line
+RSI_OVERBOUGHT = "#FF8080"  # Red for 70+ zone
+RSI_OVERSOLD = "#77E4C8"  # Green for 30- zone
 TEXT_COLOR = "#E8EAED"  # Light text
 
 
@@ -173,18 +174,30 @@ class ChartGenerator:
 
         return {"resistance": resistance_levels, "support": support_levels}
 
+    def _calculate_rsi(self, df: pd.DataFrame, period: int = 14) -> pd.Series:
+        """Calculate RSI(14) indicator for vision analysis"""
+        delta = df["close_price"].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        return rsi
+
     def _render_chart(self, df: pd.DataFrame, symbol: str = "") -> bytes:
-        """Render pretty annotated chart with S/R lines and volume profile"""
-        # Create figure with GridSpec for price chart + volume profile on right
-        fig = plt.figure(figsize=(4, 3), dpi=100, facecolor=BACKGROUND)
-        gs = GridSpec(3, 4, figure=fig, height_ratios=[3, 1, 0.1], width_ratios=[3, 0.5, 0.02, 0.3])
+        """Render enhanced chart with S/R lines, volume profile, and RSI for vision AI"""
+        # Create figure with GridSpec: price chart, RSI, volume, and volume profile
+        fig = plt.figure(figsize=(5, 4), dpi=100, facecolor=BACKGROUND)
+        gs = GridSpec(4, 4, figure=fig,
+                      height_ratios=[3, 0.8, 0.8, 0.1],
+                      width_ratios=[3, 0.5, 0.02, 0.3])
 
         ax_price = fig.add_subplot(gs[0, 0])  # Main price chart
-        ax_vol = fig.add_subplot(gs[1, 0], sharex=ax_price)  # Volume bars
+        ax_rsi = fig.add_subplot(gs[1, 0], sharex=ax_price)  # RSI indicator
+        ax_vol = fig.add_subplot(gs[2, 0], sharex=ax_price)  # Volume bars
         ax_profile = fig.add_subplot(gs[0, 3])  # Volume profile (right side)
 
         # Set backgrounds
-        for ax in [ax_price, ax_vol, ax_profile]:
+        for ax in [ax_price, ax_rsi, ax_vol, ax_profile]:
             ax.set_facecolor(BACKGROUND)
 
         # Calculate S/R levels
@@ -218,6 +231,29 @@ class ChartGenerator:
                   for i in range(len(df))]
         ax_vol.bar(range(len(df)), df["volume"], color=colors, width=0.8, alpha=0.7)
 
+        # RSI indicator (14-period)
+        rsi = self._calculate_rsi(df)
+        x_vals = range(len(df))
+
+        # Draw RSI overbought/oversold zones
+        ax_rsi.axhspan(70, 100, color=RSI_OVERBOUGHT, alpha=0.15)  # Overbought zone
+        ax_rsi.axhspan(0, 30, color=RSI_OVERSOLD, alpha=0.15)  # Oversold zone
+        ax_rsi.axhline(70, color=RSI_OVERBOUGHT, linestyle='--', lw=0.8, alpha=0.5)
+        ax_rsi.axhline(30, color=RSI_OVERSOLD, linestyle='--', lw=0.8, alpha=0.5)
+        ax_rsi.axhline(50, color=GRID, linestyle='-', lw=0.5, alpha=0.5)  # Midline
+
+        # Draw RSI line
+        ax_rsi.plot(x_vals, rsi.values, color=RSI_COLOR, lw=1.5, alpha=0.9)
+
+        # RSI styling
+        ax_rsi.set_ylim(0, 100)
+        ax_rsi.set_ylabel('RSI', color=TEXT_COLOR, fontsize=6)
+        ax_rsi.yaxis.set_label_position("right")
+        ax_rsi.yaxis.tick_right()
+        ax_rsi.tick_params(axis='y', colors=TEXT_COLOR, labelsize=5)
+        ax_rsi.set_yticks([30, 50, 70])
+        ax_rsi.grid(True, color=GRID, alpha=0.2, lw=0.5)
+
         # Volume profile (horizontal bars on right)
         price_range = np.linspace(df["low_price"].min(), df["high_price"].max(), 20)
         vol_profile = np.zeros(len(price_range) - 1)
@@ -241,6 +277,7 @@ class ChartGenerator:
 
         # Remove ticks for cleaner look
         ax_price.set_xticks([])
+        ax_rsi.set_xticks([])
         ax_vol.set_xticks([])
         ax_profile.set_xticks([])
         ax_profile.set_yticks([])
@@ -263,7 +300,7 @@ class ChartGenerator:
                      alpha=0.08, ha='center', va='center',
                      fontfamily='sans-serif', style='italic')
 
-        plt.subplots_adjust(left=0.02, right=0.88, top=0.98, bottom=0.02, hspace=0.05, wspace=0.1)
+        plt.subplots_adjust(left=0.02, right=0.88, top=0.98, bottom=0.02, hspace=0.08, wspace=0.1)
 
         buf = io.BytesIO()
         plt.savefig(buf, format="png", facecolor=BACKGROUND, edgecolor='none')
@@ -295,8 +332,8 @@ async def get_chart_generator() -> ChartGenerator:
 
 # Celery task
 @celery_app.task(name="tasks.generate_charts")
-def generate_charts():
-    """Celery task — runs at 8:15 AM ET"""
+def generate_charts(prev_result=None):
+    """Celery task — runs at 8:15 AM ET. Accepts prev_result for chain compatibility."""
     async def _run():
         from app.services.system_state import is_system_on
 

@@ -8,7 +8,8 @@ from app.core.database import get_asyncpg_pool
 logger = logging.getLogger(__name__)
 
 @celery_app.task(name="tasks.run_grok_social")
-def run_grok_social():
+def run_grok_social(prev_result=None):
+    """Celery task to run social analysis. Accepts prev_result for chain compatibility."""
     async def _run():
         db = await get_asyncpg_pool()
         async with db.acquire() as conn:
