@@ -362,3 +362,109 @@ async def get_todays_picks():
         logger.error(f"Error fetching today's picks: {e}")
         return {"bullish": 0, "bearish": 0, "total": 0, "last_updated": None}
 
+
+@router.post("/check-targets")
+async def manual_check_targets():
+    """Manually check and update target hits for all picks"""
+    try:
+        from app.core.database import get_asyncpg_pool
+        from app.core.config import settings
+        import httpx
+
+        db = await get_asyncpg_pool()
+        async with db.acquire() as conn:
+            # Get all active picks with their targets
+            rows = await conn.fetch("""
+                SELECT p.id, p.symbol, p.direction, p.primary_target, p.moonshot_target,
+                       pod.hit_primary_target, pod.hit_moonshot_target
+                FROM picks p
+                LEFT JOIN pick_outcomes_detailed pod ON pod.pick_id = p.id
+                WHERE p.expires_at > NOW()
+            """)
+
+            if not rows:
+                return {"message": "No active picks found", "checked": 0, "updated": 0}
+
+            symbol_list = list(set(r["symbol"] for r in rows))
+
+            # Fetch current prices
+            current_prices = {}
+            symbols_str = ",".join(symbol_list)
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"https://financialmodelingprep.com/api/v3/quote/{symbols_str}",
+                    params={"apikey": settings.FMP_API_KEY}
+                )
+                if resp.status_code == 200:
+                    for q in resp.json():
+                        current_prices[q["symbol"]] = float(q.get("price", 0))
+
+            # Check targets
+            updates = []
+            for row in rows:
+                symbol = row["symbol"]
+                direction = row["direction"]
+                current_price = current_prices.get(symbol, 0)
+                primary_target = float(row["primary_target"]) if row["primary_target"] else None
+                moonshot_target = float(row["moonshot_target"]) if row["moonshot_target"] else None
+
+                # Skip already hit
+                if row["hit_primary_target"] or row["hit_moonshot_target"]:
+                    continue
+
+                hit_primary = False
+                hit_moonshot = False
+
+                if direction == "bullish":
+                    if primary_target and current_price >= primary_target:
+                        hit_primary = True
+                    if moonshot_target and current_price >= moonshot_target:
+                        hit_moonshot = True
+                else:
+                    if primary_target and current_price <= primary_target:
+                        hit_primary = True
+                    if moonshot_target and current_price <= moonshot_target:
+                        hit_moonshot = True
+
+                if hit_primary or hit_moonshot:
+                    updates.append({
+                        "pick_id": row["id"],
+                        "symbol": symbol,
+                        "direction": direction,
+                        "current_price": current_price,
+                        "primary_target": primary_target,
+                        "hit_primary": hit_primary,
+                        "hit_moonshot": hit_moonshot
+                    })
+
+            # Apply updates
+            updated_count = 0
+            for upd in updates:
+                existing = await conn.fetchrow(
+                    "SELECT id FROM pick_outcomes_detailed WHERE pick_id = $1",
+                    upd["pick_id"]
+                )
+
+                if existing:
+                    await conn.execute("""
+                        UPDATE pick_outcomes_detailed
+                        SET hit_primary_target = $2, hit_moonshot_target = $3, price_at_hit = $4, hit_at = NOW()
+                        WHERE pick_id = $1
+                    """, upd["pick_id"], upd["hit_primary"], upd["hit_moonshot"], upd["current_price"])
+                else:
+                    await conn.execute("""
+                        INSERT INTO pick_outcomes_detailed (pick_id, hit_primary_target, hit_moonshot_target, price_at_hit, hit_at)
+                        VALUES ($1, $2, $3, $4, NOW())
+                    """, upd["pick_id"], upd["hit_primary"], upd["hit_moonshot"], upd["current_price"])
+                updated_count += 1
+
+            return {
+                "checked": len(rows),
+                "prices_fetched": len(current_prices),
+                "updated": updated_count,
+                "updates": updates
+            }
+
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "traceback": traceback.format_exc()}
