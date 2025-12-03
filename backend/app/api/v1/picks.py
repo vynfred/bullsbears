@@ -47,14 +47,14 @@ async def get_live_picks(
                 logger.warning("Picks table doesn't exist yet")
                 return []
 
-            # Build dynamic query with confluence columns
+            # Build dynamic query - only select columns that exist
+            # Note: confluence columns may not exist in older schemas
             query = """
                 SELECT
                     p.id, p.symbol, p.direction, p.confidence, p.reasoning,
                     p.target_low, p.target_high, p.pick_context, p.pretty_chart_url,
                     p.primary_target, p.moonshot_target,
-                    p.confluence_score, p.rsi_divergence, p.gann_alignment,
-                    p.weekly_pivots,
+                    p.confluence_score,
                     p.created_at, p.expires_at,
                     pod.hit_primary_target, pod.hit_moonshot_target, pod.max_gain_pct
                 FROM picks p
@@ -196,9 +196,10 @@ async def get_live_picks(
             return picks
 
     except Exception as e:
-        logger.error(f"Error fetching picks: {e}")
-        # Return empty list instead of error for graceful frontend handling
-        return []
+        import traceback
+        logger.error(f"Error fetching picks: {e}\n{traceback.format_exc()}")
+        # Return error info for debugging - frontend should handle gracefully
+        raise HTTPException(status_code=500, detail=f"Error fetching picks: {str(e)}")
 
 
 @router.get("/today")
