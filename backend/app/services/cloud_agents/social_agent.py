@@ -1,7 +1,8 @@
 # backend/app/services/cloud_agents/social_agent.py
 """
 Social Context Agent – Grok-4 (Phase 4)
-75 parallel calls → social_score (-5 to +5) + headlines + events + Polymarket
+75 parallel calls → social_score (-7 to +7) + headlines + events + Polymarket
+Includes: bullish_ratio, mention_velocity, engagement_weight, platform_consensus, contrarian_flag
 Pure async. No classes. No legacy.
 """
 
@@ -46,11 +47,14 @@ async def run_social_analysis(symbols: List[Dict[str, Any]]) -> List[Dict[str, A
             processed.append({
                 "symbol": symbol,
                 "social_score": 0,
+                "bullish_ratio": 0.5,
                 "headlines": [],
                 "events": [],
                 "polymarket_prob": None,
-                "mention_velocity": 0.0,
+                "mention_velocity": 1.0,
+                "engagement_weight": 1.0,
                 "platform_consensus": 0.0,
+                "contrarian_flag": False,
             })
         else:
             processed.append({"symbol": symbol, **result})
@@ -88,11 +92,14 @@ async def _analyze_one(client: httpx.AsyncClient, symbol: str) -> Dict[str, Any]
 
         return {
             "social_score": int(data.get("social_score", 0)),
+            "bullish_ratio": float(data.get("bullish_ratio", 0.5)),
             "headlines": data.get("headlines", [])[:3],
             "events": data.get("events", []),
             "polymarket_prob": data.get("polymarket_prob"),
-            "mention_velocity": float(data.get("mention_velocity", 0.0)),
+            "mention_velocity": float(data.get("mention_velocity", 1.0)),
+            "engagement_weight": float(data.get("engagement_weight", 1.0)),
             "platform_consensus": float(data.get("platform_consensus", 0.0)),
+            "contrarian_flag": bool(data.get("contrarian_flag", False)),
         }
     except Exception as e:
         logger.error(f"Grok failed for {symbol}: {e}")
@@ -119,8 +126,11 @@ async def _store_social_results(results: List[Dict[str, Any]]):
                     "headlines": r.get("headlines", []),
                     "events": r.get("events", []),
                     "polymarket_prob": r.get("polymarket_prob"),
-                    "mention_velocity": r.get("mention_velocity", 0.0),
+                    "bullish_ratio": r.get("bullish_ratio", 0.5),
+                    "mention_velocity": r.get("mention_velocity", 1.0),
+                    "engagement_weight": r.get("engagement_weight", 1.0),
                     "platform_consensus": r.get("platform_consensus", 0.0),
+                    "contrarian_flag": r.get("contrarian_flag", False),
                 }
 
                 result = await conn.execute("""
