@@ -91,7 +91,7 @@
 
 .dark {
   /* Dark Mode - BullsBears Theme (same as light mode for consistency) */
-  --bg-primary: #074173; /* Dark blue background */
+  --bg-primary: #012d38; /* Dark blue background */
   --bg-secondary: #BADFDB; /* Light mint for cards and boxes */
   --bg-tertiary: #FCF9EA; /* Cream for subtle backgrounds */
   --bg-accent: #FCF9EA; /* Cream accent background */

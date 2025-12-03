@@ -91,10 +91,23 @@ def run_arbitrator():
                 return {"success": False, "reason": "no_picks_returned"}
 
             # Save picks + full context + create outcome tracking
+            saved_count = 0
+            updated_count = 0
             async with db.acquire() as conn:
                 for pick in final_picks:
                     symbol = pick.get("symbol")
                     direction = pick.get("direction", "bullish")
+
+                    # Check for existing pick within 30 days (avoid duplicates)
+                    existing_pick = await conn.fetchrow("""
+                        SELECT id, primary_target, moonshot_target, direction
+                        FROM picks
+                        WHERE symbol = $1
+                          AND created_at > NOW() - INTERVAL '30 days'
+                          AND expires_at > NOW()
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                    """, symbol)
 
                     candidate = await conn.fetchrow("""
                         SELECT * FROM shortlist_candidates
@@ -113,6 +126,35 @@ def run_arbitrator():
                         direction=direction,
                         db_pool=db
                     )
+
+                    # If stock was already picked in last 30 days, only update targets if needed
+                    if existing_pick:
+                        old_primary = float(existing_pick['primary_target']) if existing_pick['primary_target'] else 0
+                        new_primary = conf_targets.primary_target
+
+                        # Update targets if they've changed significantly (>2% difference)
+                        if abs(new_primary - old_primary) / max(old_primary, 1) > 0.02:
+                            await conn.execute("""
+                                UPDATE picks
+                                SET primary_target = $1,
+                                    moonshot_target = $2,
+                                    target_low = $1,
+                                    target_high = COALESCE($2, $1 * 1.15),
+                                    confluence_score = $3,
+                                    confluence_methods = $4
+                                WHERE id = $5
+                            """,
+                                conf_targets.primary_target,
+                                conf_targets.moonshot_target,
+                                conf_targets.confluence_score,
+                                conf_targets.confluence_methods,
+                                existing_pick['id']
+                            )
+                            logger.info(f"{symbol}: Updated targets (was ${old_primary:.2f}, now ${new_primary:.2f})")
+                            updated_count += 1
+                        else:
+                            logger.info(f"{symbol}: Already picked within 30 days, targets unchanged - skipping")
+                        continue  # Skip to next pick - don't create duplicate
 
                     # Primary target always shown, moonshot conditional on confluence score
                     primary_target = conf_targets.primary_target
@@ -225,11 +267,13 @@ def run_arbitrator():
                         moonshot_target,
                         conf_targets.confluence_score
                     )
+                    saved_count += 1
 
-            logger.info(f"Arbitrator complete: {len(final_picks)} picks saved")
+            logger.info(f"Arbitrator complete: {saved_count} new picks, {updated_count} updated")
             return {
                 "success": True,
-                "picks_count": len(final_picks),
+                "picks_count": saved_count,
+                "updated_count": updated_count,
                 "symbols": [p["symbol"] for p in final_picks],
                 "model": "qwen2.5-72b-instruct",
                 "timestamp": datetime.now().isoformat()
