@@ -1111,28 +1111,31 @@ async def trigger_arbitrator_sync():
                     db_pool=db
                 )
 
-                target_low = fib_targets.target_1
-                target_high = fib_targets.target_2
+                # Use new confluence target attributes
+                target_low = fib_targets.primary_target
+                target_high = fib_targets.moonshot_target if fib_targets.moonshot_target else fib_targets.primary_target * 1.15
 
                 # Store complete fib data including stop_loss and entry for pretty charts
                 debug_info[f"fib_{symbol}"] = {
                     "price": current_price,
                     "entry_price": current_price,
-                    "target_1": target_low,
-                    "target_2": target_high,
+                    "primary_target": target_low,
+                    "moonshot_target": target_high,
                     "stop_loss": fib_targets.stop_loss,
                     "swing_low": fib_targets.swing_low,
                     "swing_high": fib_targets.swing_high,
+                    "confluence_score": fib_targets.confluence_score,
                     "valid": fib_targets.valid
                 }
 
                 await conn.execute("""
                     INSERT INTO picks (
                         symbol, direction, confidence, reasoning,
-                        target_low, target_high,
+                        target_low, target_high, primary_target, moonshot_target,
+                        confluence_score,
                         pick_context, created_at, expires_at
                     ) VALUES (
-                        $1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP,
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP,
                         CURRENT_TIMESTAMP + INTERVAL '30 days'
                     )
                 """,
@@ -1140,8 +1143,11 @@ async def trigger_arbitrator_sync():
                     direction,
                     float(pick.get("confidence", 0)) / 100.0 if pick.get("confidence", 0) > 1 else pick.get("confidence", 0.0),
                     pick.get("reasoning", ""),
-                    target_low,
-                    target_high,
+                    target_low,  # target_low (legacy)
+                    target_high,  # target_high (legacy)
+                    target_low,  # primary_target
+                    target_high if fib_targets.moonshot_target else None,  # moonshot_target
+                    fib_targets.confluence_score,
                     json.dumps({"arbitrator": pick, "fib": debug_info[f"fib_{symbol}"]})
                 )
 
