@@ -269,6 +269,11 @@ async def init_database():
                 CREATE INDEX IF NOT EXISTS idx_outcomes_outcome ON pick_outcomes_detailed(outcome);
             """)
 
+            # Ensure unique constraint on pick_id for upsert operations
+            await conn.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_outcomes_pick_unique ON pick_outcomes_detailed(pick_id);
+            """)
+
         return {
             "success": True,
             "message": "Database tables created successfully",
@@ -1223,6 +1228,12 @@ async def migrate_confluence_columns():
                 "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS price_at_hit NUMERIC(10, 2)",
                 "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS hit_at TIMESTAMP",
             ]
+
+            # Add unique constraint on pick_id for upsert operations
+            try:
+                await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_outcomes_pick_unique ON pick_outcomes_detailed(pick_id)")
+            except Exception:
+                pass  # May already exist
 
             for sql in outcomes_columns:
                 await conn.execute(sql)
