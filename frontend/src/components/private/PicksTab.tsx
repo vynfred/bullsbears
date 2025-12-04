@@ -124,7 +124,7 @@ export default function PicksTab() {
         >
           {/* Conic gradient border ring - emerald LEFT, rose RIGHT */}
           <div
-            className="w-48 h-48 rounded-full p-1 shadow-2xl"
+            className="w-56 h-56 rounded-full p-1 shadow-2xl"
             style={{
               background: `conic-gradient(from 180deg at 50% 50%,
                 rgb(249, 115, 22) 0deg,
@@ -136,43 +136,55 @@ export default function PicksTab() {
                 rgb(249, 115, 22) 360deg)`
             }}
           >
-            <div className="w-full h-full rounded-full bg-slate-900 flex flex-col items-center justify-center">
-              {/* Dynamic title based on filter */}
-              <span className="text-[10px] text-slate-400 uppercase tracking-widest mb-2">
+            <div className="w-full h-full rounded-full bg-slate-900 flex flex-col items-center justify-center px-4">
+              {/* Filter label at top - cream color */}
+              <span className="text-xs uppercase tracking-widest mb-3" style={{ color: '#FCF9EA' }}>
                 {currentFilterConfig.label}
               </span>
-              <div className="flex items-center justify-center gap-6">
-                {/* Bullish side */}
+
+              {/* Main content: Number | Icon | divider | Icon | Number */}
+              <div className="flex items-center justify-center gap-2">
+                {/* Bullish: Number + Icon */}
                 <button
                   onClick={() => handleFilterChange(activeFilter === 'bull' ? 'active' : 'bull')}
-                  className={`flex flex-col items-center transition-all ${activeFilter === 'bull' ? "scale-110" : "hover:scale-105"}`}
+                  className={`flex items-center gap-1 transition-all ${activeFilter === 'bull' ? "scale-110" : "hover:scale-105"}`}
                 >
-                  <span className="text-4xl font-bold text-emerald-400">{bullishCount}</span>
-                  <img
-                    src={bullIcon}
-                    alt="bull"
-                    className="w-8 h-8 mt-1"
-                  />
-                  <span className="text-[10px] text-emerald-400 mt-1 uppercase tracking-wide">Bullish</span>
+                  <span className="text-3xl font-bold text-emerald-400">{bullishCount}</span>
+                  <img src={bullIcon} alt="bull" className="w-10 h-10" />
                 </button>
 
                 {/* Divider */}
-                <div className="h-16 w-px bg-slate-700" />
+                <div className="h-12 w-px bg-slate-600 mx-1" />
 
-                {/* Bearish side */}
+                {/* Bearish: Icon + Number */}
                 <button
                   onClick={() => handleFilterChange(activeFilter === 'bear' ? 'active' : 'bear')}
-                  className={`flex flex-col items-center transition-all ${activeFilter === 'bear' ? "scale-110" : "hover:scale-105"}`}
+                  className={`flex items-center gap-1 transition-all ${activeFilter === 'bear' ? "scale-110" : "hover:scale-105"}`}
                 >
-                  <span className="text-4xl font-bold text-rose-400">{bearishCount}</span>
-                  <img
-                    src={bearIcon}
-                    alt="bear"
-                    className="w-8 h-8 mt-1"
-                  />
-                  <span className="text-[10px] text-rose-400 mt-1 uppercase tracking-wide">Bearish</span>
+                  <img src={bearIcon} alt="bear" className="w-10 h-10" />
+                  <span className="text-3xl font-bold text-rose-400">{bearishCount}</span>
                 </button>
               </div>
+
+              {/* Labels row */}
+              <div className="flex items-center justify-center gap-6 mt-1">
+                <span className="text-[10px] text-emerald-400 uppercase tracking-wide font-medium">Bullish</span>
+                <span className="text-[10px] text-rose-400 uppercase tracking-wide font-medium">Bearish</span>
+              </div>
+
+              {/* Date at bottom */}
+              <span className="text-xs text-slate-400 mt-2">
+                {activeFilter === 'today'
+                  ? new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+                  : activeFilter === 'week'
+                    ? `Since ${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`
+                  : activeFilter === 'active'
+                    ? `Since ${new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                  : activeFilter === 'all'
+                    ? 'All Time'
+                  : ''
+                }
+              </span>
             </div>
           </div>
         </motion.div>
