@@ -1416,12 +1416,34 @@ async def recreate_outcomes_table():
                 CREATE INDEX idx_outcomes_created ON pick_outcomes_detailed(created_at);
             """)
 
-            # Get count of picks that will need outcomes
-            picks_count = await conn.fetchval("SELECT COUNT(*) FROM picks")
+            # INSERT initial rows for all existing picks
+            inserted = await conn.execute("""
+                INSERT INTO pick_outcomes_detailed (
+                    pick_id, symbol, direction, price_when_picked,
+                    target_primary, target_medium, target_moonshot,
+                    outcome, created_at
+                )
+                SELECT
+                    p.id,
+                    p.symbol,
+                    p.direction,
+                    sc.price_at_selection,
+                    COALESCE(p.target_primary, p.primary_target, p.target_low),
+                    p.target_medium,
+                    COALESCE(p.target_moonshot, p.moonshot_target, p.target_high),
+                    'active',
+                    NOW()
+                FROM picks p
+                LEFT JOIN shortlist_candidates sc ON sc.symbol = p.symbol AND sc.date = p.created_at::date
+                WHERE p.expires_at > NOW()
+            """)
+
+            # Get count of inserted rows
+            picks_count = await conn.fetchval("SELECT COUNT(*) FROM pick_outcomes_detailed")
 
             return {
                 "success": True,
-                "message": f"Table recreated successfully. {picks_count} picks ready for outcome tracking.",
+                "message": f"Table recreated and populated with {picks_count} active picks.",
                 "schema": {
                     "columns": [
                         "id SERIAL PRIMARY KEY",
