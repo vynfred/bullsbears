@@ -18,8 +18,9 @@ import { motion } from "framer-motion";
 import { useLivePicks } from "@/hooks/useLivePicks";
 import { useWatchlist } from "@/hooks/useWatchlist";
 
-const bullIcon = "/assets/bull-icon.png";
-const bearIcon = "/assets/bear-icon.png";
+// BullsBears official side icons
+const bullIcon = "/assets/BullsBears-Side-Bull-Icon.png";
+const bearIcon = "/assets/BullsBears-Side-Bear-Icon.png";
 
 export default function PicksTab() {
   const {
@@ -115,8 +116,7 @@ export default function PicksTab() {
                   <img
                     src={bullIcon}
                     alt="bull"
-                    className="w-5 h-5 mt-1"
-                    style={{ filter: 'brightness(0) saturate(100%) invert(78%) sepia(23%) saturate(1234%) hue-rotate(94deg) brightness(91%) contrast(86%)' }}
+                    className="w-8 h-8 mt-1"
                   />
                   <span className="text-[10px] text-emerald-400 mt-1 uppercase tracking-wide">Bullish</span>
                 </button>
@@ -133,8 +133,7 @@ export default function PicksTab() {
                   <img
                     src={bearIcon}
                     alt="bear"
-                    className="w-5 h-5 mt-1"
-                    style={{ filter: 'brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(3959%) hue-rotate(316deg) brightness(96%) contrast(92%)' }}
+                    className="w-8 h-8 mt-1"
                   />
                   <span className="text-[10px] text-rose-400 mt-1 uppercase tracking-wide">Bearish</span>
                 </button>
