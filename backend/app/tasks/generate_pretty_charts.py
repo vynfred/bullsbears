@@ -72,11 +72,13 @@ class PrettyChartGenerator:
         logger.info("🎨 Generating pretty charts for final picks...")
 
         async with self.db.acquire() as conn:
-            # Get today's picks with confluence data
+            # Get today's picks with 3-tier confluence targets
             picks = await conn.fetch("""
                 SELECT p.id, p.symbol, p.direction, p.confidence,
                        p.target_low, p.target_high,
-                       p.primary_target, p.moonshot_target,
+                       COALESCE(p.target_primary, p.primary_target) as target_primary,
+                       p.target_medium,
+                       COALESCE(p.target_moonshot, p.moonshot_target) as target_moonshot,
                        p.confluence_score, p.confluence_methods,
                        p.rsi_divergence, p.gann_alignment,
                        p.weekly_pivots,
@@ -115,9 +117,10 @@ class PrettyChartGenerator:
             elif pick_context is None:
                 pick_context = {}
 
-            # v5 Confluence data - directly from picks table
-            primary_target = float(pick["primary_target"]) if pick["primary_target"] else None
-            moonshot_target = float(pick["moonshot_target"]) if pick["moonshot_target"] else None
+            # v6 3-Tier Confluence data - directly from picks table
+            target_primary = float(pick["target_primary"]) if pick["target_primary"] else None
+            target_medium = float(pick["target_medium"]) if pick["target_medium"] else None
+            target_moonshot = float(pick["target_moonshot"]) if pick["target_moonshot"] else None
             confluence_score = int(pick["confluence_score"] or 0)
             confluence_methods = pick["confluence_methods"] or []
             rsi_divergence = bool(pick["rsi_divergence"])
@@ -138,10 +141,10 @@ class PrettyChartGenerator:
             swing_high = conf_analysis.get("swing_high")
 
             # Fallback to old field names or estimates
-            if primary_target is None:
-                primary_target = float(pick["target_low"]) if pick["target_low"] else None
-            if moonshot_target is None and pick["target_high"]:
-                moonshot_target = float(pick["target_high"])
+            if target_primary is None:
+                target_primary = float(pick["target_low"]) if pick["target_low"] else None
+            if target_moonshot is None and pick["target_high"]:
+                target_moonshot = float(pick["target_high"])
 
             if stop_loss is None:
                 if direction == "bullish":
@@ -156,14 +159,15 @@ class PrettyChartGenerator:
                 logger.warning(f"Insufficient data for {symbol}")
                 continue
 
-            # Generate pretty chart with confluence data
+            # Generate pretty chart with 3-tier confluence targets
             png_bytes = self._render_pretty_chart(
                 df=df,
                 symbol=symbol,
                 direction=direction,
                 entry_price=entry_price,
-                primary_target=primary_target,
-                moonshot_target=moonshot_target,
+                target_primary=target_primary,
+                target_medium=target_medium,
+                target_moonshot=target_moonshot,
                 stop_loss=stop_loss,
                 confluence_score=confluence_score,
                 confluence_methods=confluence_methods,
@@ -281,9 +285,10 @@ class PrettyChartGenerator:
         symbol: str,
         direction: str,
         entry_price: Optional[float],
-        primary_target: Optional[float],
-        moonshot_target: Optional[float],  # None if confluence conditions not met
-        stop_loss: Optional[float],
+        target_primary: Optional[float],
+        target_medium: Optional[float] = None,   # Fib 1.272 - shown if confluence ≥ 2
+        target_moonshot: Optional[float] = None, # Fib 1.618 - shown if confluence ≥ 3 OR catalyst
+        stop_loss: Optional[float] = None,
         confluence_score: int = 0,
         confluence_methods: list = None,
         weekly_pivots: dict = None,
@@ -293,13 +298,14 @@ class PrettyChartGenerator:
         swing_high: Optional[float] = None
     ) -> bytes:
         """
-        Render chart with v5 confluence system elements:
-        - Primary target (solid line, always shown)
-        - Moonshot target (dashed line, only when confluence ≥3)
+        Render chart with v6 3-tier confluence system:
+        - Primary target (Fib 1.000) - solid line, always shown
+        - Medium target (Fib 1.272) - solid line, shown if confluence ≥ 2
+        - Moonshot target (Fib 1.618) - dashed line, shown if confluence ≥ 3 OR catalyst
         - Weekly pivot lines (faint gray R1/R2/S1/S2)
         - Gann diagonal (if aligned)
         - RSI divergence indicator
-        - Confluence X/4 badge
+        - Confluence X/5 badge
         """
         from matplotlib.gridspec import GridSpec
 
@@ -316,10 +322,11 @@ class PrettyChartGenerator:
         price_min = df["low_price"].min()
         price_max = df["high_price"].max()
 
-        # Collect all price levels for dynamic scaling
+        # Collect all price levels for dynamic scaling (include all 3 tiers)
         all_levels = [price_min, price_max]
-        if primary_target: all_levels.append(primary_target)
-        if moonshot_target: all_levels.append(moonshot_target)
+        if target_primary: all_levels.append(target_primary)
+        if target_medium: all_levels.append(target_medium)
+        if target_moonshot: all_levels.append(target_moonshot)
         if stop_loss: all_levels.append(stop_loss)
         if entry_price: all_levels.append(entry_price)
         # Include pivot levels in scaling
@@ -393,25 +400,25 @@ class PrettyChartGenerator:
                                  color=PIVOT_COLOR, fontsize=8, alpha=0.6, va='center')
 
         # ═══════════════════════════════════════════════════════════════════
-        # v5 CONFLUENCE SYSTEM - Gann 1×1 Diagonal Line (orange)
+        # v6 CONFLUENCE SYSTEM - Gann 1×1 Diagonal Line (orange)
         # ═══════════════════════════════════════════════════════════════════
         GANN_COLOR = '#FFA500'  # Orange
         if gann_alignment and (swing_low or swing_high):
             swing_price = swing_low if is_bullish else swing_high
-            if swing_price and primary_target:
+            if swing_price and target_primary:
                 # Draw Gann line from swing to 30-day projection
                 gann_x = [len(df) - 30, len(df) + 30]  # From 30 days ago to 30 days future
                 if is_bullish:
-                    gann_y = [swing_price, primary_target * 1.1]  # Upward slope
+                    gann_y = [swing_price, target_primary * 1.1]  # Upward slope
                 else:
-                    gann_y = [swing_price, primary_target * 0.9]  # Downward slope
+                    gann_y = [swing_price, target_primary * 0.9]  # Downward slope
                 ax_price.plot(gann_x, gann_y, color=GANN_COLOR, linestyle='-',
                              lw=2, alpha=0.7, zorder=3)
                 ax_price.text(len(df) + 5, gann_y[1], 'Gann 1×1',
                              color=GANN_COLOR, fontsize=8, alpha=0.8, va='center')
 
         # ═══════════════════════════════════════════════════════════════════
-        # v5 CONFLUENCE SYSTEM - RSI Divergence Indicator
+        # v6 CONFLUENCE SYSTEM - RSI Divergence Indicator
         # ═══════════════════════════════════════════════════════════════════
         if rsi_divergence:
             div_color = '#22C55E' if is_bullish else '#EF4444'
@@ -424,13 +431,14 @@ class PrettyChartGenerator:
                          fontweight='bold', va='center', ha='right')
 
         # ═══════════════════════════════════════════════════════════════════
-        # v5 CONFLUENCE SYSTEM - Target Lines (solid primary, dashed moonshot)
+        # v6 3-TIER TARGET SYSTEM - Primary / Medium / Moonshot
         # ═══════════════════════════════════════════════════════════════════
-        valid_primary = primary_target if (primary_target and primary_target > 0.01) else None
-        valid_moonshot = moonshot_target if (moonshot_target and moonshot_target > 0.01) else None
+        valid_primary = target_primary if (target_primary and target_primary > 0.01) else None
+        valid_medium = target_medium if (target_medium and target_medium > 0.01) else None
+        valid_moonshot = target_moonshot if (target_moonshot and target_moonshot > 0.01) else None
 
+        # Primary target (Fib 1.000) - SOLID line with box, ALWAYS shown
         if valid_primary:
-            # Primary target - SOLID line with box (always shown)
             t1_height = price_range * 0.05
             t1_box = Rectangle((box_start_x, valid_primary - t1_height/2), box_width, t1_height,
                                facecolor=target_color, edgecolor=target_color, alpha=0.4, lw=3, zorder=4)
@@ -439,21 +447,39 @@ class PrettyChartGenerator:
             ax_price.text(label_x, valid_primary, f'Primary: ${valid_primary:.2f}',
                          color=target_color, fontsize=10, fontweight='bold', va='center', zorder=10)
 
-        if valid_moonshot:
-            # Moonshot target - DASHED line (only when confluence ≥3)
-            t2_height = price_range * 0.04
-            t2_box = Rectangle((box_start_x, valid_moonshot - t2_height/2), box_width, t2_height,
-                               facecolor=target_color, edgecolor=target_color, alpha=0.25, lw=2, zorder=4)
+        # Medium target (Fib 1.272) - SOLID line, shown if confluence ≥ 2
+        if valid_medium:
+            t2_height = price_range * 0.05
+            t2_box = Rectangle((box_start_x, valid_medium - t2_height/2), box_width, t2_height,
+                               facecolor=target_color, edgecolor=target_color, alpha=0.35, lw=2.5, zorder=4)
             ax_price.add_patch(t2_box)
+            ax_price.axhline(y=valid_medium, color=target_color, lw=2, ls='-', alpha=0.75, zorder=5)
+            ax_price.text(label_x, valid_medium, f'Medium: ${valid_medium:.2f}',
+                         color=target_color, fontsize=9.5, fontweight='bold', va='center', zorder=10)
+
+        # Moonshot target (Fib 1.618) - DASHED line, shown if confluence ≥ 3 OR catalyst
+        if valid_moonshot:
+            t3_height = price_range * 0.04
+            t3_box = Rectangle((box_start_x, valid_moonshot - t3_height/2), box_width, t3_height,
+                               facecolor=target_color, edgecolor=target_color, alpha=0.25, lw=2, zorder=4)
+            ax_price.add_patch(t3_box)
             ax_price.axhline(y=valid_moonshot, color=target_color, lw=2, ls='--', alpha=0.7, zorder=5)
             ax_price.text(label_x, valid_moonshot, f'Moonshot: ${valid_moonshot:.2f}',
                          color=target_color, fontsize=9, fontweight='bold', va='center', alpha=0.8, zorder=10)
 
         # ═══════════════════════════════════════════════════════════════════
-        # v5 CONFLUENCE SYSTEM - Confluence Badge (top-right)
+        # v6 CONFLUENCE SYSTEM - Confluence Badge (top-right) - now /5 max
         # ═══════════════════════════════════════════════════════════════════
-        badge_color = '#77E4C8' if confluence_score >= 3 else '#FFA500' if confluence_score >= 2 else '#FF8080'
-        badge_text = f'Confluence {confluence_score}/4'
+        if confluence_score >= 5:
+            badge_color = '#00FF9D'  # Bright green - max confluence
+        elif confluence_score >= 4:
+            badge_color = '#77E4C8'  # Mint - very strong
+        elif confluence_score >= 3:
+            badge_color = '#FFA500'  # Orange - strong
+        else:
+            badge_color = '#FF8080'  # Red - weak
+
+        badge_text = f'Confluence {confluence_score}/5'
         ax_price.text(0.98, 0.96, badge_text, transform=ax_price.transAxes,
                      fontsize=11, fontweight='bold', color=badge_color,
                      bbox=dict(boxstyle='round,pad=0.5', facecolor='#1E2A35',

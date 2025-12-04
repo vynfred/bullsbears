@@ -1198,51 +1198,44 @@ async def trigger_pretty_charts():
 
 @router.post("/migrate-confluence")
 async def migrate_confluence_columns():
-    """Add confluence columns to picks and pick_outcomes_detailed tables"""
+    """Add 3-tier target columns to picks table"""
     try:
         from app.core.database import get_asyncpg_pool
 
         db = await get_asyncpg_pool()
         async with db.acquire() as conn:
-            # Add columns to picks table
+            # Add 3-tier target columns to picks table
             picks_columns = [
                 "ALTER TABLE picks ADD COLUMN IF NOT EXISTS confluence_score SMALLINT DEFAULT 0",
                 "ALTER TABLE picks ADD COLUMN IF NOT EXISTS confluence_methods TEXT[] DEFAULT '{}'",
                 "ALTER TABLE picks ADD COLUMN IF NOT EXISTS rsi_divergence BOOLEAN DEFAULT FALSE",
-                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS primary_target NUMERIC(10, 2)",
-                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS moonshot_target NUMERIC(10, 2)",
                 "ALTER TABLE picks ADD COLUMN IF NOT EXISTS gann_alignment BOOLEAN DEFAULT FALSE",
                 "ALTER TABLE picks ADD COLUMN IF NOT EXISTS weekly_pivots JSONB",
+                # 3-tier targets
+                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS target_primary NUMERIC(10, 2)",
+                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS target_medium NUMERIC(10, 2)",
+                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS target_moonshot NUMERIC(10, 2)",
+                # Legacy columns (keep for backward compat, may remove later)
+                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS primary_target NUMERIC(10, 2)",
+                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS moonshot_target NUMERIC(10, 2)",
+                # Chart URL
+                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS pretty_chart_url TEXT",
+                # Catalyst flags
+                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS has_earnings_catalyst BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS has_news_catalyst BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE picks ADD COLUMN IF NOT EXISTS short_interest_pct DECIMAL(5, 2)",
             ]
 
             for sql in picks_columns:
-                await conn.execute(sql)
-
-            # Add columns to pick_outcomes_detailed table
-            outcomes_columns = [
-                "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS confluence_score SMALLINT",
-                "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS hit_primary_target BOOLEAN DEFAULT FALSE",
-                "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS hit_moonshot_target BOOLEAN DEFAULT FALSE",
-                "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS primary_target NUMERIC(10, 2)",
-                "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS moonshot_target NUMERIC(10, 2)",
-                "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS price_at_hit NUMERIC(10, 2)",
-                "ALTER TABLE pick_outcomes_detailed ADD COLUMN IF NOT EXISTS hit_at TIMESTAMP",
-            ]
-
-            # Add unique constraint on pick_id for upsert operations
-            try:
-                await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_outcomes_pick_unique ON pick_outcomes_detailed(pick_id)")
-            except Exception:
-                pass  # May already exist
-
-            for sql in outcomes_columns:
-                await conn.execute(sql)
+                try:
+                    await conn.execute(sql)
+                except Exception:
+                    pass  # Column may already exist
 
             return {
                 "success": True,
-                "message": "Confluence columns added successfully",
-                "picks_columns_added": len(picks_columns),
-                "outcomes_columns_added": len(outcomes_columns)
+                "message": "Confluence columns added to picks table",
+                "columns_added": len(picks_columns)
             }
     except Exception as e:
         import traceback
@@ -1366,3 +1359,93 @@ async def trigger_full_pipeline_sequence():
         }
     except Exception as e:
         return {"success": False, "message": f"Error: {str(e)}"}
+
+
+@router.post("/recreate-outcomes-table")
+async def recreate_outcomes_table():
+    """
+    Drop and recreate pick_outcomes_detailed table with clean schema.
+    Preserves picks table - outcomes will be regenerated on price checks.
+    """
+    try:
+        from app.core.database import get_asyncpg_pool
+
+        db = await get_asyncpg_pool()
+        async with db.acquire() as conn:
+            # Drop the old table
+            await conn.execute("DROP TABLE IF EXISTS pick_outcomes_detailed CASCADE")
+
+            # Create fresh table with new schema
+            await conn.execute("""
+                CREATE TABLE pick_outcomes_detailed (
+                    id SERIAL PRIMARY KEY,
+                    pick_id INTEGER UNIQUE REFERENCES picks(id) ON DELETE CASCADE,
+                    symbol VARCHAR(10) NOT NULL,
+                    direction VARCHAR(10) NOT NULL,
+
+                    -- Prices
+                    price_when_picked DECIMAL(10, 2),
+
+                    -- 3-tier targets (copied from pick at creation for historical accuracy)
+                    target_primary DECIMAL(10, 2),
+                    target_medium DECIMAL(10, 2),
+                    target_moonshot DECIMAL(10, 2),
+
+                    -- Target hit tracking
+                    hit_primary_target BOOLEAN DEFAULT FALSE,
+                    hit_medium_target BOOLEAN DEFAULT FALSE,
+                    hit_moonshot_target BOOLEAN DEFAULT FALSE,
+                    price_at_hit DECIMAL(10, 2),
+                    hit_at TIMESTAMP,
+
+                    -- Outcome tracking
+                    outcome VARCHAR(20) DEFAULT 'active',
+                    max_gain_pct DECIMAL(6, 2),
+                    days_to_peak INTEGER,
+
+                    -- Timestamps
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    resolved_at TIMESTAMP
+                )
+            """)
+
+            # Create indexes
+            await conn.execute("""
+                CREATE INDEX idx_outcomes_symbol ON pick_outcomes_detailed(symbol);
+                CREATE INDEX idx_outcomes_outcome ON pick_outcomes_detailed(outcome);
+                CREATE INDEX idx_outcomes_created ON pick_outcomes_detailed(created_at);
+            """)
+
+            # Get count of picks that will need outcomes
+            picks_count = await conn.fetchval("SELECT COUNT(*) FROM picks")
+
+            return {
+                "success": True,
+                "message": f"Table recreated successfully. {picks_count} picks ready for outcome tracking.",
+                "schema": {
+                    "columns": [
+                        "id SERIAL PRIMARY KEY",
+                        "pick_id INTEGER UNIQUE",
+                        "symbol VARCHAR(10) NOT NULL",
+                        "direction VARCHAR(10) NOT NULL",
+                        "price_when_picked DECIMAL(10,2)",
+                        "target_primary DECIMAL(10,2)",
+                        "target_medium DECIMAL(10,2)",
+                        "target_moonshot DECIMAL(10,2)",
+                        "hit_primary_target BOOLEAN",
+                        "hit_medium_target BOOLEAN",
+                        "hit_moonshot_target BOOLEAN",
+                        "price_at_hit DECIMAL(10,2)",
+                        "hit_at TIMESTAMP",
+                        "outcome VARCHAR(20)",
+                        "max_gain_pct DECIMAL(6,2)",
+                        "days_to_peak INTEGER",
+                        "created_at TIMESTAMP",
+                        "resolved_at TIMESTAMP"
+                    ]
+                },
+                "picks_count": picks_count
+            }
+    except Exception as e:
+        import traceback
+        return {"success": False, "error": str(e), "traceback": traceback.format_exc()}

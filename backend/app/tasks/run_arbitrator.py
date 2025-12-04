@@ -101,7 +101,9 @@ def run_arbitrator(prev_result=None):
 
                     # Check for existing pick within 30 days (avoid duplicates)
                     existing_pick = await conn.fetchrow("""
-                        SELECT id, primary_target, moonshot_target, direction
+                        SELECT id, COALESCE(target_primary, primary_target) as target_primary,
+                               target_medium, COALESCE(target_moonshot, moonshot_target) as target_moonshot,
+                               direction
                         FROM picks
                         WHERE symbol = $1
                           AND created_at > NOW() - INTERVAL '30 days'
@@ -130,23 +132,27 @@ def run_arbitrator(prev_result=None):
 
                     # If stock was already picked in last 30 days, only update targets if needed
                     if existing_pick:
-                        old_primary = float(existing_pick['primary_target']) if existing_pick['primary_target'] else 0
-                        new_primary = conf_targets.primary_target
+                        old_primary = float(existing_pick['target_primary']) if existing_pick['target_primary'] else 0
+                        new_primary = conf_targets.target_primary
 
                         # Update targets if they've changed significantly (>2% difference)
                         if abs(new_primary - old_primary) / max(old_primary, 1) > 0.02:
                             await conn.execute("""
                                 UPDATE picks
-                                SET primary_target = $1,
-                                    moonshot_target = $2,
+                                SET target_primary = $1,
+                                    target_medium = $2,
+                                    target_moonshot = $3,
+                                    primary_target = $1,
+                                    moonshot_target = $3,
                                     target_low = $1,
-                                    target_high = COALESCE($2, $1 * 1.15),
-                                    confluence_score = $3,
-                                    confluence_methods = $4
-                                WHERE id = $5
+                                    target_high = COALESCE($3, $1 * 1.15),
+                                    confluence_score = $4,
+                                    confluence_methods = $5
+                                WHERE id = $6
                             """,
-                                conf_targets.primary_target,
-                                conf_targets.moonshot_target,
+                                conf_targets.target_primary,
+                                conf_targets.target_medium,
+                                conf_targets.target_moonshot,
                                 conf_targets.confluence_score,
                                 conf_targets.confluence_methods,
                                 existing_pick['id']
@@ -157,14 +163,16 @@ def run_arbitrator(prev_result=None):
                             logger.info(f"{symbol}: Already picked within 30 days, targets unchanged - skipping")
                         continue  # Skip to next pick - don't create duplicate
 
-                    # Primary target always shown, moonshot conditional on confluence score
-                    primary_target = conf_targets.primary_target
-                    moonshot_target = conf_targets.moonshot_target  # None if conditions not met
+                    # 3-TIER TARGETS: Primary always shown, Medium/Moonshot conditional
+                    target_primary = conf_targets.target_primary
+                    target_medium = conf_targets.target_medium  # None if confluence < 2
+                    target_moonshot = conf_targets.target_moonshot  # None if confluence < 3 and no catalyst
                     stop_loss = conf_targets.stop_loss
 
                     logger.info(f"{symbol} ({direction}): price=${current_price:.2f}, "
-                               f"primary=${primary_target:.2f}, moonshot={f'${moonshot_target:.2f}' if moonshot_target else 'N/A'}, "
-                               f"confluence={conf_targets.confluence_score}/4 {conf_targets.confluence_methods}")
+                               f"primary=${target_primary:.2f}, medium={f'${target_medium:.2f}' if target_medium else 'N/A'}, "
+                               f"moonshot={f'${target_moonshot:.2f}' if target_moonshot else 'N/A'}, "
+                               f"confluence={conf_targets.confluence_score}/5 {conf_targets.confluence_methods}")
 
                     # Serialize weekly pivots for charting
                     weekly_pivots_dict = None
@@ -196,8 +204,10 @@ def run_arbitrator(prev_result=None):
                         "confluence_analysis": {
                             "swing_low": conf_targets.swing_low,
                             "swing_high": conf_targets.swing_high,
-                            "primary_target": conf_targets.primary_target,
-                            "moonshot_target": conf_targets.moonshot_target,
+                            # 3-tier targets
+                            "target_primary": conf_targets.target_primary,
+                            "target_medium": conf_targets.target_medium,
+                            "target_moonshot": conf_targets.target_moonshot,
                             "stop_loss": conf_targets.stop_loss,
                             "confluence_score": conf_targets.confluence_score,
                             "confluence_methods": conf_targets.confluence_methods,
@@ -211,17 +221,18 @@ def run_arbitrator(prev_result=None):
                         "market_context": phase_data.get("market_context", {})
                     }
 
-                    # Insert final pick with confluence data
+                    # Insert final pick with 3-tier targets
                     pick_id = await conn.fetchval("""
                         INSERT INTO picks (
                             symbol, direction, confidence, reasoning,
                             target_low, target_high,
+                            target_primary, target_medium, target_moonshot,
                             primary_target, moonshot_target,
                             confluence_score, confluence_methods, rsi_divergence, gann_alignment,
                             weekly_pivots,
                             pick_context, created_at, expires_at
                         ) VALUES (
-                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
                             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '30 days'
                         ) RETURNING id
                     """,
@@ -229,10 +240,13 @@ def run_arbitrator(prev_result=None):
                         direction,
                         pick.get("confidence", 0.0),
                         pick.get("reasoning", ""),
-                        primary_target,  # Keep target_low for backward compat
-                        moonshot_target if moonshot_target else primary_target * 1.15,  # target_high fallback
-                        primary_target,
-                        moonshot_target,
+                        target_primary,  # target_low for backward compat
+                        target_moonshot if target_moonshot else target_primary * 1.15,  # target_high fallback
+                        target_primary,
+                        target_medium,
+                        target_moonshot,
+                        target_primary,  # Legacy primary_target
+                        target_moonshot,  # Legacy moonshot_target
                         conf_targets.confluence_score,
                         conf_targets.confluence_methods,
                         conf_targets.rsi_divergence.detected if conf_targets.rsi_divergence else False,
@@ -250,23 +264,22 @@ def run_arbitrator(prev_result=None):
                         WHERE date = $2 AND symbol = $3
                     """, direction, shortlist_date, symbol)
 
+                    # Insert into pick_outcomes_detailed with 3-tier targets
                     await conn.execute("""
                         INSERT INTO pick_outcomes_detailed (
                             pick_id, symbol, direction,
-                            entry_price, target_low, target_high,
-                            primary_target, moonshot_target, confluence_score,
+                            price_when_picked,
+                            target_primary, target_medium, target_moonshot,
                             outcome, created_at
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', CURRENT_TIMESTAMP)
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', CURRENT_TIMESTAMP)
                     """,
                         pick_id,
                         symbol,
                         direction,
                         current_price,
-                        primary_target,  # Keep target_low for backward compat
-                        moonshot_target if moonshot_target else primary_target * 1.15,
-                        primary_target,
-                        moonshot_target,
-                        conf_targets.confluence_score
+                        target_primary,
+                        target_medium,
+                        target_moonshot
                     )
                     saved_count += 1
 

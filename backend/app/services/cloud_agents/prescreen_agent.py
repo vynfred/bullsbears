@@ -2,12 +2,14 @@
 """
 Prescreen Agent - Fireworks.ai qwen2.5-72b-instruct
 ACTIVE tier → SHORT_LIST (up to 75 bullish + bearish)
+
+v6: Added catalyst detection (earnings this week, short interest >20%)
 """
 
 import httpx
 import json
 import logging
-from datetime import date
+from datetime import date, timedelta
 from app.core.config import settings
 from app.core.database import get_asyncpg_pool
 
@@ -112,18 +114,56 @@ class PrescreenAgent:
 
         logger.info(f"Found {len(stocks)} active stocks to screen")
 
-        # Build stock data for prompt
+        # ═══════════════════════════════════════════════════════════════════
+        # v6 CATALYST DETECTION - Earnings this week + Short Interest
+        # ═══════════════════════════════════════════════════════════════════
+        today_date = date.today()
+        next_week = today_date + timedelta(days=7)
+
+        # Fetch earnings calendar this week (FMP API)
+        earnings_this_week = set()
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.get(
+                    f"https://financialmodelingprep.com/api/v3/earning_calendar",
+                    params={
+                        "from": today_date.isoformat(),
+                        "to": next_week.isoformat(),
+                        "apikey": settings.FMP_API_KEY
+                    }
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    earnings_this_week = {e.get('symbol') for e in data if e.get('symbol')}
+                    logger.info(f"📅 Found {len(earnings_this_week)} stocks with earnings this week")
+        except Exception as e:
+            logger.warning(f"Could not fetch earnings calendar: {e}")
+
+        # Build stock data for prompt with catalyst flags
         stock_data = []
         for s in stocks:
-            stock_data.append({
-                "symbol": s["symbol"],
+            symbol = s["symbol"]
+            vol_ratio = float(s["volume_ratio"] or 0)
+
+            # Hard filter: skip low volume ratio stocks
+            if vol_ratio < 1.5:
+                continue
+
+            stock_entry = {
+                "symbol": symbol,
                 "price": float(s["price"]),
                 "volume_today": int(s["volume_today"]),
                 "pct_change_30d": float(s["pct_change_30d"] or 0),
                 "avg_volume_30d": int(s["avg_volume_30d"] or 0),
-                "volume_ratio": float(s["volume_ratio"] or 0),
-                "volatility_30d": float(s["volatility_30d"] or 0)
-            })
+                "volume_ratio": vol_ratio,
+                "volatility_30d": float(s["volatility_30d"] or 0),
+                # v6 Catalyst flags
+                "catalyst_earnings": symbol in earnings_this_week,
+                "short_interest_pct": 0  # Placeholder - can be populated from finnhub if needed
+            }
+            stock_data.append(stock_entry)
+
+        logger.info(f"Filtered to {len(stock_data)} stocks after vol_ratio >= 1.5 filter")
 
         # Format prompt
         prompt = PRESCREEN_PROMPT.replace("{STOCK_DATA}", json.dumps(stock_data, indent=2))
@@ -221,11 +261,24 @@ class PrescreenAgent:
                 """, today, symbol, rank, "bear", s.get("volume_ratio", 0) * 10, summary, s.get("price", 0))
 
         total_picks = len(bullish_picks) + len(bearish_picks)
+        earnings_count = sum(1 for s in stock_data if s.get("catalyst_earnings"))
         logger.info(f"✅ Saved {total_picks} stocks ({len(bullish_picks)} bull, {len(bearish_picks)} bear)")
+        logger.info(f"📅 {earnings_count} stocks have earnings this week (catalyst)")
+
+        # Return catalyst data for downstream use (arbitrator/fib_calculator)
+        catalyst_data = {
+            symbol: {
+                "catalyst_earnings": s.get("catalyst_earnings", False),
+                "short_interest_pct": s.get("short_interest_pct", 0)
+            }
+            for s in stock_data
+            for symbol in [s["symbol"]]
+        }
 
         return {
             "shortlist_count": total_picks,
             "bullish": bullish_picks,
             "bearish": bearish_picks,
-            "summary": summary
+            "summary": summary,
+            "catalyst_data": catalyst_data  # v6: Pass to arbitrator for fib_calculator
         }

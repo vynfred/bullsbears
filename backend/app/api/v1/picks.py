@@ -15,11 +15,13 @@ logger = logging.getLogger(__name__)
 
 async def _check_and_update_target_hits(conn, rows: List, current_prices: Dict[str, float]):
     """
-    Check if any picks hit their targets based on fresh FMP prices.
+    Check if any picks hit their 3-tier targets based on fresh FMP prices.
     Updates database immediately when targets are hit.
 
-    For BULLISH picks: price >= primary_target = win
-    For BEARISH picks: price <= primary_target = win (price dropped to target)
+    3-TIER TARGET SYSTEM:
+      Primary (Fib 1.000)  - BULLISH: price >= target, BEARISH: price <= target
+      Medium (Fib 1.272)   - Same logic
+      Moonshot (Fib 1.618) - Same logic
     """
     updates = []
 
@@ -32,35 +34,44 @@ async def _check_and_update_target_hits(conn, rows: List, current_prices: Dict[s
         if not current_price:
             continue
 
-        # Skip if already marked as hit
-        if row.get("hit_primary_target") or row.get("hit_moonshot_target"):
+        # Skip if already hit all targets
+        if row.get("hit_moonshot_target"):
             continue
 
-        primary_target = float(row["primary_target"]) if row.get("primary_target") else None
-        moonshot_target = float(row["moonshot_target"]) if row.get("moonshot_target") else None
+        # Get 3-tier targets (supports both old and new column names)
+        target_primary = float(row["target_primary"]) if row.get("target_primary") else None
+        target_medium = float(row["target_medium"]) if row.get("target_medium") else None
+        target_moonshot = float(row["target_moonshot"]) if row.get("target_moonshot") else None
 
-        hit_primary = False
+        hit_primary = row.get("hit_primary_target") or False
+        hit_medium = row.get("hit_medium_target") or False
         hit_moonshot = False
 
         if direction == "bullish":
             # Bullish: price needs to GO UP to hit target
-            if primary_target and current_price >= primary_target:
+            if target_primary and current_price >= target_primary:
                 hit_primary = True
-            if moonshot_target and current_price >= moonshot_target:
+            if target_medium and current_price >= target_medium:
+                hit_medium = True
+            if target_moonshot and current_price >= target_moonshot:
                 hit_moonshot = True
         else:
             # Bearish: price needs to GO DOWN to hit target
-            if primary_target and current_price <= primary_target:
+            if target_primary and current_price <= target_primary:
                 hit_primary = True
-            if moonshot_target and current_price <= moonshot_target:
+            if target_medium and current_price <= target_medium:
+                hit_medium = True
+            if target_moonshot and current_price <= target_moonshot:
                 hit_moonshot = True
 
-        if hit_primary or hit_moonshot:
+        # Only update if something changed
+        if hit_primary or hit_medium or hit_moonshot:
             updates.append({
                 "pick_id": pick_id,
                 "symbol": symbol,
                 "direction": direction,
                 "hit_primary": hit_primary,
+                "hit_medium": hit_medium,
                 "hit_moonshot": hit_moonshot,
                 "price_at_hit": current_price
             })
@@ -83,22 +94,29 @@ async def _check_and_update_target_hits(conn, rows: List, current_prices: Dict[s
                 await conn.execute("""
                     UPDATE pick_outcomes_detailed
                     SET hit_primary_target = $2,
-                        hit_moonshot_target = $3,
-                        price_at_hit = $4,
-                        hit_at = CURRENT_TIMESTAMP
+                        hit_medium_target = $3,
+                        hit_moonshot_target = $4,
+                        price_at_hit = $5,
+                        hit_at = CURRENT_TIMESTAMP,
+                        outcome = CASE
+                            WHEN $4 THEN 'moonshot'
+                            WHEN $3 THEN 'medium_hit'
+                            WHEN $2 THEN 'win'
+                            ELSE outcome
+                        END
                     WHERE pick_id = $1
-                """, upd["pick_id"], upd["hit_primary"], upd["hit_moonshot"], upd["price_at_hit"])
+                """, upd["pick_id"], upd["hit_primary"], upd["hit_medium"], upd["hit_moonshot"], upd["price_at_hit"])
             else:
-                # Insert new row - manually get next ID since SERIAL may be broken
-                next_id = await conn.fetchval(
-                    "SELECT COALESCE(MAX(id), 0) + 1 FROM pick_outcomes_detailed"
-                )
+                # Insert new row with clean schema
                 await conn.execute("""
-                    INSERT INTO pick_outcomes_detailed (id, pick_id, symbol, direction, hit_primary_target, hit_moonshot_target, price_at_hit, hit_at)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
-                """, next_id, upd["pick_id"], upd["symbol"], upd["direction"], upd["hit_primary"], upd["hit_moonshot"], upd["price_at_hit"])
+                    INSERT INTO pick_outcomes_detailed
+                        (pick_id, symbol, direction, hit_primary_target, hit_medium_target, hit_moonshot_target, price_at_hit, hit_at, outcome)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8)
+                """, upd["pick_id"], upd["symbol"], upd["direction"],
+                    upd["hit_primary"], upd["hit_medium"], upd["hit_moonshot"], upd["price_at_hit"],
+                    'moonshot' if upd["hit_moonshot"] else ('medium_hit' if upd["hit_medium"] else ('win' if upd["hit_primary"] else 'active')))
 
-            logger.info(f"🎯 TARGET HIT: {upd['symbol']} (pick_id={upd['pick_id']}) - primary={upd['hit_primary']}, moonshot={upd['hit_moonshot']} @ ${upd['price_at_hit']:.2f}")
+            logger.info(f"🎯 TARGET HIT: {upd['symbol']} (pick_id={upd['pick_id']}) - primary={upd['hit_primary']}, medium={upd['hit_medium']}, moonshot={upd['hit_moonshot']} @ ${upd['price_at_hit']:.2f}")
         except Exception as e:
             logger.error(f"Failed to update target hit for {upd['symbol']}: {e}")
 
@@ -138,16 +156,19 @@ async def get_live_picks(
                 logger.warning("Picks table doesn't exist yet")
                 return []
 
-            # Build dynamic query - only select columns that exist
-            # Note: pick_outcomes_detailed may not have all columns yet
+            # Build dynamic query - supports both old and new column names
+            # New 3-tier: target_primary, target_medium, target_moonshot
+            # Legacy: primary_target, moonshot_target
             query = """
                 SELECT
                     p.id, p.symbol, p.direction, p.confidence, p.reasoning,
                     p.target_low, p.target_high, p.pick_context, p.pretty_chart_url,
-                    p.primary_target, p.moonshot_target,
+                    COALESCE(p.target_primary, p.primary_target) as target_primary,
+                    p.target_medium,
+                    COALESCE(p.target_moonshot, p.moonshot_target) as target_moonshot,
                     p.confluence_score,
                     p.created_at, p.expires_at,
-                    pod.hit_primary_target, pod.hit_moonshot_target
+                    pod.hit_primary_target, pod.hit_medium_target, pod.hit_moonshot_target
                 FROM picks p
                 LEFT JOIN pick_outcomes_detailed pod ON pod.pick_id = p.id
                 WHERE p.confidence >= $1
@@ -243,13 +264,16 @@ async def get_live_picks(
                 if entry_price and current_price and entry_price > 0:
                     change_pct = ((current_price - entry_price) / entry_price) * 100
 
-                # Determine outcome status for styling
+                # Determine outcome status for styling (3-tier system)
                 hit_primary = row.get("hit_primary_target") or False
+                hit_medium = row.get("hit_medium_target") or False
                 hit_moonshot = row.get("hit_moonshot_target") or False
                 is_expired = row["expires_at"] and row["expires_at"] < datetime.utcnow()
 
                 if hit_moonshot:
                     outcome_status = "moonshot"  # Gold with sparkles
+                elif hit_medium:
+                    outcome_status = "medium_hit"  # Silver
                 elif hit_primary:
                     outcome_status = "win"  # Gold
                 elif is_expired and not hit_primary:
@@ -265,15 +289,21 @@ async def get_live_picks(
                     "reasoning": row["reasoning"],
                     "target_low": float(row["target_low"]) if row["target_low"] else None,
                     "target_high": float(row["target_high"]) if row["target_high"] else None,
-                    # Confluence v5 fields
-                    "primary_target": float(row["primary_target"]) if row.get("primary_target") else None,
-                    "moonshot_target": float(row["moonshot_target"]) if row.get("moonshot_target") else None,
+                    # 3-TIER TARGETS (v6)
+                    "target_primary": float(row["target_primary"]) if row.get("target_primary") else None,
+                    "target_medium": float(row["target_medium"]) if row.get("target_medium") else None,
+                    "target_moonshot": float(row["target_moonshot"]) if row.get("target_moonshot") else None,
+                    # Legacy aliases for backward compatibility
+                    "primary_target": float(row["target_primary"]) if row.get("target_primary") else None,
+                    "moonshot_target": float(row["target_moonshot"]) if row.get("target_moonshot") else None,
+                    # Confluence data
                     "confluence_score": int(row["confluence_score"]) if row.get("confluence_score") else 0,
                     "rsi_divergence": bool(row.get("rsi_divergence")),
                     "gann_alignment": bool(row.get("gann_alignment")),
                     "weekly_pivots": row.get("weekly_pivots"),
-                    # Outcome tracking
+                    # 3-tier outcome tracking
                     "hit_primary_target": hit_primary,
+                    "hit_medium_target": hit_medium,
                     "hit_moonshot_target": hit_moonshot,
                     "outcome_status": outcome_status,
                     # Price/chart data
