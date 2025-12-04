@@ -59,6 +59,7 @@ async def _check_and_update_target_hits(conn, rows: List, current_prices: Dict[s
             updates.append({
                 "pick_id": pick_id,
                 "symbol": symbol,
+                "direction": direction,
                 "hit_primary": hit_primary,
                 "hit_moonshot": hit_moonshot,
                 "price_at_hit": current_price
@@ -88,11 +89,11 @@ async def _check_and_update_target_hits(conn, rows: List, current_prices: Dict[s
                     WHERE pick_id = $1
                 """, upd["pick_id"], upd["hit_primary"], upd["hit_moonshot"], upd["price_at_hit"])
             else:
-                # Insert new row
+                # Insert new row - include required symbol and direction columns
                 await conn.execute("""
-                    INSERT INTO pick_outcomes_detailed (pick_id, hit_primary_target, hit_moonshot_target, price_at_hit, hit_at)
-                    VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-                """, upd["pick_id"], upd["hit_primary"], upd["hit_moonshot"], upd["price_at_hit"])
+                    INSERT INTO pick_outcomes_detailed (pick_id, symbol, direction, hit_primary_target, hit_moonshot_target, price_at_hit, hit_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+                """, upd["pick_id"], upd["symbol"], upd["direction"], upd["hit_primary"], upd["hit_moonshot"], upd["price_at_hit"])
 
             logger.info(f"🎯 TARGET HIT: {upd['symbol']} (pick_id={upd['pick_id']}) - primary={upd['hit_primary']}, moonshot={upd['hit_moonshot']} @ ${upd['price_at_hit']:.2f}")
         except Exception as e:
@@ -453,9 +454,9 @@ async def manual_check_targets():
                     """, upd["pick_id"], upd["hit_primary"], upd["hit_moonshot"], upd["current_price"])
                 else:
                     await conn.execute("""
-                        INSERT INTO pick_outcomes_detailed (pick_id, hit_primary_target, hit_moonshot_target, price_at_hit, hit_at)
-                        VALUES ($1, $2, $3, $4, NOW())
-                    """, upd["pick_id"], upd["hit_primary"], upd["hit_moonshot"], upd["current_price"])
+                        INSERT INTO pick_outcomes_detailed (pick_id, symbol, direction, hit_primary_target, hit_moonshot_target, price_at_hit, hit_at)
+                        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                    """, upd["pick_id"], upd["symbol"], upd["direction"], upd["hit_primary"], upd["hit_moonshot"], upd["current_price"])
                 updated_count += 1
 
             return {
