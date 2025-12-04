@@ -1,7 +1,7 @@
 // src/components/private/PicksTab.tsx
 'use client';
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import {
   ChevronDown,
   ChevronUp,
@@ -22,7 +22,27 @@ import { useWatchlist } from "@/hooks/useWatchlist";
 const bullIcon = "/assets/BullsBears-Side-Bull-Icon.png";
 const bearIcon = "/assets/BullsBears-Side-Bear-Icon.png";
 
+// Unified filter configuration
+const FILTERS = [
+  { id: 'today', label: "Today's Picks", period: 'today' as const, sentiment: undefined, outcome: undefined },
+  { id: 'week', label: "Past 7 Days", period: '7d' as const, sentiment: undefined, outcome: undefined },
+  { id: 'all', label: "All Time", period: 'all' as const, sentiment: undefined, outcome: undefined },
+  { id: 'bull', label: "Bullish", period: 'active' as const, sentiment: 'bullish' as const, outcome: undefined },
+  { id: 'bear', label: "Bearish", period: 'active' as const, sentiment: 'bearish' as const, outcome: undefined },
+  { id: 'wins', label: "Wins", period: 'all' as const, sentiment: undefined, outcome: 'wins' as const },
+  { id: 'misses', label: "Misses", period: 'all' as const, sentiment: undefined, outcome: 'losses' as const },
+  { id: 'active', label: "All Active (30d)", period: 'active' as const, sentiment: undefined, outcome: undefined },
+] as const;
+
+type FilterId = typeof FILTERS[number]['id'];
+
 export default function PicksTab() {
+  const [activeFilter, setActiveFilter] = useState<FilterId>('active');
+  const [openPickId, setOpenPickId] = useState<string | null>(null);
+
+  // Get current filter config
+  const currentFilterConfig = FILTERS.find(f => f.id === activeFilter) || FILTERS[7]; // Default to 'active'
+
   const {
     picks,
     isLoading,
@@ -30,17 +50,16 @@ export default function PicksTab() {
     error,
     lastUpdated,
     refresh,
-    period,
     setPeriod,
-    outcome,
     setOutcome,
   } = useLivePicks({
-    bullishLimit: 25,
-    bearishLimit: 25,
+    bullishLimit: 50,
+    bearishLimit: 50,
     refreshInterval: 5 * 60 * 1000,
     enabled: true,
     minConfidence: 0,
-    period: 'today',
+    period: currentFilterConfig.period,
+    outcome: currentFilterConfig.outcome,
   });
 
   const {
@@ -49,25 +68,38 @@ export default function PicksTab() {
     isInWatchlist,
   } = useWatchlist();
 
-  const [filterSentiment, setFilterSentiment] = useState<"all" | "bullish" | "bearish">("all");
-  const [openPickId, setOpenPickId] = useState<string | null>(null);
+  // Handle unified filter change
+  const handleFilterChange = useCallback((newFilterId: FilterId) => {
+    setActiveFilter(newFilterId);
+    const config = FILTERS.find(f => f.id === newFilterId);
+    if (config) {
+      setPeriod(config.period);
+      if (config.outcome) {
+        setOutcome(config.outcome);
+      } else {
+        setOutcome(undefined);
+      }
+    }
+  }, [setPeriod, setOutcome]);
 
+  // Apply local sentiment filter if needed
   const filteredPicks = useMemo(() => {
     let picksToShow = picks;
 
-    // Apply sentiment filter (local, client-side)
-    if (filterSentiment === "bullish") {
+    // Apply sentiment filter for bull/bear options (local filtering)
+    if (currentFilterConfig.sentiment === "bullish") {
       picksToShow = picks.filter(p => p.sentiment === "bullish");
-    } else if (filterSentiment === "bearish") {
+    } else if (currentFilterConfig.sentiment === "bearish") {
       picksToShow = picks.filter(p => p.sentiment === "bearish");
     }
 
     // Sort by confidence descending
     return [...picksToShow].sort((a, b) => b.confidence - a.confidence);
-  }, [picks, filterSentiment]);
+  }, [picks, currentFilterConfig.sentiment]);
 
-  const bullishCount = picks.filter(p => p.sentiment === "bullish").length;
-  const bearishCount = picks.filter(p => p.sentiment === "bearish").length;
+  // Badge counts based on filtered picks
+  const bullishCount = filteredPicks.filter(p => p.sentiment === "bullish").length;
+  const bearishCount = filteredPicks.filter(p => p.sentiment === "bearish").length;
 
   const getConfidenceLevel = (confidence: number): { label: string; color: string } => {
     if (confidence >= 80) return { label: "High", color: "text-emerald-400" };
@@ -105,12 +137,15 @@ export default function PicksTab() {
             }}
           >
             <div className="w-full h-full rounded-full bg-slate-900 flex flex-col items-center justify-center">
-              <span className="text-[10px] text-slate-400 uppercase tracking-widest mb-2">Today&apos;s Picks</span>
+              {/* Dynamic title based on filter */}
+              <span className="text-[10px] text-slate-400 uppercase tracking-widest mb-2">
+                {currentFilterConfig.label}
+              </span>
               <div className="flex items-center justify-center gap-6">
                 {/* Bullish side */}
                 <button
-                  onClick={() => setFilterSentiment(filterSentiment === "bullish" ? "all" : "bullish")}
-                  className={`flex flex-col items-center transition-all ${filterSentiment === "bullish" ? "scale-110" : "hover:scale-105"}`}
+                  onClick={() => handleFilterChange(activeFilter === 'bull' ? 'active' : 'bull')}
+                  className={`flex flex-col items-center transition-all ${activeFilter === 'bull' ? "scale-110" : "hover:scale-105"}`}
                 >
                   <span className="text-4xl font-bold text-emerald-400">{bullishCount}</span>
                   <img
@@ -126,8 +161,8 @@ export default function PicksTab() {
 
                 {/* Bearish side */}
                 <button
-                  onClick={() => setFilterSentiment(filterSentiment === "bearish" ? "all" : "bearish")}
-                  className={`flex flex-col items-center transition-all ${filterSentiment === "bearish" ? "scale-110" : "hover:scale-105"}`}
+                  onClick={() => handleFilterChange(activeFilter === 'bear' ? 'active' : 'bear')}
+                  className={`flex flex-col items-center transition-all ${activeFilter === 'bear' ? "scale-110" : "hover:scale-105"}`}
                 >
                   <span className="text-4xl font-bold text-rose-400">{bearishCount}</span>
                   <img
@@ -143,51 +178,32 @@ export default function PicksTab() {
         </motion.div>
       </div>
 
-      {/* Filter Options */}
+      {/* Unified Filter Dropdown */}
       <div className="flex flex-wrap items-center justify-center gap-2">
-        {/* Period Filter */}
-        <Select value={period} onValueChange={(v) => setPeriod(v as typeof period)}>
-          <SelectTrigger className="w-[120px] bg-slate-800 border-slate-600 text-slate-100 text-sm">
-            <SelectValue />
+        <Select value={activeFilter} onValueChange={(v) => handleFilterChange(v as FilterId)}>
+          <SelectTrigger className="w-[160px] bg-slate-800 border-slate-600 text-slate-100 text-sm">
+            <SelectValue placeholder="Select filter" />
           </SelectTrigger>
           <SelectContent className="bg-slate-900 border-slate-700">
-            <SelectItem value="today" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">Today</SelectItem>
-            <SelectItem value="7d" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">Past 7 Days</SelectItem>
-            <SelectItem value="active" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">Active (30d)</SelectItem>
-            <SelectItem value="all" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">All Time</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Sentiment Filter */}
-        <Select value={filterSentiment} onValueChange={(v) => setFilterSentiment(v as typeof filterSentiment)}>
-          <SelectTrigger className="w-[120px] bg-slate-800 border-slate-600 text-slate-100 text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-slate-900 border-slate-700">
-            <SelectItem value="all" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">All</SelectItem>
-            <SelectItem value="bullish" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">Bullish</SelectItem>
-            <SelectItem value="bearish" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">Bearish</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Outcome Filter */}
-        <Select value={outcome || "all"} onValueChange={(v) => setOutcome(v === "all" ? undefined : v as "wins" | "losses")}>
-          <SelectTrigger className="w-[100px] bg-slate-800 border-slate-600 text-slate-100 text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-slate-900 border-slate-700">
-            <SelectItem value="all" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">All</SelectItem>
-            <SelectItem value="wins" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">
-              <span className="flex items-center gap-1">🏆 Wins</span>
-            </SelectItem>
-            <SelectItem value="losses" className="text-slate-200 focus:bg-slate-800 focus:text-slate-100">
-              <span className="flex items-center gap-1">💔 Losses</span>
-            </SelectItem>
+            {FILTERS.map((filter) => (
+              <SelectItem
+                key={filter.id}
+                value={filter.id}
+                className="text-slate-200 focus:bg-slate-800 focus:text-slate-100"
+              >
+                {filter.id === 'wins' && '🏆 '}
+                {filter.id === 'misses' && '💔 '}
+                {filter.id === 'bull' && '🐂 '}
+                {filter.id === 'bear' && '🐻 '}
+                {filter.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
         <Button onClick={refresh} variant="outline" size="sm" disabled={isRefreshing} className="bg-slate-800 border-slate-600">
-          <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
+          <RefreshCw className={`w-4 h-4 mr-1 ${isRefreshing ? "animate-spin" : ""}`} />
+          Refresh
         </Button>
       </div>
 

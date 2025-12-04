@@ -63,7 +63,7 @@ export function useLivePicks({
   minConfidence = 0,
   enableSSE = true,
   cacheTimeout = 30 * 1000, // 30 seconds
-  period = 'today',
+  period = 'active',
   outcome,
 }: UseLivePicksOptions = {}) {
   const [picks, setPicks] = useState<LivePick[]>([]);
