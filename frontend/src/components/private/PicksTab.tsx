@@ -322,25 +322,25 @@ export default function PicksTab() {
                             </div>
 
                             <div className="flex items-center gap-2 shrink-0">
-                              {/* Confluence Score Badge */}
-                              {pick.confluenceScore !== undefined && pick.confluenceScore > 0 && (
+                              {/* Confidence Badge with Tooltip */}
+                              <div className="relative group">
                                 <Badge
-                                  className={`text-xs px-2 py-1 ${
-                                    pick.confluenceScore >= 3 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50' :
-                                    pick.confluenceScore >= 2 ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' :
-                                    'bg-slate-500/20 text-slate-300 border-slate-500/50'
-                                  }`}
+                                  className={`text-xs px-2 py-1 ${confidenceLevel.color} bg-slate-800/50 border-slate-600 cursor-help`}
                                   variant="outline"
                                 >
-                                  {pick.confluenceScore}/4
+                                  {pick.confidence}%
                                 </Badge>
-                              )}
-                              <Badge
-                                className={`text-xs px-2 py-1 ${confidenceLevel.color} bg-slate-800/50 border-slate-600`}
-                                variant="outline"
-                              >
-                                {pick.confidence}%
-                              </Badge>
+                                {/* Tooltip */}
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-xs text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-lg">
+                                  <div className="font-medium text-slate-100 mb-1">AI Confidence Score</div>
+                                  <div>How certain our AI model is about this pick</div>
+                                  <div className="mt-1 text-slate-400">
+                                    80%+ High • 65-79% Medium • &lt;65% Low
+                                  </div>
+                                  {/* Arrow */}
+                                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-600"></div>
+                                </div>
+                              </div>
                               <Badge
                                 className={`text-xs px-2 py-1 ${
                                   isBullish
@@ -359,13 +359,22 @@ export default function PicksTab() {
                             </div>
                           </div>
 
-                          {/* Row 2: Current Price + Change % */}
+                          {/* Row 2: Picked @ + Current Price (same sizes) */}
                           <div className="flex items-center justify-between gap-4 pt-1">
-                            <div className="text-left">
-                              <p className="text-slate-500 text-xs mb-0.5">Current Price</p>
+                            <div className="text-left space-y-1">
+                              {/* Line 1: Picked @ with date */}
                               <div className="flex items-center gap-2">
-                                <span className="text-lg text-slate-100 font-medium">
-                                  ${pick.currentPrice > 0 ? pick.currentPrice.toFixed(2) : '—'}
+                                <span className="text-sm text-slate-300">
+                                  Picked @ ${pick.priceAtAlert > 0 ? pick.priceAtAlert.toFixed(2) : '—'}
+                                </span>
+                                <span className="text-sm text-slate-500">
+                                  on {pick.timestamp ? new Date(pick.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }).replace(',', '') : '—'}
+                                </span>
+                              </div>
+                              {/* Line 2: Current Price with change */}
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-slate-300">
+                                  Current ${pick.currentPrice > 0 ? pick.currentPrice.toFixed(2) : '—'}
                                 </span>
                                 {pick.change !== 0 && (
                                   <span className={`text-sm font-medium ${pick.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -373,9 +382,6 @@ export default function PicksTab() {
                                   </span>
                                 )}
                               </div>
-                              <p className="text-slate-600 text-xs">
-                                Picked @ ${pick.priceAtAlert > 0 ? pick.priceAtAlert.toFixed(2) : '—'}
-                              </p>
                             </div>
 
                             <div className="text-right">
