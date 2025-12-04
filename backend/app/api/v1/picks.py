@@ -13,10 +13,11 @@ router = APIRouter(prefix="/picks", tags=["picks"])
 logger = logging.getLogger(__name__)
 
 
-async def _check_and_update_target_hits(conn, rows: List, current_prices: Dict[str, float]):
+async def _check_and_update_target_hits(conn, rows: List, current_prices: Dict[str, float]) -> Dict[int, Dict]:
     """
     Check if any picks hit their 3-tier targets based on fresh FMP prices.
     Updates database immediately when targets are hit.
+    Returns dict mapping pick_id -> hit statuses for immediate use in response.
 
     3-TIER TARGET SYSTEM:
       Primary (Fib 1.000)  - BULLISH: price >= target, BEARISH: price <= target
@@ -24,6 +25,7 @@ async def _check_and_update_target_hits(conn, rows: List, current_prices: Dict[s
       Moonshot (Fib 1.618) - Same logic
     """
     updates = []
+    hit_status = {}  # Return this to caller for immediate response update
 
     for row in rows:
         pick_id = row["id"]
@@ -34,38 +36,50 @@ async def _check_and_update_target_hits(conn, rows: List, current_prices: Dict[s
         if not current_price:
             continue
 
-        # Skip if already hit all targets
-        if row.get("hit_moonshot_target"):
-            continue
-
         # Get 3-tier targets (supports both old and new column names)
         target_primary = float(row["target_primary"]) if row.get("target_primary") else None
         target_medium = float(row["target_medium"]) if row.get("target_medium") else None
         target_moonshot = float(row["target_moonshot"]) if row.get("target_moonshot") else None
 
+        # Start with existing hit status
         hit_primary = row.get("hit_primary_target") or False
         hit_medium = row.get("hit_medium_target") or False
-        hit_moonshot = False
+        hit_moonshot = row.get("hit_moonshot_target") or False
 
+        # Check for NEW hits
+        new_hit = False
         if direction == "bullish":
             # Bullish: price needs to GO UP to hit target
-            if target_primary and current_price >= target_primary:
+            if target_primary and current_price >= target_primary and not hit_primary:
                 hit_primary = True
-            if target_medium and current_price >= target_medium:
+                new_hit = True
+            if target_medium and current_price >= target_medium and not hit_medium:
                 hit_medium = True
-            if target_moonshot and current_price >= target_moonshot:
+                new_hit = True
+            if target_moonshot and current_price >= target_moonshot and not hit_moonshot:
                 hit_moonshot = True
+                new_hit = True
         else:
             # Bearish: price needs to GO DOWN to hit target
-            if target_primary and current_price <= target_primary:
+            if target_primary and current_price <= target_primary and not hit_primary:
                 hit_primary = True
-            if target_medium and current_price <= target_medium:
+                new_hit = True
+            if target_medium and current_price <= target_medium and not hit_medium:
                 hit_medium = True
-            if target_moonshot and current_price <= target_moonshot:
+                new_hit = True
+            if target_moonshot and current_price <= target_moonshot and not hit_moonshot:
                 hit_moonshot = True
+                new_hit = True
 
-        # Only update if something changed
-        if hit_primary or hit_medium or hit_moonshot:
+        # Track current hit status for response (even if not a new hit)
+        hit_status[pick_id] = {
+            "hit_primary_target": hit_primary,
+            "hit_medium_target": hit_medium,
+            "hit_moonshot_target": hit_moonshot
+        }
+
+        # Only update DB if we have a NEW hit
+        if new_hit:
             updates.append({
                 "pick_id": pick_id,
                 "symbol": symbol,
@@ -78,7 +92,7 @@ async def _check_and_update_target_hits(conn, rows: List, current_prices: Dict[s
 
     # Log pending updates
     if updates:
-        logger.info(f"🎯 Found {len(updates)} target hits to update: {[u['symbol'] for u in updates]}")
+        logger.info(f"🎯 Found {len(updates)} NEW target hits to update: {[u['symbol'] for u in updates]}")
 
     # Batch update hits in database
     for upd in updates:
@@ -119,6 +133,8 @@ async def _check_and_update_target_hits(conn, rows: List, current_prices: Dict[s
             logger.info(f"🎯 TARGET HIT: {upd['symbol']} (pick_id={upd['pick_id']}) - primary={upd['hit_primary']}, medium={upd['hit_medium']}, moonshot={upd['hit_moonshot']} @ ${upd['price_at_hit']:.2f}")
         except Exception as e:
             logger.error(f"Failed to update target hit for {upd['symbol']}: {e}")
+
+    return hit_status
 
 
 @router.get("/live")
@@ -243,13 +259,16 @@ async def get_live_picks(
 
             # ═══════════════════════════════════════════════════════════════════
             # AUTO-CHECK TARGET HITS on every price fetch (replaces cron job)
+            # Returns hit_status dict for immediate use in response
             # ═══════════════════════════════════════════════════════════════════
+            hit_status = {}
             if current_prices:
-                await _check_and_update_target_hits(conn, rows, current_prices)
+                hit_status = await _check_and_update_target_hits(conn, rows, current_prices)
 
             # Transform to frontend format
             picks = []
             for row in rows:
+                pick_id = row["id"]
                 symbol = row["symbol"]
                 # confidence is already stored as a decimal (0.85) or percentage (85) - check value
                 conf_value = float(row["confidence"]) if row["confidence"] else 0
@@ -264,10 +283,11 @@ async def get_live_picks(
                 if entry_price and current_price and entry_price > 0:
                     change_pct = ((current_price - entry_price) / entry_price) * 100
 
-                # Determine outcome status for styling (3-tier system)
-                hit_primary = row.get("hit_primary_target") or False
-                hit_medium = row.get("hit_medium_target") or False
-                hit_moonshot = row.get("hit_moonshot_target") or False
+                # Use LIVE hit status from _check_and_update_target_hits (not stale DB values)
+                pick_hits = hit_status.get(pick_id, {})
+                hit_primary = pick_hits.get("hit_primary_target", row.get("hit_primary_target") or False)
+                hit_medium = pick_hits.get("hit_medium_target", row.get("hit_medium_target") or False)
+                hit_moonshot = pick_hits.get("hit_moonshot_target", row.get("hit_moonshot_target") or False)
                 is_expired = row["expires_at"] and row["expires_at"] < datetime.utcnow()
 
                 if hit_moonshot:
