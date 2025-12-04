@@ -9,15 +9,24 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "BullsBears - AI Stock & Options Analysis",
-  description: "Clean, simple AI-powered stock and options trading analysis platform",
+  description: "AI-powered stock picks platform with ML-based targets and confluence scoring",
+  manifest: "/site.webmanifest",
   icons: {
     icon: [
       { url: '/bullsbears-favicon-16x16.png', sizes: '16x16', type: 'image/png' },
       { url: '/bullsbears-favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/bullsbears-favicon-512x512.png', sizes: '512x512', type: 'image/png' },
     ],
     apple: [
       { url: '/bullsbears-favicon-180x180.png', sizes: '180x180', type: 'image/png' },
     ],
+    shortcut: '/bullsbears-favicon-32x32.png',
+  },
+  themeColor: '#10b981',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'BullsBears',
   },
 };
 
