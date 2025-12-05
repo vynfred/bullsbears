@@ -433,10 +433,25 @@ class PrettyChartGenerator:
 
         # ═══════════════════════════════════════════════════════════════════
         # v6 3-TIER TARGET SYSTEM - Primary / Medium / Moonshot
+        # For bearish: targets should be BELOW current price, descending order
+        # (Primary closest to price, Moonshot furthest down)
         # ═══════════════════════════════════════════════════════════════════
         valid_primary = target_primary if (target_primary and target_primary > 0.01) else None
         valid_medium = target_medium if (target_medium and target_medium > 0.01) else None
         valid_moonshot = target_moonshot if (target_moonshot and target_moonshot > 0.01) else None
+
+        # Fix bearish target ordering: Primary > Medium > Moonshot (descending)
+        if not is_bullish and valid_primary and entry_price:
+            # For bearish, primary should be below entry price (10% drop)
+            if valid_primary >= entry_price:
+                valid_primary = entry_price * 0.90
+            # Medium should be below primary (15% drop from entry)
+            if valid_medium and valid_medium >= valid_primary:
+                valid_medium = entry_price * 0.85
+            # Moonshot should be below medium (20-25% drop from entry)
+            if valid_moonshot:
+                if valid_moonshot >= (valid_medium or valid_primary):
+                    valid_moonshot = entry_price * 0.75
 
         # Primary target (Fib 1.000) - SOLID line with box, ALWAYS shown
         if valid_primary:
@@ -555,7 +570,9 @@ class PrettyChartGenerator:
 
         if icon_arr is not None:
             try:
-                imagebox = OffsetImage(icon_arr, zoom=0.8)
+                # Bearish icon 40% smaller than bullish
+                icon_zoom = 0.8 if is_bullish else 0.48
+                imagebox = OffsetImage(icon_arr, zoom=icon_zoom)
                 # Position icon inline with text
                 ab = AnnotationBbox(imagebox, (icon_x, 0.955), frameon=False,
                                    xycoords='axes fraction', box_alignment=(0.5, 0.5))
