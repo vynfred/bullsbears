@@ -139,6 +139,34 @@ class PrescreenAgent:
         except Exception as e:
             logger.warning(f"Could not fetch earnings calendar: {e}")
 
+        # ═══════════════════════════════════════════════════════════════════
+        # v7 FINRA SHORT INTEREST (bi-weekly updates, use last available)
+        # ═══════════════════════════════════════════════════════════════════
+        short_interest = {}
+        try:
+            # FINRA publishes bi-weekly, use ~15 days ago to get latest available
+            latest_si_date = (today_date - timedelta(days=15)).strftime("%Y-%m-%d")
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.post(
+                    "https://api.finra.org/data/group/otcMarket/name/EquityShortInterest",
+                    headers={"Content-Type": "application/json"},
+                    json={"settlementDate": latest_si_date}
+                )
+                if resp.status_code == 200:
+                    si_data = resp.json()
+                    for row in si_data:
+                        symbol = row.get("symbol", "").upper()
+                        shares_short = float(row.get("sharesShort", 0))
+                        float_shares = float(row.get("floatSharesOutstanding", 0))
+                        if float_shares > 0:
+                            pct = (shares_short / float_shares) * 100
+                            short_interest[symbol] = round(pct, 2)
+                    logger.info(f"📊 Fetched short interest for {len(short_interest)} symbols from FINRA")
+                else:
+                    logger.warning(f"FINRA API returned {resp.status_code}")
+        except Exception as e:
+            logger.warning(f"FINRA short interest fetch failed: {e}")
+
         # Build stock data for prompt with catalyst flags
         stock_data = []
         for s in stocks:
@@ -148,6 +176,9 @@ class PrescreenAgent:
             # Hard filter: skip low volume ratio stocks
             if vol_ratio < 1.5:
                 continue
+
+            # Get short interest for this symbol (default 0 if not found)
+            short_pct = short_interest.get(symbol, 0)
 
             stock_entry = {
                 "symbol": symbol,
@@ -159,7 +190,9 @@ class PrescreenAgent:
                 "volatility_30d": float(s["volatility_30d"] or 0),
                 # v6 Catalyst flags
                 "catalyst_earnings": symbol in earnings_this_week,
-                "short_interest_pct": 0  # Placeholder - can be populated from finnhub if needed
+                # v7 Short interest from FINRA
+                "short_interest_pct": short_pct,
+                "catalyst_short_squeeze": short_pct > 20  # High short = potential squeeze
             }
             stock_data.append(stock_entry)
 

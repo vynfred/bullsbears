@@ -121,14 +121,42 @@ def run_arbitrator(prev_result=None):
                         logger.warning(f"Candidate data missing for {symbol}")
                         continue
 
-                    # Calculate confluence-based targets (v5 - deterministic math)
+                    # ═══════════════════════════════════════════════════════════════════
+                    # v7 CATALYST DETECTION from social_data (headlines + short interest)
+                    # ═══════════════════════════════════════════════════════════════════
+                    social_data = json.loads(candidate['social_data'] or '{}') if candidate.get('social_data') else {}
+                    headlines = social_data.get("headlines", [])
+
+                    # Check headlines for news catalyst keywords
+                    NEWS_KEYWORDS = ["fda", "merger", "acquisition", "partnership", "breakthrough",
+                                     "approval", "deal", "contract", "guidance", "upgrade", "downgrade",
+                                     "earnings", "revenue", "buyback", "dividend"]
+                    has_news_catalyst = any(
+                        keyword in headline.lower() for headline in headlines
+                        for keyword in NEWS_KEYWORDS
+                    )
+
+                    # Get news sentiment from social score (-5 to +5 → -1 to +1)
+                    news_sentiment = float(social_data.get("social_score", 0)) / 5.0  # Normalize
+
+                    # Get short interest if available from prescreen data (stored in technical_snapshot)
+                    tech_snapshot = json.loads(candidate['technical_snapshot'] or '{}') if candidate.get('technical_snapshot') else {}
+                    short_interest_pct = float(tech_snapshot.get("short_interest_pct", 0))
+
+                    # Calculate confluence-based targets (v7 - with catalyst data)
                     current_price = float(candidate['price_at_selection']) if candidate['price_at_selection'] else 0
                     conf_targets = await calculate_confluence_targets(
                         symbol=symbol,
                         current_price=current_price,
                         direction=direction,
-                        db_pool=db
+                        db_pool=db,
+                        has_news_catalyst=has_news_catalyst,
+                        news_sentiment=news_sentiment,
+                        short_interest_pct=short_interest_pct
                     )
+
+                    if has_news_catalyst:
+                        logger.info(f"📰 {symbol} has news catalyst: {headlines[:2]}")
 
                     # If stock was already picked in last 30 days, only update targets if needed
                     if existing_pick:

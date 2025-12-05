@@ -216,9 +216,20 @@ class FMPIngestion:
             await self._store_90d(symbol, data["historical"])
 
     async def _fetch_1d(self, symbol: str):
-        data = await self._get(f"quote-short/{symbol}")
-        if data and data[0].get("price"):
-            await self._store_1d(symbol, data[0])
+        """Fetch today's full OHLC data (not just quote-short price)"""
+        end = datetime.now().date()
+        start = end - timedelta(days=1)  # Yesterday to today (ensures we get today's data)
+        data = await self._get(
+            f"historical-price-full/{symbol}",
+            {"from": start.isoformat(), "to": end.isoformat()}
+        )
+        if "historical" in data and data["historical"]:
+            await self._store_90d(symbol, data["historical"])  # Reuse UPSERT method
+        else:
+            # Fallback to quote-short if no historical data yet
+            quote = await self._get(f"quote-short/{symbol}")
+            if quote and quote[0].get("price"):
+                await self._store_1d_quote(symbol, quote[0])
 
     async def _fetch_7d(self, symbol: str):
         """Fetch last 7 days of data for a symbol"""
@@ -262,11 +273,14 @@ class FMPIngestion:
                 for r in records
             ])
 
-    async def _store_1d(self, symbol: str, data: Dict):
+    async def _store_1d_quote(self, symbol: str, data: Dict):
+        """Fallback store from quote-short - INSERT OR UPDATE today's price"""
         query = """
-        UPDATE prime_ohlc_90d
-        SET close_price = $2, volume = $3
-        WHERE symbol = $1 AND date = CURRENT_DATE
+        INSERT INTO prime_ohlc_90d (symbol, date, open_price, high_price, low_price, close_price, volume)
+        VALUES ($1, CURRENT_DATE, $2, $2, $2, $2, $3)
+        ON CONFLICT (symbol, date) DO UPDATE SET
+            close_price = EXCLUDED.close_price,
+            volume = EXCLUDED.volume
         """
         db = await get_asyncpg_pool()
         async with db.acquire() as conn:
