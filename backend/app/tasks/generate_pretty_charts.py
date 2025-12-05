@@ -55,7 +55,8 @@ GRADIENT_END = "#22C55E"  # Green
 
 # Icon paths - use BullsBears side icons from backend/assets folder
 # Path is relative to backend/ root directory (Render's rootDir)
-BULL_ICON_PATH = os.path.join(os.path.dirname(__file__), "../../assets/BullsBears-Side-Bull-Icon.png")
+# Bullish uses the "opposite" bull icon, Bearish uses the regular bear icon
+BULL_ICON_PATH = os.path.join(os.path.dirname(__file__), "../../assets/BullsBears-Side-Opposite-Bull-Icon.png")
 BEAR_ICON_PATH = os.path.join(os.path.dirname(__file__), "../../assets/BullsBears-Side-Bear-Icon.png")
 
 
@@ -463,18 +464,20 @@ class PrettyChartGenerator:
             ax_price.text(label_x, valid_primary, f'Primary: ${valid_primary:.2f}',
                          color=target_color, fontsize=10, fontweight='bold', va='center', zorder=10)
 
-        # Medium target (Fib 1.272) - SOLID line, shown if confluence ≥ 2
-        if valid_medium:
+        # Secondary target (Fib 1.272) - SOLID line, shown if confluence ≥ 2
+        if valid_medium and confluence_score >= 2:
             t2_height = price_range * 0.05
             t2_box = Rectangle((box_start_x, valid_medium - t2_height/2), box_width, t2_height,
                                facecolor=target_color, edgecolor=target_color, alpha=0.35, lw=2.5, zorder=4)
             ax_price.add_patch(t2_box)
             ax_price.axhline(y=valid_medium, color=target_color, lw=2, ls='-', alpha=0.75, zorder=5)
-            ax_price.text(label_x, valid_medium, f'Medium: ${valid_medium:.2f}',
+            ax_price.text(label_x, valid_medium, f'Secondary: ${valid_medium:.2f}',
                          color=target_color, fontsize=9.5, fontweight='bold', va='center', zorder=10)
 
-        # Moonshot target (Fib 1.618) - DASHED line, shown if confluence ≥ 3 OR catalyst
-        if valid_moonshot:
+        # Moonshot target (Fib 1.618) - DASHED line, shown ONLY if confluence ≥ 3 OR catalyst
+        # For confluence 1/5 with no catalyst, moonshot should NOT be shown
+        show_moonshot = valid_moonshot and confluence_score >= 3
+        if show_moonshot:
             t3_height = price_range * 0.04
             t3_box = Rectangle((box_start_x, valid_moonshot - t3_height/2), box_width, t3_height,
                                facecolor=target_color, edgecolor=target_color, alpha=0.25, lw=2, zorder=4)
@@ -573,8 +576,11 @@ class PrettyChartGenerator:
                 # Bearish icon 40% smaller than bullish
                 icon_zoom = 0.8 if is_bullish else 0.48
                 imagebox = OffsetImage(icon_arr, zoom=icon_zoom)
-                # Position icon inline with text
-                ab = AnnotationBbox(imagebox, (icon_x, 0.955), frameon=False,
+                # Position icon vertically aligned with text baseline (va='top' at 0.96)
+                # Text with va='top' at 0.96 means text top is at 0.96
+                # Icon center should be slightly below (around 0.945) to align with text middle
+                icon_y = 0.945
+                ab = AnnotationBbox(imagebox, (icon_x, icon_y), frameon=False,
                                    xycoords='axes fraction', box_alignment=(0.5, 0.5))
                 ax_price.add_artist(ab)
                 # Direction text right after icon
@@ -591,10 +597,10 @@ class PrettyChartGenerator:
                          transform=ax_price.transAxes, fontsize=14, fontweight='bold',
                          color=direction_color, va='top', ha='left')
 
-        # Gradient watermark - DEAD CENTER of entire figure
+        # Gradient watermark - DEAD CENTER of entire figure (150% larger: 36 * 1.5 = 54)
         # Use figure coordinates for true center
         fig.text(0.45, 0.55, 'BullsBears.xyz',
-                fontsize=36, fontweight='bold', color=GRADIENT_START,
+                fontsize=54, fontweight='bold', color=GRADIENT_START,
                 alpha=0.08, ha='center', va='center', style='italic')
 
         # Bottom attribution
