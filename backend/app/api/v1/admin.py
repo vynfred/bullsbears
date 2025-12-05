@@ -498,17 +498,18 @@ async def get_shortlist_data(limit: int = 50, offset: int = 0, date: str = None)
 
             total = await conn.fetchval(query, *params) or 0
 
+            # Query actual columns from prescreen_agent
             data_query = """
                 SELECT id, date, symbol, price_at_selection, prescreen_score,
-                       technical_score, sentiment_score, was_picked, picked_direction, created_at
+                       rank, direction, was_picked, picked_direction, created_at
                 FROM shortlist_candidates
             """
             if date:
                 data_query += " WHERE date = $1"
-                data_query += " ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+                data_query += " ORDER BY rank ASC LIMIT $2 OFFSET $3"
                 rows = await conn.fetch(data_query, datetime.strptime(date, "%Y-%m-%d").date(), limit, offset)
             else:
-                data_query += " ORDER BY created_at DESC LIMIT $1 OFFSET $2"
+                data_query += " ORDER BY created_at DESC, rank ASC LIMIT $1 OFFSET $2"
                 rows = await conn.fetch(data_query, limit, offset)
 
             shortlist = [{
@@ -517,8 +518,8 @@ async def get_shortlist_data(limit: int = 50, offset: int = 0, date: str = None)
                 "symbol": r["symbol"],
                 "price": float(r["price_at_selection"]) if r["price_at_selection"] else None,
                 "prescreen_score": float(r["prescreen_score"]) if r["prescreen_score"] else None,
-                "technical_score": float(r["technical_score"]) if r["technical_score"] else None,
-                "sentiment_score": float(r["sentiment_score"]) if r["sentiment_score"] else None,
+                "rank": r["rank"],
+                "direction": r["direction"],
                 "was_picked": r["was_picked"],
                 "picked_direction": r["picked_direction"],
                 "created_at": r["created_at"].isoformat() if r["created_at"] else None
