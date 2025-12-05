@@ -124,7 +124,7 @@ export default function PicksTab() {
         >
           {/* Conic gradient border ring - emerald LEFT, rose RIGHT */}
           <div
-            className="w-60 h-60 rounded-full p-1 shadow-2xl"
+            className="w-72 h-72 rounded-full p-1.5 shadow-2xl"
             style={{
               background: `conic-gradient(from 180deg at 50% 50%,
                 rgb(249, 115, 22) 0deg,
@@ -136,9 +136,9 @@ export default function PicksTab() {
                 rgb(249, 115, 22) 360deg)`
             }}
           >
-            <div className="w-full h-full rounded-full bg-slate-900 flex flex-col items-center justify-center px-3">
+            <div className="w-full h-full rounded-full bg-slate-900 flex flex-col items-center justify-center px-4">
               {/* Filter label at top - cream color */}
-              <span className="text-sm uppercase tracking-widest mb-4" style={{ color: '#FCF9EA' }}>
+              <span className="text-base uppercase tracking-widest mb-3" style={{ color: '#FCF9EA' }}>
                 {currentFilterConfig.label}
               </span>
 
@@ -147,33 +147,33 @@ export default function PicksTab() {
                 {/* Bullish: Number on left, Icon next to divider */}
                 <button
                   onClick={() => handleFilterChange(activeFilter === 'bull' ? 'active' : 'bull')}
-                  className={`flex items-center gap-2 transition-all ${activeFilter === 'bull' ? "scale-110" : "hover:scale-105"}`}
+                  className={`flex items-center gap-1 transition-all ${activeFilter === 'bull' ? "scale-110" : "hover:scale-105"}`}
                 >
-                  <span className="text-4xl font-bold text-emerald-400">{bullishCount}</span>
-                  <img src={bullIcon} alt="bull" className="w-12 h-12" />
+                  <span className="text-6xl font-bold text-emerald-400">{bullishCount}</span>
+                  <img src={bullIcon} alt="bull" className="w-14 h-14" />
                 </button>
 
                 {/* Divider */}
-                <div className="h-14 w-px bg-slate-600 mx-2" />
+                <div className="h-20 w-px bg-slate-600 mx-3" />
 
                 {/* Bearish: Icon next to divider, Number on right */}
                 <button
                   onClick={() => handleFilterChange(activeFilter === 'bear' ? 'active' : 'bear')}
-                  className={`flex items-center gap-2 transition-all ${activeFilter === 'bear' ? "scale-110" : "hover:scale-105"}`}
+                  className={`flex items-center gap-1 transition-all ${activeFilter === 'bear' ? "scale-110" : "hover:scale-105"}`}
                 >
-                  <img src={bearIcon} alt="bear" className="w-12 h-12" />
-                  <span className="text-4xl font-bold text-rose-400">{bearishCount}</span>
+                  <img src={bearIcon} alt="bear" className="w-14 h-14" />
+                  <span className="text-6xl font-bold text-rose-400">{bearishCount}</span>
                 </button>
               </div>
 
               {/* Labels row - larger */}
-              <div className="flex items-center justify-center gap-10 mt-2">
-                <span className="text-xs text-emerald-400 uppercase tracking-wider font-semibold">Bullish</span>
-                <span className="text-xs text-rose-400 uppercase tracking-wider font-semibold">Bearish</span>
+              <div className="flex items-center justify-center gap-14 mt-1">
+                <span className="text-base text-emerald-400 uppercase tracking-wider font-bold">Bullish</span>
+                <span className="text-base text-rose-400 uppercase tracking-wider font-bold">Bearish</span>
               </div>
 
               {/* Date at bottom */}
-              <span className="text-xs text-slate-400 mt-3">
+              <span className="text-sm text-slate-400 mt-3">
                 {activeFilter === 'today'
                   ? new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
                   : activeFilter === 'week'
