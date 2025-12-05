@@ -142,27 +142,27 @@ export default function PicksTab() {
                 {currentFilterConfig.label}
               </span>
 
-              {/* Main content: Number (outside) | Icon | divider | Icon | Number (outside) */}
+              {/* Main content: Number | Bull Icon | divider | Bear Icon | Number */}
               <div className="flex items-center justify-center">
-                {/* Bullish: Number on left, Icon next to divider */}
+                {/* Bullish: Number on far left, Icon next to divider */}
                 <button
                   onClick={() => handleFilterChange(activeFilter === 'bull' ? 'active' : 'bull')}
-                  className={`flex items-center gap-1 transition-all ${activeFilter === 'bull' ? "scale-110" : "hover:scale-105"}`}
+                  className={`flex items-center gap-2 transition-all ${activeFilter === 'bull' ? "scale-110" : "hover:scale-105"}`}
                 >
-                  <span className="text-6xl font-bold text-emerald-400">{bullishCount}</span>
-                  <img src={bullIcon} alt="bull" className="w-14 h-14" />
+                  <span className="text-5xl font-bold text-emerald-400">{bullishCount}</span>
+                  <img src={bullIcon} alt="bull" className="w-12 h-12" />
                 </button>
 
                 {/* Divider */}
-                <div className="h-20 w-px bg-slate-600 mx-3" />
+                <div className="h-16 w-px bg-slate-600 mx-2" />
 
-                {/* Bearish: Icon next to divider, Number on right */}
+                {/* Bearish: Icon next to divider, Number on far right */}
                 <button
                   onClick={() => handleFilterChange(activeFilter === 'bear' ? 'active' : 'bear')}
-                  className={`flex items-center gap-1 transition-all ${activeFilter === 'bear' ? "scale-110" : "hover:scale-105"}`}
+                  className={`flex items-center gap-2 transition-all ${activeFilter === 'bear' ? "scale-110" : "hover:scale-105"}`}
                 >
-                  <img src={bearIcon} alt="bear" className="w-14 h-14" />
-                  <span className="text-6xl font-bold text-rose-400">{bearishCount}</span>
+                  <img src={bearIcon} alt="bear" className="w-12 h-12" />
+                  <span className="text-5xl font-bold text-rose-400">{bearishCount}</span>
                 </button>
               </div>
 
