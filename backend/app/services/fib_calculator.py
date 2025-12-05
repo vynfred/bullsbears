@@ -559,17 +559,10 @@ def calculate_fib_targets(
         stop_loss = swing_low * 0.97
     else:
         is_valid = current_price < fib_618_ret
-        ext_1 = 0.382 if current_price < 1.0 else 0.618
-        ext_2 = 0.5 if current_price < 1.0 else 1.0
-        primary_target = max(0.01, swing_low - swing_range * ext_1)
-        moonshot_raw = max(0.01, swing_low - swing_range * ext_2)
+        # Bearish: Use percentage-based targets from current price
+        primary_target = max(0.01, current_price * 0.90)  # 10% drop
+        moonshot_raw = max(0.01, current_price * 0.80)    # 20% drop
         stop_loss = swing_high * 1.03
-
-        # Validation for bearish
-        if primary_target >= current_price:
-            primary_target = current_price * 0.90
-        if moonshot_raw >= primary_target:
-            moonshot_raw = primary_target * 0.85
 
     return ConfluenceTargets(
         direction=direction,
@@ -685,13 +678,30 @@ async def calculate_confluence_targets(
             swing_for_gann = swing_low
             swing_idx = next((s.index for s in swings if not s.is_high), 0)
         else:
-            # Bearish: dynamic extensions for penny stocks
-            ext_primary = 0.382 if current_price < 1.0 else 0.618
-            ext_medium = 0.5 if current_price < 1.0 else 0.786
-            ext_moonshot = 0.618 if current_price < 1.0 else 1.0
-            target_primary = max(0.01, swing_low - swing_range * ext_primary)
-            target_medium_raw = max(0.01, swing_low - swing_range * ext_medium)
-            target_moonshot_raw = max(0.01, swing_low - swing_range * ext_moonshot)
+            # Bearish: Use Fibonacci retracements from current price toward swing_low
+            # Target 1 (Primary): 0.618 retracement toward swing_low (conservative)
+            # Target 2 (Medium): 0.786 retracement toward swing_low
+            # Target 3 (Moonshot): Full move to swing_low or below
+
+            # Calculate drop range from current price to swing_low
+            drop_range = current_price - swing_low
+
+            # For bearish, targets are BELOW current price
+            # Primary: 10-15% drop (conservative)
+            # Medium: 15-20% drop
+            # Moonshot: 20-30% drop or to swing_low
+
+            if drop_range > 0:
+                # Price is above swing_low - use percentage-based targets
+                target_primary = max(0.01, current_price * 0.90)  # 10% drop
+                target_medium_raw = max(0.01, current_price * 0.85)  # 15% drop
+                target_moonshot_raw = max(0.01, min(swing_low, current_price * 0.75))  # 25% drop or swing_low
+            else:
+                # Price is at or below swing_low - use smaller targets
+                target_primary = max(0.01, current_price * 0.92)  # 8% drop
+                target_medium_raw = max(0.01, current_price * 0.88)  # 12% drop
+                target_moonshot_raw = max(0.01, current_price * 0.82)  # 18% drop
+
             stop_loss = swing_high * 1.03
             fib_valid = current_price < fib_618_ret
             swing_for_gann = swing_high
