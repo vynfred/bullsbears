@@ -42,7 +42,9 @@ async def _monitor_outcomes():
         picks = await conn.fetch("""
             SELECT
                 p.id, p.symbol, p.direction, p.reasoning,
-                p.primary_target, p.moonshot_target,
+                COALESCE(p.target_primary, p.primary_target) as primary_target,
+                p.target_medium,
+                COALESCE(p.target_moonshot, p.moonshot_target) as moonshot_target,
                 p.pick_context,
                 p.created_at, p.expires_at
             FROM picks p
@@ -99,6 +101,7 @@ async def _monitor_outcomes():
                         pass
                 entry_price = float(entry_price) if entry_price else None
                 primary_target = float(pick["primary_target"]) if pick["primary_target"] else None
+                medium_target = float(pick["target_medium"]) if pick.get("target_medium") else None
                 moonshot_target = float(pick["moonshot_target"]) if pick["moonshot_target"] else None
                 direction = pick["direction"]
                 is_expired = pick["expires_at"] and pick["expires_at"] < datetime.now(tz=None)
@@ -112,8 +115,9 @@ async def _monitor_outcomes():
                 else:
                     gain_pct = 0
 
-                # Check target hits - start fresh since we're not tracking prior state
+                # Check target hits - 3-tier system
                 hit_primary = False
+                hit_medium = False
                 hit_moonshot = False
 
                 if primary_target:
@@ -122,19 +126,29 @@ async def _monitor_outcomes():
                     elif direction == "bearish" and current_price <= primary_target:
                         hit_primary = True
 
+                if medium_target:
+                    if direction == "bullish" and current_price >= medium_target:
+                        hit_medium = True
+                    elif direction == "bearish" and current_price <= medium_target:
+                        hit_medium = True
+
                 if moonshot_target:
                     if direction == "bullish" and current_price >= moonshot_target:
                         hit_moonshot = True
                     elif direction == "bearish" and current_price <= moonshot_target:
                         hit_moonshot = True
 
-                # Determine outcome
+                # Determine outcome (3-tier: moonshot > medium_hit > win > loss)
                 new_outcome = None
                 new_reasoning = None
 
                 if hit_moonshot:
                     new_outcome = "moonshot"
                     new_reasoning = _build_win_summary(symbol, "moonshot", moonshot_target, gain_pct)
+                    results["hits"] += 1
+                elif hit_medium:
+                    new_outcome = "medium_hit"
+                    new_reasoning = _build_win_summary(symbol, "medium", medium_target, gain_pct)
                     results["hits"] += 1
                 elif hit_primary:
                     new_outcome = "win"
@@ -150,14 +164,60 @@ async def _monitor_outcomes():
                     await conn.execute("""
                         UPDATE picks SET reasoning = $1 WHERE id = $2
                     """, new_reasoning, pick["id"])
+
+                    # Also update pick_outcomes_detailed for analytics tracking
+                    await _upsert_outcome(conn, pick["id"], symbol, direction,
+                                         new_outcome, hit_primary, hit_medium, hit_moonshot,
+                                         current_price, gain_pct)
+
                     logger.info(f"Updated {symbol}: {new_outcome} - {new_reasoning[:80]}...")
 
             except Exception as e:
                 logger.error(f"Error processing {pick['symbol']}: {e}")
                 results["errors"] += 1
-    
+
     logger.info(f"Outcome monitor complete: {results}")
     return results
+
+
+async def _upsert_outcome(conn, pick_id: int, symbol: str, direction: str,
+                          outcome: str, hit_primary: bool, hit_medium: bool,
+                          hit_moonshot: bool, price_at_hit: float, gain_pct: float):
+    """
+    Insert or update pick_outcomes_detailed record.
+    This ensures analytics has proper win/loss/medium_hit/moonshot data.
+    """
+    try:
+        existing = await conn.fetchrow(
+            "SELECT id FROM pick_outcomes_detailed WHERE pick_id = $1", pick_id
+        )
+
+        if existing:
+            # Update existing row
+            await conn.execute("""
+                UPDATE pick_outcomes_detailed
+                SET outcome = $1,
+                    hit_primary_target = $2,
+                    hit_medium_target = $3,
+                    hit_moonshot_target = $4,
+                    price_at_hit = $5,
+                    max_gain_percent = GREATEST(COALESCE(max_gain_percent, 0), $6),
+                    outcome_determined_at = CURRENT_TIMESTAMP
+                WHERE pick_id = $7
+            """, outcome, hit_primary, hit_medium, hit_moonshot, price_at_hit, gain_pct, pick_id)
+        else:
+            # Insert new row
+            await conn.execute("""
+                INSERT INTO pick_outcomes_detailed
+                    (pick_id, symbol, direction, outcome, hit_primary_target,
+                     hit_medium_target, hit_moonshot_target, price_at_hit,
+                     max_gain_percent, outcome_determined_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+            """, pick_id, symbol, direction, outcome, hit_primary, hit_medium,
+                hit_moonshot, price_at_hit, gain_pct)
+
+    except Exception as e:
+        logger.error(f"Failed to upsert outcome for pick {pick_id}: {e}")
 
 
 def _build_win_summary(symbol: str, target_type: str, target_price: float, gain_pct: float) -> str:
@@ -169,6 +229,8 @@ def _build_win_summary(symbol: str, target_type: str, target_price: float, gain_
 
     if target_type == "moonshot":
         return f"🌙 Moonshot hit ${target_price:.2f} ({gain_str}). Volume breakout confirmed, Fib 1.618 extension reached, momentum sustained through target."
+    elif target_type == "medium":
+        return f"🥈 Medium target hit ${target_price:.2f} ({gain_str}). Fib 1.272 extension reached, confluence zone cleared, strong follow-through."
     else:
         return f"🎯 Primary target hit ${target_price:.2f} ({gain_str}). Technical breakout validated, confluence zone cleared, trend continuation confirmed."
 

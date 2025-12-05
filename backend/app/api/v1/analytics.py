@@ -54,39 +54,39 @@ async def get_model_accuracy():
     try:
         db = await get_asyncpg_pool()
         
-        # Get overall accuracy
+        # Get overall accuracy (win includes win, medium_hit, moonshot)
         overall_stats = await db.fetchrow("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_predictions,
                 COALESCE(
-                    ROUND(100.0 * SUM(CASE WHEN outcome = 'win' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2),
+                    ROUND(100.0 * SUM(CASE WHEN outcome IN ('win', 'medium_hit', 'moonshot') THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2),
                     0.0
                 ) as overall_accuracy,
                 COALESCE(
-                    ROUND(100.0 * SUM(CASE WHEN outcome = 'win' AND direction = 'bullish' THEN 1 ELSE 0 END) / 
+                    ROUND(100.0 * SUM(CASE WHEN outcome IN ('win', 'medium_hit', 'moonshot') AND direction = 'bullish' THEN 1 ELSE 0 END) /
                           NULLIF(SUM(CASE WHEN direction = 'bullish' THEN 1 ELSE 0 END), 0), 2),
                     0.0
                 ) as bullish_accuracy,
                 COALESCE(
-                    ROUND(100.0 * SUM(CASE WHEN outcome = 'win' AND direction = 'bearish' THEN 1 ELSE 0 END) / 
+                    ROUND(100.0 * SUM(CASE WHEN outcome IN ('win', 'medium_hit', 'moonshot') AND direction = 'bearish' THEN 1 ELSE 0 END) /
                           NULLIF(SUM(CASE WHEN direction = 'bearish' THEN 1 ELSE 0 END), 0), 2),
                     0.0
                 ) as bearish_accuracy
             FROM pick_outcomes_detailed
-            WHERE outcome IN ('win', 'loss', 'partial')
+            WHERE outcome IN ('win', 'medium_hit', 'moonshot', 'loss')
         """)
         
         # Get high confidence accuracy (>= 70%)
         high_conf_stats = await db.fetchrow("""
-            SELECT 
+            SELECT
                 COALESCE(
-                    ROUND(100.0 * SUM(CASE WHEN pod.outcome = 'win' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2),
+                    ROUND(100.0 * SUM(CASE WHEN pod.outcome IN ('win', 'medium_hit', 'moonshot') THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2),
                     0.0
                 ) as high_confidence_accuracy
             FROM pick_outcomes_detailed pod
             JOIN picks p ON pod.pick_id = p.id
-            WHERE pod.outcome IN ('win', 'loss', 'partial')
-              AND p.confidence >= 70
+            WHERE pod.outcome IN ('win', 'medium_hit', 'moonshot', 'loss')
+              AND p.confidence >= 0.70
         """)
         
         total = overall_stats['total_predictions'] or 0
@@ -117,7 +117,7 @@ async def get_recent_outcomes(limit: int = Query(default=20, le=100)):
         db = await get_asyncpg_pool()
         
         rows = await db.fetch("""
-            SELECT 
+            SELECT
                 pod.id,
                 pod.symbol,
                 pod.direction as sentiment,
@@ -131,7 +131,7 @@ async def get_recent_outcomes(limit: int = Query(default=20, le=100)):
                 p.created_at
             FROM pick_outcomes_detailed pod
             JOIN picks p ON pod.pick_id = p.id
-            WHERE pod.outcome IN ('win', 'loss', 'partial')
+            WHERE pod.outcome IN ('win', 'medium_hit', 'moonshot', 'loss')
             ORDER BY pod.outcome_determined_at DESC
             LIMIT $1
         """, limit)
@@ -177,23 +177,23 @@ async def get_accuracy_trend(period: str = Query(default="30d", regex="^(7d|30d|
                 DATE(p.created_at) as date,
                 COUNT(*) as total_picks,
                 COALESCE(
-                    ROUND(100.0 * SUM(CASE WHEN pod.outcome = 'win' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2),
+                    ROUND(100.0 * SUM(CASE WHEN pod.outcome IN ('win', 'medium_hit', 'moonshot') THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2),
                     0.0
                 ) as accuracy,
                 COALESCE(
-                    ROUND(100.0 * SUM(CASE WHEN pod.outcome = 'win' AND pod.direction = 'bullish' THEN 1 ELSE 0 END) /
+                    ROUND(100.0 * SUM(CASE WHEN pod.outcome IN ('win', 'medium_hit', 'moonshot') AND pod.direction = 'bullish' THEN 1 ELSE 0 END) /
                           NULLIF(SUM(CASE WHEN pod.direction = 'bullish' THEN 1 ELSE 0 END), 0), 2),
                     0.0
                 ) as bullish_accuracy,
                 COALESCE(
-                    ROUND(100.0 * SUM(CASE WHEN pod.outcome = 'win' AND pod.direction = 'bearish' THEN 1 ELSE 0 END) /
+                    ROUND(100.0 * SUM(CASE WHEN pod.outcome IN ('win', 'medium_hit', 'moonshot') AND pod.direction = 'bearish' THEN 1 ELSE 0 END) /
                           NULLIF(SUM(CASE WHEN pod.direction = 'bearish' THEN 1 ELSE 0 END), 0), 2),
                     0.0
                 ) as bearish_accuracy
             FROM picks p
             JOIN pick_outcomes_detailed pod ON p.id = pod.pick_id
             WHERE p.created_at >= NOW() - INTERVAL '1 day' * $1
-              AND pod.outcome IN ('win', 'loss', 'partial')
+              AND pod.outcome IN ('win', 'medium_hit', 'moonshot', 'loss')
             GROUP BY DATE(p.created_at)
             ORDER BY date ASC
         """, days)

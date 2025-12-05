@@ -122,41 +122,30 @@ def run_arbitrator(prev_result=None):
                         continue
 
                     # ═══════════════════════════════════════════════════════════════════
-                    # v7 CATALYST DETECTION from social_data (headlines + short interest)
+                    # v9 CATALYST DATA EXTRACTION
+                    # Headlines passed to fib_calculator for tiered scoring
                     # ═══════════════════════════════════════════════════════════════════
                     social_data = json.loads(candidate['social_data'] or '{}') if candidate.get('social_data') else {}
                     headlines = social_data.get("headlines", [])
 
-                    # Check headlines for news catalyst keywords
-                    NEWS_KEYWORDS = ["fda", "merger", "acquisition", "partnership", "breakthrough",
-                                     "approval", "deal", "contract", "guidance", "upgrade", "downgrade",
-                                     "earnings", "revenue", "buyback", "dividend"]
-                    has_news_catalyst = any(
-                        keyword in headline.lower() for headline in headlines
-                        for keyword in NEWS_KEYWORDS
-                    )
-
-                    # Get news sentiment from social score (-5 to +5 → -1 to +1)
-                    news_sentiment = float(social_data.get("social_score", 0)) / 5.0  # Normalize
-
-                    # Get short interest if available from prescreen data (stored in technical_snapshot)
+                    # Get short interest from prescreen data (stored in technical_snapshot)
                     tech_snapshot = json.loads(candidate['technical_snapshot'] or '{}') if candidate.get('technical_snapshot') else {}
                     short_interest_pct = float(tech_snapshot.get("short_interest_pct", 0))
 
-                    # Calculate confluence-based targets (v7 - with catalyst data)
+                    # Calculate confluence-based targets (v9 - tiered news scoring in fib_calculator)
                     current_price = float(candidate['price_at_selection']) if candidate['price_at_selection'] else 0
                     conf_targets = await calculate_confluence_targets(
                         symbol=symbol,
                         current_price=current_price,
                         direction=direction,
                         db_pool=db,
-                        has_news_catalyst=has_news_catalyst,
-                        news_sentiment=news_sentiment,
+                        headlines=headlines,  # Pass raw headlines for tiered scoring
                         short_interest_pct=short_interest_pct
                     )
 
-                    if has_news_catalyst:
-                        logger.info(f"📰 {symbol} has news catalyst: {headlines[:2]}")
+                    # Log if news catalyst was detected
+                    if conf_targets.catalyst.has_news_catalyst:
+                        logger.info(f"📰 {symbol}: {conf_targets.catalyst.news_reason} (+{conf_targets.catalyst.news_confluence_bonus})")
 
                     # If stock was already picked in last 30 days, only update targets if needed
                     if existing_pick:
@@ -170,12 +159,11 @@ def run_arbitrator(prev_result=None):
                                 SET target_primary = $1,
                                     target_medium = $2,
                                     target_moonshot = $3,
-                                    primary_target = $1,
-                                    moonshot_target = $3,
-                                    target_low = $1,
-                                    target_high = COALESCE($3, $1 * 1.15),
                                     confluence_score = $4,
-                                    confluence_methods = $5
+                                    confluence_methods = $5,
+                                    has_earnings_catalyst = $7,
+                                    has_news_catalyst = $8,
+                                    short_interest_pct = $9
                                 WHERE id = $6
                             """,
                                 conf_targets.target_primary,
@@ -183,7 +171,10 @@ def run_arbitrator(prev_result=None):
                                 conf_targets.target_moonshot,
                                 conf_targets.confluence_score,
                                 conf_targets.confluence_methods,
-                                existing_pick['id']
+                                existing_pick['id'],
+                                conf_targets.catalyst.has_earnings,
+                                conf_targets.catalyst.has_news_catalyst,
+                                short_interest_pct
                             )
                             logger.info(f"{symbol}: Updated targets (was ${old_primary:.2f}, now ${new_primary:.2f})")
                             updated_count += 1
@@ -249,18 +240,18 @@ def run_arbitrator(prev_result=None):
                         "market_context": phase_data.get("market_context", {})
                     }
 
-                    # Insert final pick with 3-tier targets
+                    # Insert final pick with 3-tier targets + catalyst data
+                    # NOTE: Only using target_primary/medium/moonshot (clean schema)
                     pick_id = await conn.fetchval("""
                         INSERT INTO picks (
                             symbol, direction, confidence, reasoning,
-                            target_low, target_high,
                             target_primary, target_medium, target_moonshot,
-                            primary_target, moonshot_target,
                             confluence_score, confluence_methods, rsi_divergence, gann_alignment,
                             weekly_pivots,
+                            has_earnings_catalyst, has_news_catalyst, short_interest_pct,
                             pick_context, created_at, expires_at
                         ) VALUES (
-                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
                             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '30 days'
                         ) RETURNING id
                     """,
@@ -268,18 +259,17 @@ def run_arbitrator(prev_result=None):
                         direction,
                         pick.get("confidence", 0.0),
                         pick.get("reasoning", ""),
-                        target_primary,  # target_low for backward compat
-                        target_moonshot if target_moonshot else target_primary * 1.15,  # target_high fallback
                         target_primary,
                         target_medium,
                         target_moonshot,
-                        target_primary,  # Legacy primary_target
-                        target_moonshot,  # Legacy moonshot_target
                         conf_targets.confluence_score,
                         conf_targets.confluence_methods,
                         conf_targets.rsi_divergence.detected if conf_targets.rsi_divergence else False,
                         conf_targets.gann_alignment,
                         json.dumps(weekly_pivots_dict) if weekly_pivots_dict else None,
+                        conf_targets.catalyst.has_earnings,
+                        conf_targets.catalyst.has_news_catalyst,
+                        short_interest_pct,
                         json.dumps(pick_context)
                     )
 

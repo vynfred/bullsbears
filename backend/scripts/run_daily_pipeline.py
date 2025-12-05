@@ -30,20 +30,44 @@ logger = logging.getLogger(__name__)
 
 
 async def run_pipeline():
-    """Execute full daily pipeline"""
+    """Execute full daily pipeline with proper cleanup"""
     from app.services.system_state import is_system_on
-    
-    # Step 0: Check system state
-    if not await is_system_on():
-        logger.warning("⏸️ System is OFF - skipping daily pipeline")
-        return {"status": "skipped", "reason": "system_off"}
-    
-    logger.info("🚀 Starting BullsBears Daily Pipeline")
-    results = {}
-    
+    from app.core.database import close_asyncpg_pool
+    from app.core.firebase import close_firebase
+
+    try:
+        # Step 0: Check system state
+        if not await is_system_on():
+            logger.warning("⏸️ System is OFF - skipping daily pipeline")
+            return {"status": "skipped", "reason": "system_off"}
+
+        logger.info("🚀 Starting BullsBears Daily Pipeline")
+        results = {}
+
+        return await _run_pipeline_steps(results)
+    finally:
+        # CRITICAL: Clean up async resources before event loop closes
+        logger.info("🧹 Cleaning up async resources...")
+        try:
+            await close_asyncpg_pool()
+        except Exception as e:
+            logger.warning(f"asyncpg pool cleanup warning: {e}")
+        try:
+            await close_firebase()
+        except Exception as e:
+            logger.warning(f"Firebase cleanup warning: {e}")
+        logger.info("✅ Cleanup complete")
+
+
+async def _run_pipeline_steps(results: dict):
+    """Execute pipeline steps (separated for cleanup handling)"""
+    from app.services.agent_manager import get_agent_manager
+
+    agent_manager = None
+
     try:
         # Step 1: FMP Delta Update
-        logger.info("📊 Step 1/6: FMP Delta Update...")
+        logger.info("📊 Step 1/8: FMP Delta Update...")
         from app.services import get_fmp_ingestion
         ingestion = await get_fmp_ingestion()
         await ingestion.daily_delta_update()
@@ -53,11 +77,34 @@ async def run_pipeline():
         logger.error(f"❌ FMP Delta failed: {e}")
         results["fmp_delta"] = f"error: {e}"
         # Continue anyway - we might have recent enough data
-    
+
     try:
-        # Step 2: Prescreen
-        logger.info("🔍 Step 2/6: Prescreen (ACTIVE → SHORT_LIST)...")
-        from app.services.agent_manager import get_agent_manager
+        # Step 2: Finnhub Short Interest
+        logger.info("📉 Step 2/8: Finnhub Short Interest...")
+        from app.tasks.fetch_short_interest import _fetch_short_interest_async
+        short_result = await _fetch_short_interest_async()
+        results["finnhub_short"] = short_result
+        logger.info(f"✅ Finnhub Short Interest complete: {short_result.get('updated', 0)} stocks")
+    except Exception as e:
+        logger.error(f"❌ Finnhub Short Interest failed: {e}")
+        results["finnhub_short"] = f"error: {e}"
+        # Continue anyway - prescreen can work without short interest
+
+    try:
+        # Step 3: FRED Economic Calendar
+        logger.info("📅 Step 3/8: FRED Economic Calendar...")
+        from app.tasks.fetch_fred_calendar import _fetch_fred_calendar_async
+        fred_result = await _fetch_fred_calendar_async()
+        results["fred_calendar"] = fred_result
+        logger.info(f"✅ FRED Calendar complete: {fred_result.get('events_found', 0)} events")
+    except Exception as e:
+        logger.error(f"❌ FRED Calendar failed: {e}")
+        results["fred_calendar"] = f"error: {e}"
+        # Continue anyway - prescreen can work without economic calendar
+
+    try:
+        # Step 4: Prescreen
+        logger.info("🔍 Step 4/8: Prescreen (ACTIVE → SHORT_LIST)...")
         agent_manager = await get_agent_manager()
         prescreen_result = await agent_manager.run_prescreen_agent()
         results["prescreen"] = prescreen_result
@@ -66,10 +113,10 @@ async def run_pipeline():
         logger.error(f"❌ Prescreen failed: {e}")
         results["prescreen"] = f"error: {e}"
         return {"status": "failed", "step": "prescreen", "results": results}
-    
+
     try:
-        # Step 3: Generate Charts
-        logger.info("📈 Step 3/6: Generating charts...")
+        # Step 5: Generate Charts
+        logger.info("📈 Step 5/8: Generating charts...")
         from app.tasks.generate_charts import get_chart_generator
         chart_gen = await get_chart_generator()
         chart_result = await chart_gen.generate_all_charts()
@@ -79,10 +126,10 @@ async def run_pipeline():
         logger.error(f"❌ Chart generation failed: {e}")
         results["charts"] = f"error: {e}"
         return {"status": "failed", "step": "charts", "results": results}
-    
+
     try:
-        # Step 4: Vision Analysis
-        logger.info("👁️ Step 4/6: Vision analysis (Fireworks Qwen3-VL)...")
+        # Step 6: Vision Analysis
+        logger.info("👁️ Step 6/8: Vision analysis (Fireworks Qwen3-VL)...")
         vision_result = await agent_manager.run_vision_agent()
         results["vision"] = vision_result
         logger.info(f"✅ Vision complete")
@@ -90,10 +137,10 @@ async def run_pipeline():
         logger.error(f"❌ Vision analysis failed: {e}")
         results["vision"] = f"error: {e}"
         # Continue - social might still work
-    
+
     try:
-        # Step 5: Social Analysis
-        logger.info("📱 Step 5/6: Social analysis (Grok)...")
+        # Step 7: Social Analysis
+        logger.info("📱 Step 7/8: Social analysis (Grok)...")
         social_result = await agent_manager.run_social_agent()
         results["social"] = social_result
         logger.info(f"✅ Social complete")
@@ -101,10 +148,10 @@ async def run_pipeline():
         logger.error(f"❌ Social analysis failed: {e}")
         results["social"] = f"error: {e}"
         # Continue - arbitrator can work without social
-    
+
     try:
-        # Step 6: Arbitrator (with Fib targets)
-        logger.info("🎯 Step 6/6: Arbitrator (final picks with Fib targets)...")
+        # Step 8: Arbitrator (with Fib targets)
+        logger.info("🎯 Step 8/8: Arbitrator (final picks with Fib targets)...")
         arbitrator_result = await agent_manager.run_arbitrator_agent()
         results["arbitrator"] = arbitrator_result
         logger.info(f"✅ Arbitrator complete: {arbitrator_result.get('picks_count', 0)} picks")
@@ -112,7 +159,7 @@ async def run_pipeline():
         logger.error(f"❌ Arbitrator failed: {e}")
         results["arbitrator"] = f"error: {e}"
         return {"status": "failed", "step": "arbitrator", "results": results}
-    
+
     logger.info("🎉 Daily pipeline complete!")
     return {"status": "success", "results": results}
 

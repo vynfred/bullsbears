@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { TrendingUp, Shield, Zap, BarChart3 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { AnimatedLogo } from "@/components/shared/AnimatedLogo";
+
 import { CandleBackground } from "@/components/shared/CandleBackground";
 
 export default function LandingPage() {
@@ -28,7 +28,7 @@ export default function LandingPage() {
       <header className="border-b border-slate-800 sticky top-0 bg-slate-950/95 backdrop-blur-sm z-20">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <AnimatedLogo className="text-2xl font-black" />
+            <img src="/assets/bullbears-text-gradient.png" alt="BullsBears" className="h-8" />
             <div className="flex gap-3">
               <Link href="/login" className="px-4 py-2 text-slate-300 hover:text-white transition-colors">
                 Sign In
@@ -107,8 +107,9 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-slate-800 py-8">
-        <div className="container mx-auto px-4 text-center text-slate-500 text-sm">
-          © 2024 BullsBears.xyz • Not financial advice
+        <div className="container mx-auto px-4 flex flex-col items-center gap-4">
+          <img src="/assets/bullsbears-icon-with-text.png" alt="BullsBears" className="h-12" />
+          <span className="text-slate-500 text-sm">© 2024 BullsBears.xyz • Not financial advice</span>
         </div>
       </footer>
     </div>

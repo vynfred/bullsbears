@@ -667,8 +667,8 @@ async def trigger_vision():
         if not await is_system_on():
             return {"success": False, "message": "System is OFF. Turn it ON first."}
 
-        from app.tasks.run_groq_vision import run_groq_vision
-        task = run_groq_vision.delay()
+        from app.tasks.run_vision import run_vision
+        task = run_vision.delay()
 
         return {
             "success": True,
@@ -688,7 +688,7 @@ async def trigger_vision_sync():
         if not await is_system_on():
             return {"success": False, "message": "System is OFF. Turn it ON first."}
 
-        from app.tasks.run_groq_vision import _run_vision
+        from app.tasks.run_vision import _run_vision
         result = await _run_vision()
 
         return {"success": True, "result": result}
@@ -884,6 +884,22 @@ async def trigger_social():
         return {
             "success": True,
             "message": f"Social analysis triggered (task_id: {task.id})",
+            "task_id": task.id
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error: {str(e)}"}
+
+
+@router.post("/trigger-short-interest")
+async def trigger_short_interest():
+    """Manually trigger Finnhub short interest fetch for ACTIVE stocks (~50 min)"""
+    try:
+        from app.tasks.fetch_short_interest import fetch_short_interest
+        task = fetch_short_interest.delay()
+
+        return {
+            "success": True,
+            "message": f"Short interest fetch queued (task_id: {task.id}). Takes ~50 min for 3000 stocks.",
             "task_id": task.id
         }
     except Exception as e:
@@ -1338,7 +1354,7 @@ async def trigger_full_pipeline_sequence():
         from celery import chain
         from app.tasks.run_prescreen import run_prescreen
         from app.tasks.generate_charts import generate_charts
-        from app.tasks.run_groq_vision import run_groq_vision
+        from app.tasks.run_vision import run_vision
         from app.tasks.run_grok_social import run_grok_social
         from app.tasks.run_arbitrator import run_arbitrator
 
@@ -1346,7 +1362,7 @@ async def trigger_full_pipeline_sequence():
         pipeline = chain(
             run_prescreen.s(),
             generate_charts.s(),
-            run_groq_vision.s(),
+            run_vision.s(),
             run_grok_social.s(),
             run_arbitrator.s()
         )

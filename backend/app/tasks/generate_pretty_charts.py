@@ -433,28 +433,35 @@ class PrettyChartGenerator:
                          fontweight='bold', va='center', ha='right')
 
         # ═══════════════════════════════════════════════════════════════════
-        # v6 3-TIER TARGET SYSTEM - Primary / Medium / Moonshot
-        # For bearish: targets should be BELOW current price, descending order
-        # (Primary closest to price, Moonshot furthest down)
+        # v6 3-TIER TARGET SYSTEM - Primary / Secondary / Moonshot
+        # Bullish: targets ABOVE entry price (Primary < Secondary < Moonshot)
+        # Bearish: targets BELOW entry price (Primary > Secondary > Moonshot)
+        # Primary + Secondary always shown by default, Moonshot only if confluence >= 3
         # ═══════════════════════════════════════════════════════════════════
         valid_primary = target_primary if (target_primary and target_primary > 0.01) else None
         valid_medium = target_medium if (target_medium and target_medium > 0.01) else None
         valid_moonshot = target_moonshot if (target_moonshot and target_moonshot > 0.01) else None
 
-        # Fix bearish target ordering: Primary > Medium > Moonshot (descending)
-        if not is_bullish and valid_primary and entry_price:
-            # For bearish, primary should be below entry price (10% drop)
-            if valid_primary >= entry_price:
-                valid_primary = entry_price * 0.90
-            # Medium should be below primary (15% drop from entry)
-            if valid_medium and valid_medium >= valid_primary:
-                valid_medium = entry_price * 0.85
-            # Moonshot should be below medium (20-25% drop from entry)
-            if valid_moonshot:
-                if valid_moonshot >= (valid_medium or valid_primary):
-                    valid_moonshot = entry_price * 0.75
+        # VALIDATE AND FIX targets based on direction
+        if is_bullish and entry_price:
+            # Bullish: targets must be ABOVE entry price
+            if valid_primary and valid_primary <= entry_price:
+                # Recalculate using percentage-based targets
+                valid_primary = entry_price * 1.10  # 10% gain
+            if not valid_medium or valid_medium <= (valid_primary or entry_price):
+                valid_medium = entry_price * 1.15  # 15% gain
+            if valid_moonshot and valid_moonshot <= (valid_medium or valid_primary or entry_price):
+                valid_moonshot = entry_price * 1.25  # 25% gain
+        elif not is_bullish and entry_price:
+            # Bearish: targets must be BELOW entry price
+            if valid_primary and valid_primary >= entry_price:
+                valid_primary = entry_price * 0.90  # 10% drop
+            if not valid_medium or valid_medium >= (valid_primary or entry_price):
+                valid_medium = entry_price * 0.85  # 15% drop
+            if valid_moonshot and valid_moonshot >= (valid_medium or valid_primary or entry_price):
+                valid_moonshot = entry_price * 0.75  # 25% drop
 
-        # Primary target (Fib 1.000) - SOLID line with box, ALWAYS shown
+        # Primary target - SOLID line with box, ALWAYS shown
         if valid_primary:
             t1_height = price_range * 0.05
             t1_box = Rectangle((box_start_x, valid_primary - t1_height/2), box_width, t1_height,
@@ -464,8 +471,8 @@ class PrettyChartGenerator:
             ax_price.text(label_x, valid_primary, f'Primary: ${valid_primary:.2f}',
                          color=target_color, fontsize=10, fontweight='bold', va='center', zorder=10)
 
-        # Secondary target (Fib 1.272) - SOLID line, shown if confluence ≥ 2
-        if valid_medium and confluence_score >= 2:
+        # Secondary target - SOLID line, ALWAYS shown by default
+        if valid_medium:
             t2_height = price_range * 0.05
             t2_box = Rectangle((box_start_x, valid_medium - t2_height/2), box_width, t2_height,
                                facecolor=target_color, edgecolor=target_color, alpha=0.35, lw=2.5, zorder=4)
@@ -474,8 +481,7 @@ class PrettyChartGenerator:
             ax_price.text(label_x, valid_medium, f'Secondary: ${valid_medium:.2f}',
                          color=target_color, fontsize=9.5, fontweight='bold', va='center', zorder=10)
 
-        # Moonshot target (Fib 1.618) - DASHED line, shown ONLY if confluence ≥ 3 OR catalyst
-        # For confluence 1/5 with no catalyst, moonshot should NOT be shown
+        # Moonshot target - DASHED line, shown ONLY if confluence >= 3
         show_moonshot = valid_moonshot and confluence_score >= 3
         if show_moonshot:
             t3_height = price_range * 0.04
@@ -573,8 +579,8 @@ class PrettyChartGenerator:
 
         if icon_arr is not None:
             try:
-                # Bearish icon 40% smaller than bullish
-                icon_zoom = 0.8 if is_bullish else 0.48
+                # Both icons same size
+                icon_zoom = 0.8
                 imagebox = OffsetImage(icon_arr, zoom=icon_zoom)
                 # Position icon vertically aligned with text baseline (va='top' at 0.96)
                 # Text with va='top' at 0.96 means text top is at 0.96

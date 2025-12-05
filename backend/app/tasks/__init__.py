@@ -7,7 +7,7 @@ from .fmp_delta_update import fmp_delta_update
 from .build_active_symbols import build_active_symbols
 from .run_prescreen import run_prescreen
 from .generate_charts import generate_charts
-from .run_groq_vision import run_groq_vision
+from .run_vision import run_vision
 from .run_grok_social import run_grok_social
 from .run_arbitrator import run_arbitrator
 from .publish_to_firebase import publish_to_firebase
@@ -20,7 +20,7 @@ __all__ = [
     "build_active_symbols",
     "run_prescreen",
     "generate_charts",
-    "run_groq_vision",
+    "run_vision",
     "run_grok_social",
     "run_arbitrator",
     "publish_to_firebase",

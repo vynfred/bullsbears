@@ -29,20 +29,22 @@ logger = logging.getLogger(__name__)
 
 
 async def main():
-    """Run the outcome monitor."""
+    """Run the outcome monitor with proper cleanup."""
     from app.services.system_state import is_system_on
     from app.tasks.monitor_pick_outcomes import _monitor_outcomes
-    
+    from app.core.database import close_asyncpg_pool
+    from app.core.firebase import close_firebase
+
     logger.info("=" * 60)
     logger.info("OUTCOME MONITOR START")
     logger.info("=" * 60)
-    
-    # Check if system is ON
-    if not await is_system_on():
-        logger.info("⏸️ System is OFF - skipping outcome monitor")
-        return {"skipped": True, "reason": "system_off"}
-    
+
     try:
+        # Check if system is ON
+        if not await is_system_on():
+            logger.info("⏸️ System is OFF - skipping outcome monitor")
+            return {"skipped": True, "reason": "system_off"}
+
         result = await _monitor_outcomes()
         logger.info("=" * 60)
         logger.info(f"OUTCOME MONITOR COMPLETE: {result}")
@@ -53,6 +55,18 @@ async def main():
         import traceback
         traceback.print_exc()
         raise
+    finally:
+        # CRITICAL: Clean up async resources before event loop closes
+        logger.info("🧹 Cleaning up async resources...")
+        try:
+            await close_asyncpg_pool()
+        except Exception as e:
+            logger.warning(f"asyncpg pool cleanup warning: {e}")
+        try:
+            await close_firebase()
+        except Exception as e:
+            logger.warning(f"Firebase cleanup warning: {e}")
+        logger.info("✅ Cleanup complete")
 
 
 if __name__ == "__main__":

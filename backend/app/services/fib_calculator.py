@@ -71,6 +71,79 @@ class CatalystFlags:
     has_news_catalyst: bool = False      # FDA, merger, major news
     news_sentiment: float = 0.0          # -1 to +1
     short_interest_pct: float = 0.0      # Short interest as % of float
+    news_confluence_bonus: int = 0       # 0-3 based on news tier
+    news_reason: str = ""                # Explanation for logging
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# NEWS CATALYST ENGINE v3 – Tiered keyword scoring with conflict detection
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Tier 1 – High-conviction keywords (almost always move the stock significantly)
+POSITIVE_TIER1 = {
+    "fda approval", "phase 3 success", "blockbuster", "acquisition", "buyout",
+    "takeover", "merger agreement", "beats estimates", "raised guidance",
+    "record revenue", "short squeeze", "gamma squeeze", "institutional buying"
+}
+NEGATIVE_TIER1 = {
+    "fda rejection", "clinical hold", "complete response letter", "crl",
+    "misses estimates", "lowered guidance", "class action lawsuit",
+    "sec investigation", "delisting", "bankruptcy", "dilution", "offering"
+}
+
+# Tier 2 – Strong directional (standard +1/+2)
+POSITIVE_TIER2 = {
+    "approval", "approved", "beat", "beats", "exceeds", "raises", "upgrade",
+    "breakthrough", "partnership", "deal", "contract", "buyback", "launch"
+}
+NEGATIVE_TIER2 = {
+    "rejection", "rejected", "miss", "misses", "cuts", "downgrade",
+    "lawsuit", "investigation", "fraud", "recall", "sec", "delay", "warning"
+}
+
+
+def score_news_catalyst(headlines: List[str], direction: str) -> Tuple[int, str]:
+    """
+    Score news catalyst based on keyword tiers and direction alignment.
+
+    Returns:
+        (confluence_bonus, reason)
+        - Tier 1 match aligned with direction: +3
+        - Strong Tier 2 (2+ keywords): +2
+        - Single Tier 2: +1
+        - Conflict (opposite direction news): 0
+        - Neutral (no keywords): 0
+    """
+    if not headlines:
+        return 0, ""
+
+    text = " | ".join(h.lower() for h in headlines)
+
+    tier1_pos = sum(1 for kw in POSITIVE_TIER1 if kw in text)
+    tier1_neg = sum(1 for kw in NEGATIVE_TIER1 if kw in text)
+    tier2_pos = sum(1 for kw in POSITIVE_TIER2 if kw in text)
+    tier2_neg = sum(1 for kw in NEGATIVE_TIER2 if kw in text)
+
+    # Tier-1 always wins (high conviction events)
+    if tier1_pos and direction == "bullish":
+        return 3, f"tier1_positive({tier1_pos})"
+    if tier1_neg and direction == "bearish":
+        return 3, f"tier1_negative({tier1_neg})"
+
+    # Directional alignment with conflict detection
+    if direction == "bullish":
+        if tier1_neg:      return 0, "tier1_negative_conflict"
+        if tier2_pos >= 2: return 2, "strong_positive"
+        if tier2_pos >= 1: return 1, "positive"
+        if tier2_neg >= 1: return 0, "negative_conflict"
+        return 0, "neutral"
+
+    else:  # bearish
+        if tier1_pos:      return 0, "tier1_positive_conflict"
+        if tier2_neg >= 2: return 2, "strong_negative"
+        if tier2_neg >= 1: return 1, "negative"
+        if tier2_pos >= 1: return 0, "positive_conflict"
+        return 0, "neutral"
 
 
 @dataclass
@@ -554,14 +627,12 @@ def calculate_fib_targets(
 
     if direction == 'bullish':
         is_valid = current_price > fib_618_ret
-        primary_target = swing_high + swing_range * 1.0
-        moonshot_raw = swing_high + swing_range * 1.618
+        primary_target = swing_high + swing_range * 1.0  # Fib 1.000 extension UP
         stop_loss = swing_low * 0.97
     else:
         is_valid = current_price < fib_618_ret
-        # Bearish: Use percentage-based targets from current price
-        primary_target = max(0.01, current_price * 0.90)  # 10% drop
-        moonshot_raw = max(0.01, current_price * 0.80)    # 20% drop
+        # Bearish: True Fib extension DOWN from swing geometry
+        primary_target = max(0.01, swing_low - swing_range * 1.0)  # Fib 1.000 extension DOWN
         stop_loss = swing_high * 1.03
 
     return ConfluenceTargets(
@@ -595,8 +666,7 @@ async def calculate_confluence_targets(
     # Catalyst inputs (optional - can be passed from social/news agents)
     has_earnings_catalyst: bool = False,
     earnings_surprise_pct: float = 0.0,
-    has_news_catalyst: bool = False,
-    news_sentiment: float = 0.0,
+    headlines: Optional[List[str]] = None,  # Raw headlines for tiered scoring
     short_interest_pct: float = 0.0
 ) -> ConfluenceTargets:
     """
@@ -677,30 +747,18 @@ async def calculate_confluence_targets(
             fib_valid = current_price > fib_618_ret
             swing_for_gann = swing_low
             swing_idx = next((s.index for s in swings if not s.is_high), 0)
-        else:
-            # Bearish: Use Fibonacci retracements from current price toward swing_low
-            # Target 1 (Primary): 0.618 retracement toward swing_low (conservative)
-            # Target 2 (Medium): 0.786 retracement toward swing_low
-            # Target 3 (Moonshot): Full move to swing_low or below
+        else:  # bearish
+            # Bearish: True Fibonacci EXTENSIONS downward from swing geometry
+            # swing_range = swing_high - swing_low (same as bullish)
+            # Targets project BELOW swing_low using Fib ratios
+            target_primary = swing_low - swing_range * 1.0        # Fib 1.000 extension DOWN
+            target_medium_raw = swing_low - swing_range * 1.272   # Fib 1.272 extension DOWN
+            target_moonshot_raw = swing_low - swing_range * 1.618 # Fib 1.618 extension DOWN
 
-            # Calculate drop range from current price to swing_low
-            drop_range = current_price - swing_low
-
-            # For bearish, targets are BELOW current price
-            # Primary: 10-15% drop (conservative)
-            # Medium: 15-20% drop
-            # Moonshot: 20-30% drop or to swing_low
-
-            if drop_range > 0:
-                # Price is above swing_low - use percentage-based targets
-                target_primary = max(0.01, current_price * 0.90)  # 10% drop
-                target_medium_raw = max(0.01, current_price * 0.85)  # 15% drop
-                target_moonshot_raw = max(0.01, min(swing_low, current_price * 0.75))  # 25% drop or swing_low
-            else:
-                # Price is at or below swing_low - use smaller targets
-                target_primary = max(0.01, current_price * 0.92)  # 8% drop
-                target_medium_raw = max(0.01, current_price * 0.88)  # 12% drop
-                target_moonshot_raw = max(0.01, current_price * 0.82)  # 18% drop
+            # Ensure targets don't go negative
+            target_primary = max(0.01, target_primary)
+            target_medium_raw = max(0.01, target_medium_raw)
+            target_moonshot_raw = max(0.01, target_moonshot_raw)
 
             stop_loss = swing_high * 1.03
             fib_valid = current_price < fib_618_ret
@@ -751,24 +809,24 @@ async def calculate_confluence_targets(
         atr_pct = (atr / current_price * 100) if current_price > 0 else 0
 
         # =================================================================
-        # STEP 6: Build catalyst flags
+        # STEP 6: Score news catalyst using tiered keyword system
         # =================================================================
+        news_bonus, news_reason = score_news_catalyst(headlines or [], direction)
+        has_news_catalyst = news_bonus > 0
+
+        # Build catalyst flags with scored news data
         catalyst = CatalystFlags(
             has_earnings=has_earnings_catalyst,
             earnings_surprise_pct=earnings_surprise_pct,
             has_news_catalyst=has_news_catalyst,
-            news_sentiment=news_sentiment,
-            short_interest_pct=short_interest_pct
-        )
-        has_catalyst = (
-            has_earnings_catalyst or
-            has_news_catalyst or
-            short_interest_pct > 25.0 or
-            abs(earnings_surprise_pct) > 10.0
+            news_sentiment=0.0,  # Deprecated - using tiered scoring now
+            short_interest_pct=short_interest_pct,
+            news_confluence_bonus=news_bonus,
+            news_reason=news_reason
         )
 
         # =================================================================
-        # STEP 7: Calculate confluence score (0-5)
+        # STEP 7: Calculate confluence score (0-5 base + news bonus up to +3)
         # =================================================================
         confluence_score = 0
         confluence_methods = []
@@ -793,10 +851,25 @@ async def calculate_confluence_targets(
             confluence_score += 1
             confluence_methods.append('rsi')
 
-        # +1 for catalyst (earnings, news, short squeeze)
-        if has_catalyst:
+        # NEWS CATALYST: Tiered scoring (0-3 points based on keyword strength)
+        # - Tier 1 (FDA approval, bankruptcy, etc): +3
+        # - Strong Tier 2 (2+ keywords): +2
+        # - Single Tier 2: +1
+        # - Conflict or neutral: +0
+        if news_bonus > 0:
+            confluence_score += news_bonus
+            confluence_methods.append(f'news_{news_reason}')
+            logger.info(f"📰 {symbol}: news_bonus={news_bonus} ({news_reason})")
+
+        # Short squeeze is ALWAYS bullish (shorts covering = price up)
+        if direction == 'bullish' and short_interest_pct > 25.0:
             confluence_score += 1
-            confluence_methods.append('catalyst')
+            confluence_methods.append('short_squeeze')
+
+        # Earnings surprise boost
+        if has_earnings_catalyst and abs(earnings_surprise_pct) > 10.0:
+            confluence_score += 1
+            confluence_methods.append('earnings_surprise')
 
         # =================================================================
         # STEP 8: Determine which targets to show
@@ -812,15 +885,19 @@ async def calculate_confluence_targets(
         target_moonshot = target_moonshot_raw if show_moonshot else None
 
         # =================================================================
-        # STEP 9: Final validation - ensure bearish targets below price
+        # STEP 9: Sanity check - log if Fib math produced invalid targets
+        # Real swing geometry should always produce valid targets, but log if not
         # =================================================================
         if direction == 'bearish':
             if target_primary >= current_price:
-                target_primary = current_price * 0.90
+                logger.warning(f"⚠️ {symbol}: Bearish target_primary ({target_primary:.2f}) >= current_price ({current_price:.2f}). Swing geometry may be inverted.")
             if target_medium and target_medium >= target_primary:
-                target_medium = target_primary * 0.92
+                logger.warning(f"⚠️ {symbol}: Bearish target_medium ({target_medium:.2f}) >= target_primary ({target_primary:.2f})")
             if target_moonshot and target_moonshot >= (target_medium or target_primary):
-                target_moonshot = (target_medium or target_primary) * 0.85
+                logger.warning(f"⚠️ {symbol}: Bearish target_moonshot invalid ordering")
+        elif direction == 'bullish':
+            if target_primary <= current_price:
+                logger.warning(f"⚠️ {symbol}: Bullish target_primary ({target_primary:.2f}) <= current_price ({current_price:.2f}). Swing geometry may be inverted.")
 
         return ConfluenceTargets(
             direction=direction,

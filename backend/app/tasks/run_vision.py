@@ -1,6 +1,6 @@
-# backend/app/tasks/run_groq_vision.py
+# backend/app/tasks/run_vision.py
 """
-Vision Analysis Task - Fetches chart URLs from DB, sends images to Groq Vision API
+Vision Analysis Task - Fetches chart URLs from DB, sends images to Fireworks Vision API (Qwen3-VL)
 """
 import asyncio
 import logging
@@ -11,8 +11,8 @@ from app.core.database import get_asyncpg_pool
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(name="tasks.run_groq_vision")
-def run_groq_vision(prev_result=None):
+@celery_app.task(name="tasks.run_vision")
+def run_vision(prev_result=None):
     """Celery task to run vision analysis on chart images. Accepts prev_result for chain compatibility."""
     return asyncio.run(_run_vision())
 

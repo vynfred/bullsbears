@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     GROK_API_KEY: str = ""
     FMP_API_KEY: str = ""
+    FINNHUB_API_KEY: str = ""  # Short interest data
+    FRED_API_KEY: str = ""     # Economic calendar (FRED)
     FIREBASE_SERVICE_ACCOUNT: str = ""  # full JSON string
 
     # Optional
@@ -39,6 +41,8 @@ class Settings(BaseSettings):
             "groq": bool(self.GROQ_API_KEY),
             "grok": bool(self.GROK_API_KEY),
             "fmp": bool(self.FMP_API_KEY),
+            "finnhub": bool(self.FINNHUB_API_KEY),
+            "fred": bool(self.FRED_API_KEY),
             "firebase": bool(self.FIREBASE_SERVICE_ACCOUNT),
         }
 

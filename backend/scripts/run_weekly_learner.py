@@ -26,31 +26,45 @@ logger = logging.getLogger(__name__)
 
 
 async def run_learner():
-    """Execute weekly learner"""
+    """Execute weekly learner with proper cleanup"""
     from app.services.system_state import is_system_on
-    
-    # Check system state
-    if not await is_system_on():
-        logger.warning("⏸️ System is OFF - skipping weekly learner")
-        return {"status": "skipped", "reason": "system_off"}
-    
-    logger.info("🧠 Starting BullsBears Weekly Learner")
-    
+    from app.core.database import close_asyncpg_pool
+    from app.core.firebase import close_firebase
+
     try:
+        # Check system state
+        if not await is_system_on():
+            logger.warning("⏸️ System is OFF - skipping weekly learner")
+            return {"status": "skipped", "reason": "system_off"}
+
+        logger.info("🧠 Starting BullsBears Weekly Learner")
+
         from app.services.agent_manager import get_agent_manager
         agent_manager = await get_agent_manager()
         result = await agent_manager.run_learner_agent()
-        
+
         logger.info(f"✅ Weekly learner complete")
         logger.info(f"Result: {result}")
-        
+
         return {"status": "success", "result": result}
-        
+
     except Exception as e:
         logger.error(f"❌ Weekly learner failed: {e}")
         import traceback
         traceback.print_exc()
         return {"status": "failed", "error": str(e)}
+    finally:
+        # CRITICAL: Clean up async resources before event loop closes
+        logger.info("🧹 Cleaning up async resources...")
+        try:
+            await close_asyncpg_pool()
+        except Exception as e:
+            logger.warning(f"asyncpg pool cleanup warning: {e}")
+        try:
+            await close_firebase()
+        except Exception as e:
+            logger.warning(f"Firebase cleanup warning: {e}")
+        logger.info("✅ Cleanup complete")
 
 
 def main():

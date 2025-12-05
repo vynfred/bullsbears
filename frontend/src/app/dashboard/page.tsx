@@ -13,7 +13,6 @@ import SettingsPage from "@/components/private/SettingsPage";
 import HowItWorksPage from "@/components/public/HowItWorksPage";
 import FAQPage from "@/components/public/FAQPage";
 import TermsPrivacyPage from "@/components/public/TermsPrivacyPage";
-import { AnimatedLogo } from "@/components/shared/AnimatedLogo";
 import { CandleBackground } from "@/components/shared/CandleBackground";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -70,7 +69,7 @@ export default function Dashboard() {
               <SheetContent side="left" className="bg-slate-950 border-slate-800">
                 <SheetHeader>
                   <SheetTitle>
-                    <AnimatedLogo className="text-2xl font-black" />
+                    <img src="/assets/bullbears-logo.png" alt="BullsBears" className="h-10" />
                   </SheetTitle>
                 </SheetHeader>
                 <div className="mt-8 space-y-2">
@@ -131,7 +130,7 @@ export default function Dashboard() {
 
             {/* Logo */}
             <div className="absolute left-1/2 -translate-x-1/2">
-              <AnimatedLogo className="text-2xl font-black" />
+              <img src="/assets/bullbears-text-gradient.png" alt="BullsBears" className="h-8" />
             </div>
 
             {/* Placeholder for balance */}

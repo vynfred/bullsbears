@@ -90,16 +90,46 @@ async def _analyze_one(client: httpx.AsyncClient, symbol: str) -> Dict[str, Any]
         end = content.rfind("}") + 1
         data = json.loads(content[start:end])
 
+        # ═══════════════════════════════════════════════════════════════════
+        # v9 DYNAMIC SCORE ADJUSTMENTS (server-side enforcement)
+        # Grok returns base score; we apply velocity scaling + contrarian flip
+        # ═══════════════════════════════════════════════════════════════════
+
+        # Extract raw base score from Grok
+        base_score = int(data.get("social_score", 0))  # -5 to +5 (or already adjusted)
+
+        # Extract dynamic factors
+        velocity = float(data.get("mention_velocity", 1.0))
+        consensus = float(data.get("platform_consensus", 0.5))
+
+        # Scale: base * velocity if >1.5; divide by 1.2 if consensus <0.6
+        adjusted_score = float(base_score)
+        if velocity > 1.5:
+            adjusted_score *= velocity
+        if consensus < 0.6:
+            adjusted_score /= 1.2
+
+        # Cap to -7 to +7 range
+        adjusted_score = max(-7.0, min(7.0, adjusted_score))
+
+        # Contrarian flip: if |base| ≥4 and velocity >3x, flip sign by 20%
+        # This catches overhyped stocks that may reverse
+        contrarian = False
+        if abs(base_score) >= 4 and velocity > 3.0:
+            adjusted_score *= 0.8 * (-1 if base_score > 0 else 1)  # Flip direction, reduce 20%
+            contrarian = True
+            logger.info(f"🔄 {symbol}: Contrarian flip triggered (base={base_score}, velocity={velocity}x)")
+
         return {
-            "social_score": int(data.get("social_score", 0)),
+            "social_score": int(round(adjusted_score)),  # No decimals per prompt
             "bullish_ratio": float(data.get("bullish_ratio", 0.5)),
             "headlines": data.get("headlines", [])[:3],
             "events": data.get("events", []),
             "polymarket_prob": data.get("polymarket_prob"),
-            "mention_velocity": float(data.get("mention_velocity", 1.0)),
+            "mention_velocity": velocity,
             "engagement_weight": float(data.get("engagement_weight", 1.0)),
-            "platform_consensus": float(data.get("platform_consensus", 0.0)),
-            "contrarian_flag": bool(data.get("contrarian_flag", False)),
+            "platform_consensus": consensus,
+            "contrarian_flag": contrarian or bool(data.get("contrarian_flag", False)),
         }
     except Exception as e:
         logger.error(f"Grok failed for {symbol}: {e}")

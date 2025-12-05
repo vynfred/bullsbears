@@ -17,22 +17,31 @@ logger = logging.getLogger(__name__)
 
 PRESCREEN_PROMPT = """You are an expert stock screener. Analyze these stocks and identify CLEAR bullish or bearish setups for short-term trading (1-5 days).
 
-STOCK DATA (symbol, price, volume_today, pct_change_30d, avg_volume_30d, volume_ratio, volatility_30d):
+STOCK DATA (includes catalyst flags):
 {STOCK_DATA}
+
+CATALYST FIELDS TO CONSIDER:
+- catalyst_earnings: true = earnings report within 5 days (high volatility expected)
+- short_interest_pct: % of float sold short (>20% = short squeeze candidate)
+- catalyst_short_squeeze: true = high short interest >20% (BULLISH bias for squeeze plays)
+- has_macro_event: true = major economic event within 3 days (CPI/FOMC/Jobs)
 
 SELECTION RULES:
 - Only select stocks with UNAMBIGUOUS signals. Mixed or weak = SKIP.
 - Maximum 75 total picks (bullish + bearish combined). Can be fewer if signals are weak.
+- PRIORITIZE stocks with catalyst flags - they have higher probability of large moves.
 
 BULLISH CRITERIA (must meet ≥2):
 1. 30-day price change ≥ +12% AND volume_ratio > 1.5 (momentum + volume confirmation)
 2. Breaking recent highs on elevated volume (volume_ratio > 2.0)
 3. Volatility expansion after consolidation (volatility_30d > 5% with positive price change)
+4. SHORT SQUEEZE SETUP: short_interest_pct > 20% AND positive momentum (high priority!)
 
 BEARISH CRITERIA (must meet ≥2):
 1. 30-day price change ≤ -12% AND volume_ratio > 1.5 (breakdown + volume confirmation)
 2. Support breakdown on elevated volume (volume_ratio > 2.0 with negative momentum)
 3. Volatility spike after tight range (volatility_30d > 8% with negative price change)
+4. LOW short interest + negative momentum = easier to fall (no squeeze risk)
 
 Return ONLY valid JSON with this exact structure:
 {
@@ -140,32 +149,30 @@ class PrescreenAgent:
             logger.warning(f"Could not fetch earnings calendar: {e}")
 
         # ═══════════════════════════════════════════════════════════════════
-        # v7 FINRA SHORT INTEREST (bi-weekly updates, use last available)
+        # v8 SHORT INTEREST from Finnhub (stored daily in short_interest table)
         # ═══════════════════════════════════════════════════════════════════
         short_interest = {}
         try:
-            # FINRA publishes bi-weekly, use ~15 days ago to get latest available
-            latest_si_date = (today_date - timedelta(days=15)).strftime("%Y-%m-%d")
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                resp = await client.post(
-                    "https://api.finra.org/data/group/otcMarket/name/EquityShortInterest",
-                    headers={"Content-Type": "application/json"},
-                    json={"settlementDate": latest_si_date}
-                )
-                if resp.status_code == 200:
-                    si_data = resp.json()
-                    for row in si_data:
-                        symbol = row.get("symbol", "").upper()
-                        shares_short = float(row.get("sharesShort", 0))
-                        float_shares = float(row.get("floatSharesOutstanding", 0))
-                        if float_shares > 0:
-                            pct = (shares_short / float_shares) * 100
-                            short_interest[symbol] = round(pct, 2)
-                    logger.info(f"📊 Fetched short interest for {len(short_interest)} symbols from FINRA")
-                else:
-                    logger.warning(f"FINRA API returned {resp.status_code}")
+            async with self.db.acquire() as conn:
+                # Check if table exists and has data
+                si_rows = await conn.fetch("""
+                    SELECT symbol, short_interest, avg_vol_30d, days_to_cover
+                    FROM short_interest
+                    WHERE updated_at > CURRENT_DATE - INTERVAL '7 days'
+                """)
+                for row in si_rows:
+                    symbol = row['symbol']
+                    shares_short = float(row['short_interest'] or 0)
+                    avg_vol = float(row['avg_vol_30d'] or 0)
+                    # Calculate short interest as % of avg volume (days to cover proxy)
+                    if avg_vol > 0:
+                        # days_to_cover = short_interest / avg_daily_volume
+                        # If > 5 days to cover, that's ~20%+ of float typically
+                        pct = min((row['days_to_cover'] or 0) * 4, 100)  # Rough estimate: 5 days = 20%
+                        short_interest[symbol] = round(pct, 2)
+                logger.info(f"📊 Loaded short interest for {len(short_interest)} symbols from Finnhub cache")
         except Exception as e:
-            logger.warning(f"FINRA short interest fetch failed: {e}")
+            logger.warning(f"Short interest DB read failed (table may not exist yet): {e}")
 
         # Build stock data for prompt with catalyst flags
         stock_data = []
@@ -266,32 +273,49 @@ class PrescreenAgent:
             # Insert bullish picks
             for rank, symbol in enumerate(bullish_picks, 1):
                 s = stock_lookup.get(symbol, {})
+                # Store technical snapshot with short interest for arbitrator to read
+                tech_snapshot = json.dumps({
+                    "short_interest_pct": s.get("short_interest_pct", 0),
+                    "catalyst_earnings": s.get("catalyst_earnings", False),
+                    "catalyst_short_squeeze": s.get("catalyst_short_squeeze", False),
+                    "volume_ratio": s.get("volume_ratio", 0),
+                    "volatility_30d": s.get("volatility_30d", 0)
+                })
                 await conn.execute("""
                     INSERT INTO shortlist_candidates (
                         date, symbol, rank, direction, prescreen_score, prescreen_reasoning,
-                        price_at_selection, created_at
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+                        price_at_selection, technical_snapshot, created_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
                     ON CONFLICT (date, symbol) DO UPDATE SET
                         rank = EXCLUDED.rank,
                         direction = EXCLUDED.direction,
                         prescreen_score = EXCLUDED.prescreen_score,
+                        technical_snapshot = EXCLUDED.technical_snapshot,
                         updated_at = NOW()
-                """, today, symbol, rank, "bull", s.get("volume_ratio", 0) * 10, summary, s.get("price", 0))
+                """, today, symbol, rank, "bull", s.get("volume_ratio", 0) * 10, summary, s.get("price", 0), tech_snapshot)
 
             # Insert bearish picks
             for rank, symbol in enumerate(bearish_picks, len(bullish_picks) + 1):
                 s = stock_lookup.get(symbol, {})
+                tech_snapshot = json.dumps({
+                    "short_interest_pct": s.get("short_interest_pct", 0),
+                    "catalyst_earnings": s.get("catalyst_earnings", False),
+                    "catalyst_short_squeeze": s.get("catalyst_short_squeeze", False),
+                    "volume_ratio": s.get("volume_ratio", 0),
+                    "volatility_30d": s.get("volatility_30d", 0)
+                })
                 await conn.execute("""
                     INSERT INTO shortlist_candidates (
                         date, symbol, rank, direction, prescreen_score, prescreen_reasoning,
-                        price_at_selection, created_at
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+                        price_at_selection, technical_snapshot, created_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
                     ON CONFLICT (date, symbol) DO UPDATE SET
                         rank = EXCLUDED.rank,
                         direction = EXCLUDED.direction,
                         prescreen_score = EXCLUDED.prescreen_score,
+                        technical_snapshot = EXCLUDED.technical_snapshot,
                         updated_at = NOW()
-                """, today, symbol, rank, "bear", s.get("volume_ratio", 0) * 10, summary, s.get("price", 0))
+                """, today, symbol, rank, "bear", s.get("volume_ratio", 0) * 10, summary, s.get("price", 0), tech_snapshot)
 
         total_picks = len(bullish_picks) + len(bearish_picks)
         earnings_count = sum(1 for s in stock_data if s.get("catalyst_earnings"))

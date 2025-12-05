@@ -5,6 +5,16 @@
 #   - Daily pipeline (8:00 AM ET weekdays)
 #   - Outcome monitor (10 AM + 4:30 PM ET weekdays)
 #   - Weekly learner (4:10 AM ET Saturdays)
+#
+# IMPORTANT: All services share the "bullsbears-env" environment group
+# Create this group in Render Dashboard with these keys:
+#   - DATABASE_URL (from Render Postgres)
+#   - REDIS_URL (from Render Redis)
+#   - FIREWORKS_API_KEY
+#   - GROQ_API_KEY
+#   - GROK_API_KEY
+#   - FMP_API_KEY
+#   - FIREBASE_SERVICE_ACCOUNT (full JSON string)
 # ============================================
 
 services:
@@ -20,6 +30,7 @@ services:
     envVars:
       - key: ENVIRONMENT
         value: production
+      - fromGroup: bullsbears-env
 
   # Daily Pipeline Cron Job
   # Runs at 8:00 AM ET (13:00 UTC) on weekdays
@@ -33,6 +44,10 @@ services:
     buildCommand: pip install -r requirements.txt
     schedule: "0 13 * * 1-5"
     startCommand: python scripts/run_daily_pipeline.py
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - fromGroup: bullsbears-env
 
   # Outcome Monitor Cron Job - Morning
   # Runs at 10:00 AM ET (15:00 UTC) on weekdays
@@ -46,6 +61,10 @@ services:
     buildCommand: pip install -r requirements.txt
     schedule: "0 15 * * 1-5"
     startCommand: python scripts/run_outcome_monitor.py
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - fromGroup: bullsbears-env
 
   # Outcome Monitor Cron Job - Afternoon
   # Runs at 4:30 PM ET (21:30 UTC) on weekdays
@@ -59,6 +78,10 @@ services:
     buildCommand: pip install -r requirements.txt
     schedule: "30 21 * * 1-5"
     startCommand: python scripts/run_outcome_monitor.py
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - fromGroup: bullsbears-env
 
   # Weekly Learner Cron Job
   # Runs at 4:10 AM ET (9:10 UTC) on Saturdays
@@ -72,3 +95,7 @@ services:
     buildCommand: pip install -r requirements.txt
     schedule: "10 9 * * 6"
     startCommand: python scripts/run_weekly_learner.py
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - fromGroup: bullsbears-env

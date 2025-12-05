@@ -427,10 +427,13 @@ async def manual_check_targets():
 
         db = await get_asyncpg_pool()
         async with db.acquire() as conn:
-            # Get all active picks with their targets
+            # Get all active picks with their targets (COALESCE for backward compat)
             rows = await conn.fetch("""
-                SELECT p.id, p.symbol, p.direction, p.primary_target, p.moonshot_target,
-                       pod.hit_primary_target, pod.hit_moonshot_target
+                SELECT p.id, p.symbol, p.direction,
+                       COALESCE(p.target_primary, p.primary_target) as target_primary,
+                       p.target_medium,
+                       COALESCE(p.target_moonshot, p.moonshot_target) as target_moonshot,
+                       pod.hit_primary_target, pod.hit_medium_target, pod.hit_moonshot_target
                 FROM picks p
                 LEFT JOIN pick_outcomes_detailed pod ON pod.pick_id = p.id
                 WHERE p.expires_at > NOW()
@@ -453,47 +456,69 @@ async def manual_check_targets():
                     for q in resp.json():
                         current_prices[q["symbol"]] = float(q.get("price", 0))
 
-            # Check targets
+            # Check targets (3-tier: primary, medium, moonshot)
             updates = []
             for row in rows:
                 symbol = row["symbol"]
                 direction = row["direction"]
                 current_price = current_prices.get(symbol, 0)
-                primary_target = float(row["primary_target"]) if row["primary_target"] else None
-                moonshot_target = float(row["moonshot_target"]) if row["moonshot_target"] else None
+                target_primary = float(row["target_primary"]) if row["target_primary"] else None
+                target_medium = float(row["target_medium"]) if row.get("target_medium") else None
+                target_moonshot = float(row["target_moonshot"]) if row["target_moonshot"] else None
 
-                # Skip already hit
-                if row["hit_primary_target"] or row["hit_moonshot_target"]:
+                # Skip already hit all targets
+                if row.get("hit_moonshot_target"):
                     continue
 
-                hit_primary = False
+                hit_primary = row.get("hit_primary_target") or False
+                hit_medium = row.get("hit_medium_target") or False
                 hit_moonshot = False
+                new_hit = False
 
                 if direction == "bullish":
-                    if primary_target and current_price >= primary_target:
+                    if target_primary and current_price >= target_primary and not hit_primary:
                         hit_primary = True
-                    if moonshot_target and current_price >= moonshot_target:
+                        new_hit = True
+                    if target_medium and current_price >= target_medium and not hit_medium:
+                        hit_medium = True
+                        new_hit = True
+                    if target_moonshot and current_price >= target_moonshot:
                         hit_moonshot = True
+                        new_hit = True
                 else:
-                    if primary_target and current_price <= primary_target:
+                    if target_primary and current_price <= target_primary and not hit_primary:
                         hit_primary = True
-                    if moonshot_target and current_price <= moonshot_target:
+                        new_hit = True
+                    if target_medium and current_price <= target_medium and not hit_medium:
+                        hit_medium = True
+                        new_hit = True
+                    if target_moonshot and current_price <= target_moonshot:
                         hit_moonshot = True
+                        new_hit = True
 
-                if hit_primary or hit_moonshot:
+                if new_hit:
                     updates.append({
                         "pick_id": row["id"],
                         "symbol": symbol,
                         "direction": direction,
                         "current_price": current_price,
-                        "primary_target": primary_target,
                         "hit_primary": hit_primary,
+                        "hit_medium": hit_medium,
                         "hit_moonshot": hit_moonshot
                     })
 
-            # Apply updates
+            # Apply updates with 3-tier tracking
             updated_count = 0
             for upd in updates:
+                # Determine outcome based on highest target hit
+                outcome = 'active'
+                if upd["hit_moonshot"]:
+                    outcome = 'moonshot'
+                elif upd["hit_medium"]:
+                    outcome = 'medium_hit'
+                elif upd["hit_primary"]:
+                    outcome = 'win'
+
                 existing = await conn.fetchrow(
                     "SELECT id FROM pick_outcomes_detailed WHERE pick_id = $1",
                     upd["pick_id"]
@@ -502,18 +527,19 @@ async def manual_check_targets():
                 if existing:
                     await conn.execute("""
                         UPDATE pick_outcomes_detailed
-                        SET hit_primary_target = $2, hit_moonshot_target = $3, price_at_hit = $4, hit_at = NOW()
+                        SET hit_primary_target = $2, hit_medium_target = $3, hit_moonshot_target = $4,
+                            price_at_hit = $5, hit_at = NOW(), outcome = $6
                         WHERE pick_id = $1
-                    """, upd["pick_id"], upd["hit_primary"], upd["hit_moonshot"], upd["current_price"])
+                    """, upd["pick_id"], upd["hit_primary"], upd["hit_medium"], upd["hit_moonshot"],
+                        upd["current_price"], outcome)
                 else:
-                    # Get next ID manually and insert
-                    next_id = await conn.fetchval(
-                        "SELECT COALESCE(MAX(id), 0) + 1 FROM pick_outcomes_detailed"
-                    )
                     await conn.execute("""
-                        INSERT INTO pick_outcomes_detailed (id, pick_id, symbol, direction, hit_primary_target, hit_moonshot_target, price_at_hit, hit_at)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-                    """, next_id, upd["pick_id"], upd["symbol"], upd["direction"], upd["hit_primary"], upd["hit_moonshot"], upd["current_price"])
+                        INSERT INTO pick_outcomes_detailed
+                            (pick_id, symbol, direction, hit_primary_target, hit_medium_target, hit_moonshot_target, price_at_hit, hit_at, outcome)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8)
+                    """, upd["pick_id"], upd["symbol"], upd["direction"],
+                        upd["hit_primary"], upd["hit_medium"], upd["hit_moonshot"],
+                        upd["current_price"], outcome)
                 updated_count += 1
 
             return {
