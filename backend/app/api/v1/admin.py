@@ -435,6 +435,55 @@ async def get_dashboard_stats():
         return {"error": str(e)}
 
 
+@router.get("/data/freshness")
+async def get_data_freshness():
+    """Check freshness of OHLC and other data"""
+    try:
+        from app.core.database import get_asyncpg_pool
+        from datetime import datetime
+
+        db = await get_asyncpg_pool()
+        async with db.acquire() as conn:
+            # OHLC data freshness
+            ohlc = await conn.fetchrow("""
+                SELECT MAX(date) as latest, MIN(date) as oldest, COUNT(*) as rows
+                FROM prime_ohlc_90d
+            """)
+
+            # Shortlist freshness
+            shortlist = await conn.fetchrow("""
+                SELECT MAX(date) as latest, COUNT(*) as today_count
+                FROM shortlist_candidates
+                WHERE date = CURRENT_DATE
+            """)
+
+            # Picks freshness
+            picks = await conn.fetchrow("""
+                SELECT MAX(created_at) as latest, COUNT(*) as today_count
+                FROM picks
+                WHERE DATE(created_at) = CURRENT_DATE
+            """)
+
+            return {
+                "ohlc": {
+                    "latest_date": str(ohlc["latest"]) if ohlc["latest"] else None,
+                    "oldest_date": str(ohlc["oldest"]) if ohlc["oldest"] else None,
+                    "total_rows": ohlc["rows"] or 0
+                },
+                "shortlist": {
+                    "latest_date": str(shortlist["latest"]) if shortlist["latest"] else None,
+                    "today_count": shortlist["today_count"] or 0
+                },
+                "picks": {
+                    "latest_created": str(picks["latest"]) if picks["latest"] else None,
+                    "today_count": picks["today_count"] or 0
+                },
+                "server_time": datetime.utcnow().isoformat()
+            }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.get("/data/picks")
 async def get_picks_data(limit: int = 50, offset: int = 0):
     """Get picks for admin dashboard"""
