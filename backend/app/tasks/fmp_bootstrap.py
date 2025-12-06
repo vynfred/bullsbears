@@ -34,7 +34,12 @@ def fmp_bootstrap(self):
     Takes ~25 minutes
     """
     async def _run():
+        from datetime import datetime
         from app.services.fmp_data_ingestion import get_fmp_ingestion
+        from app.services.activity_logger import log_activity, get_tier_counts
+
+        start_time = datetime.now()
+        await log_activity("fmp_bootstrap", "started", {"mode": "90-day full bootstrap"})
 
         logger.info("=" * 60)
         logger.info("FMP BOOTSTRAP TASK STARTED")
@@ -44,9 +49,16 @@ def fmp_bootstrap(self):
             ingestion = await get_fmp_ingestion()
             await ingestion.bootstrap_prime_db()
 
+            elapsed = (datetime.now() - start_time).total_seconds()
+            tier_counts = await get_tier_counts()
+
             logger.info("=" * 60)
             logger.info(f"✅ BOOTSTRAP COMPLETE - {ingestion.daily_mb:.2f} MB")
             logger.info("=" * 60)
+
+            await log_activity("fmp_bootstrap", "completed",
+                             {"data_mb": round(ingestion.daily_mb, 2)},
+                             tier_counts=tier_counts, duration_seconds=elapsed)
 
             return {
                 "success": True,
@@ -54,9 +66,12 @@ def fmp_bootstrap(self):
             }
 
         except Exception as e:
+            elapsed = (datetime.now() - start_time).total_seconds()
             logger.error(f"❌ BOOTSTRAP FAILED: {e}")
             import traceback
             traceback.print_exc()
+            await log_activity("fmp_bootstrap", "error", success=False,
+                             error_message=str(e), duration_seconds=elapsed)
             return {
                 "success": False,
                 "error": str(e)
@@ -72,7 +87,12 @@ def fmp_catchup(self):
     Takes ~5 minutes
     """
     async def _run():
+        from datetime import datetime
         from app.services.fmp_data_ingestion import get_fmp_ingestion
+        from app.services.activity_logger import log_activity, get_tier_counts
+
+        start_time = datetime.now()
+        await log_activity("fmp_catchup", "started", {"mode": "7-day catchup"})
 
         logger.info("FMP 7-DAY CATCHUP TASK STARTED")
 
@@ -80,7 +100,14 @@ def fmp_catchup(self):
             ingestion = await get_fmp_ingestion()
             await ingestion.catchup_7days()
 
+            elapsed = (datetime.now() - start_time).total_seconds()
+            tier_counts = await get_tier_counts()
+
             logger.info(f"✅ CATCHUP COMPLETE - {ingestion.daily_mb:.2f} MB")
+
+            await log_activity("fmp_catchup", "completed",
+                             {"data_mb": round(ingestion.daily_mb, 2)},
+                             tier_counts=tier_counts, duration_seconds=elapsed)
 
             return {
                 "success": True,
@@ -88,7 +115,10 @@ def fmp_catchup(self):
             }
 
         except Exception as e:
+            elapsed = (datetime.now() - start_time).total_seconds()
             logger.error(f"❌ CATCHUP FAILED: {e}")
+            await log_activity("fmp_catchup", "error", success=False,
+                             error_message=str(e), duration_seconds=elapsed)
             return {
                 "success": False,
                 "error": str(e)

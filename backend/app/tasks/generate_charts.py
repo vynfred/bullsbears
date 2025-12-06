@@ -335,14 +335,40 @@ async def get_chart_generator() -> ChartGenerator:
 def generate_charts(prev_result=None):
     """Celery task — runs at 8:15 AM ET. Accepts prev_result for chain compatibility."""
     async def _run():
+        from datetime import datetime
         from app.services.system_state import is_system_on
+        from app.services.activity_logger import log_activity, get_tier_counts
+
+        start_time = datetime.now()
 
         # Check if system is ON
         if not await is_system_on():
             logger.info("⏸️ System is OFF - skipping chart generation")
+            await log_activity("charts", "skipped", {"reason": "system_off"})
             return {"skipped": True, "reason": "system_off"}
 
-        gen = await get_chart_generator()
-        return await gen.generate_all_charts()
+        tier_counts = await get_tier_counts()
+        await log_activity("charts", "started",
+                          {"shortlist_count": tier_counts.get("shortlist", 0)},
+                          tier_counts=tier_counts)
+
+        try:
+            gen = await get_chart_generator()
+            result = await gen.generate_all_charts()
+
+            elapsed = (datetime.now() - start_time).total_seconds()
+            tier_counts = await get_tier_counts()
+            await log_activity("charts", "completed",
+                              {"generated": result.get("charts_generated", 0),
+                               "failed": result.get("charts_failed", 0)},
+                              tier_counts=tier_counts, duration_seconds=elapsed)
+
+            return result
+        except Exception as e:
+            elapsed = (datetime.now() - start_time).total_seconds()
+            logger.error(f"Chart generation failed: {e}")
+            await log_activity("charts", "error", success=False,
+                              error_message=str(e), duration_seconds=elapsed)
+            raise
 
     return asyncio.run(_run())
