@@ -515,6 +515,82 @@ async def prime_historical_data(mode: str = "catchup"):
         }
 
 
+@router.post("/build-active")
+async def build_active_tier():
+    """
+    Build ACTIVE tier from stocks with OHLC data.
+    Filters by: min volume (100K), min price (not penny stocks), fresh data.
+    Run this after bootstrap/catchup to classify stocks.
+    """
+    try:
+        from app.core.database import get_asyncpg_pool
+        from app.services.activity_logger import log_activity
+        from datetime import datetime
+
+        start_time = datetime.now()
+        await log_activity("build_active", "started", {"source": "manual trigger"})
+
+        db = await get_asyncpg_pool()
+        async with db.acquire() as conn:
+            # Get stocks from prime_ohlc_90d with recent data and good volume
+            # Filter: avg volume > 100K, price > $1, has recent data (within 7 days)
+            result = await conn.fetch("""
+                WITH recent_stats AS (
+                    SELECT
+                        symbol,
+                        AVG(volume) as avg_volume,
+                        AVG(close_price) as avg_price,
+                        MAX(date) as latest_date,
+                        COUNT(*) as data_points
+                    FROM prime_ohlc_90d
+                    WHERE date >= CURRENT_DATE - INTERVAL '30 days'
+                    GROUP BY symbol
+                    HAVING AVG(volume) >= 100000
+                       AND AVG(close_price) >= 1.0
+                       AND COUNT(*) >= 10
+                )
+                SELECT symbol, avg_volume, avg_price, latest_date, data_points
+                FROM recent_stats
+                ORDER BY avg_volume DESC
+            """)
+
+            if not result:
+                await log_activity("build_active", "completed",
+                                 {"active_count": 0, "reason": "no qualifying stocks"})
+                return {"success": True, "active_count": 0, "message": "No stocks met ACTIVE criteria"}
+
+            # Clear existing ACTIVE classifications
+            await conn.execute("DELETE FROM stock_classifications WHERE current_tier = 'ACTIVE'")
+
+            # Insert new ACTIVE stocks
+            for row in result:
+                await conn.execute("""
+                    INSERT INTO stock_classifications (symbol, current_tier, avg_volume_20d, last_price, last_updated)
+                    VALUES ($1, 'ACTIVE', $2, $3, NOW())
+                    ON CONFLICT (symbol) DO UPDATE SET
+                        current_tier = 'ACTIVE',
+                        avg_volume_20d = EXCLUDED.avg_volume_20d,
+                        last_price = EXCLUDED.last_price,
+                        last_updated = NOW()
+                """, row["symbol"], float(row["avg_volume"]), float(row["avg_price"]))
+
+            elapsed = (datetime.now() - start_time).total_seconds()
+            await log_activity("build_active", "completed",
+                             {"active_count": len(result)},
+                             tier_counts={"all": 0, "active": len(result), "shortlist": 0, "picks": 0},
+                             duration_seconds=elapsed)
+
+            return {
+                "success": True,
+                "active_count": len(result),
+                "message": f"Classified {len(result)} stocks as ACTIVE (volume >= 100K, price >= $1)"
+            }
+
+    except Exception as e:
+        await log_activity("build_active", "error", success=False, error_message=str(e))
+        return {"success": False, "error": str(e)}
+
+
 @router.get("/prime-status")
 async def get_prime_status(task_id: str = None):
     """Check status of bootstrap/catchup task"""
