@@ -55,6 +55,7 @@ async def verify_admin_token(token: str = Depends(oauth2_scheme)) -> dict:
 
 def verify_admin_credentials(email: str, password: str) -> bool:
     """Verify admin email and password against env vars."""
-    if not settings.ADMIN_EMAIL or not settings.ADMIN_PASSWORD:
+    admin_pwd = settings.admin_password  # Uses property that checks both env vars
+    if not settings.ADMIN_EMAIL or not admin_pwd:
         return False
-    return email == settings.ADMIN_EMAIL and password == settings.ADMIN_PASSWORD
+    return email == settings.ADMIN_EMAIL and password == admin_pwd

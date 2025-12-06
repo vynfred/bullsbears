@@ -13,8 +13,14 @@ class Settings(BaseSettings):
 
     # Admin auth (set in Render dashboard)
     ADMIN_EMAIL: str = ""
-    ADMIN_PASSWORD: str = ""
+    ADMIN_PASSWORD: str = ""  # Falls back to ADMIN_PASSWORD_TXT
+    ADMIN_PASSWORD_TXT: str = ""  # Alternative name for password
     ADMIN_JWT_SECRET: str = ""  # Generate with: openssl rand -hex 32
+
+    @property
+    def admin_password(self) -> str:
+        """Get admin password from either ADMIN_PASSWORD or ADMIN_PASSWORD_TXT."""
+        return self.ADMIN_PASSWORD or self.ADMIN_PASSWORD_TXT
 
     # API Keys — required for full functionality, but allow startup without them
     # This allows Celery worker to start even if env vars are missing
