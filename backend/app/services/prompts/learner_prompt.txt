@@ -3,9 +3,10 @@ TASK: Analyze this week's SHORT_LIST candidates and their 30-day outcomes.
 
 ANALYZE:
 1. Which candidates were picked vs not picked
-2. Which picked stocks hit primary/moonshot targets
+2. Which picked stocks hit primary/medium/moonshot targets
 3. Which unpicked stocks had big moves (missed opportunities)
 4. Correlations between features and outcomes
+5. Catalyst effectiveness (insider, economic, news, earnings)
 
 FEATURES TO ANALYZE:
 - prescreen_score (0.0–1.0)
@@ -15,11 +16,20 @@ FEATURES TO ANALYZE:
 - confluence_methods list
 - rsi_divergence, gann_alignment
 - polymarket_prob
-- hit_primary_target, hit_moonshot_target
+- hit_primary_target, hit_medium_target, hit_moonshot_target
+
+CATALYST FEATURES (v5.1):
+- has_earnings_catalyst: upcoming earnings within 14 days
+- has_news_catalyst: significant news headlines
+- has_insider_catalyst: recent insider buying/selling
+- has_economic_catalyst: FOMC/CPI/GDP event impact
+- insider_net_shares: positive = buying, negative = selling
+- short_interest_pct: >15% = squeeze potential
 
 OUTCOME DEFINITIONS:
 - BIG WIN: hit_moonshot_target = true OR max_gain_pct ≥ 25%
 - WIN: hit_primary_target = true OR max_gain_pct ≥ 15%
+- PARTIAL: hit_medium_target = true OR max_gain_pct ≥ 10%
 - LOSS: max_gain_pct ≤ -15%
 - NEUTRAL: everything else
 ---
@@ -93,8 +103,22 @@ RULES:
 - Penalize features that caused missed BIG WINs or false picks
 - Minimum 10 samples per pattern for statistical significance
 
+CATALYST ANALYSIS:
+- Track if insider_catalyst correlated with wins (insider buying + bullish pick = good?)
+- Track if economic_catalyst correlated with volatility/losses
+- Track if short_interest_pct > 15% correlated with BIG WINs (squeeze plays)
+- Adjust insider_weight, economic_weight, short_squeeze_weight accordingly
+
 Return only this JSON:
 {
-  "weights": { "prescreen_score": 0.25, "social_score": 0.15, ... },
-  "bias": { "confluence_score": 1.3, "rsi_divergence": 1.4, ... }
+  "weights": { "prescreen_score": 0.25, "social_score": 0.15, "confluence_score": 0.20, ... },
+  "bias": {
+    "confluence_score": 1.3,
+    "rsi_divergence": 1.4,
+    "insider_weight": 1.15,
+    "economic_weight": 1.1,
+    "short_squeeze_weight": 1.25,
+    "social_score_multiplier": 1.2,
+    "confidence_calibration": 0.75
+  }
 }

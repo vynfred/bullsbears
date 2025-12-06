@@ -6,6 +6,7 @@ BullsBears v5 Celery Tasks – Clean exports
 from .fmp_delta_update import fmp_delta_update
 from .build_active_symbols import build_active_symbols
 from .run_prescreen import run_prescreen
+from .fetch_insider_trading import fetch_insider_trading
 from .generate_charts import generate_charts
 from .run_vision import run_vision
 from .run_grok_social import run_grok_social

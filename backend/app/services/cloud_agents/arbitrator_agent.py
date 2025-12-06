@@ -66,6 +66,17 @@ async def get_final_picks(phase_data: dict) -> dict:
         bias = {"social_score_multiplier": 1.2, "confidence_calibration": 0.75}
 
     short_list = phase_data.get("short_list", [])
+    insider_data = phase_data.get("insider_data", {})
+    economic_events = phase_data.get("economic_events", {})
+    short_interest = phase_data.get("short_interest", {})
+
+    # Enrich candidates with catalyst data
+    for s in short_list:
+        sym = s.get("symbol", "")
+        s["insider_data"] = insider_data.get(sym, {})
+        s["economic_events"] = economic_events.get(sym, [])
+        s["short_interest_pct"] = short_interest.get(sym, 0)
+
     bullish_candidates = [s for s in short_list if s.get("direction") == "bull"]
     bearish_candidates = [s for s in short_list if s.get("direction") == "bear"]
 
@@ -79,6 +90,14 @@ async def get_final_picks(phase_data: dict) -> dict:
 LEARNED ARBITRATOR BIAS (updated nightly):
 Social Score ×{bias.get("social_score_multiplier", 1.2)}
 Confidence Calibration: {bias.get("confidence_calibration", 0.75)}
+Insider Catalyst Weight: {bias.get("insider_weight", 1.15)}
+Economic Event Weight: {bias.get("economic_weight", 1.1)}
+
+=== CATALYST SIGNALS ===
+- Insider buying (net positive shares) = BULLISH catalyst
+- Insider selling (net negative shares) = caution flag
+- High short interest (>15%) + positive momentum = squeeze potential
+- Upcoming FOMC/CPI/GDP = volatility risk, reduce position size
 
 === BULLISH CANDIDATES ({len(bullish_candidates)}) ===
 {json.dumps(bullish_candidates, indent=2, default=str)}
@@ -86,7 +105,11 @@ Confidence Calibration: {bias.get("confidence_calibration", 0.75)}
 === BEARISH CANDIDATES ({len(bearish_candidates)}) ===
 {json.dumps(bearish_candidates, indent=2, default=str)}
 
-Select TOP 3 from each. Return valid JSON with "final_picks" array.
+Select TOP 3 from each. Prioritize stocks with:
+1. High confluence_score + catalyst alignment
+2. Insider buying for bullish / insider selling for bearish
+3. Social sentiment confirmation
+Return valid JSON with "final_picks" array.
 """
 
     payload_base = {

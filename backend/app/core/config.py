@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     REDIS_URL: str
 
+    # Admin auth (set in Render dashboard)
+    ADMIN_EMAIL: str = ""
+    ADMIN_PASSWORD: str = ""
+    ADMIN_JWT_SECRET: str = ""  # Generate with: openssl rand -hex 32
+
     # API Keys — required for full functionality, but allow startup without them
     # This allows Celery worker to start even if env vars are missing
     FIREWORKS_API_KEY: str = ""

@@ -266,6 +266,17 @@ class PrescreenAgent:
         today = date.today()
         stock_lookup = {s["symbol"]: s for s in stock_data}
 
+        # Fetch upcoming economic events (next 7 days) to add to all candidates
+        economic_events = []
+        async with self.db.acquire() as conn:
+            econ_rows = await conn.fetch("""
+                SELECT release_name, release_date, impact_level
+                FROM economic_calendar
+                WHERE release_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
+                ORDER BY release_date
+            """)
+            economic_events = [{"event": r["release_name"], "date": str(r["release_date"]), "impact": r["impact_level"]} for r in econ_rows]
+
         async with self.db.acquire() as conn:
             # Clear today's existing shortlist
             await conn.execute("DELETE FROM shortlist_candidates WHERE date = $1", today)
@@ -273,9 +284,10 @@ class PrescreenAgent:
             # Insert bullish picks
             for rank, symbol in enumerate(bullish_picks, 1):
                 s = stock_lookup.get(symbol, {})
+                short_interest = s.get("short_interest_pct", 0) or 0
                 # Store technical snapshot with short interest for arbitrator to read
                 tech_snapshot = json.dumps({
-                    "short_interest_pct": s.get("short_interest_pct", 0),
+                    "short_interest_pct": short_interest,
                     "catalyst_earnings": s.get("catalyst_earnings", False),
                     "catalyst_short_squeeze": s.get("catalyst_short_squeeze", False),
                     "volume_ratio": s.get("volume_ratio", 0),
@@ -284,21 +296,24 @@ class PrescreenAgent:
                 await conn.execute("""
                     INSERT INTO shortlist_candidates (
                         date, symbol, rank, direction, prescreen_score, prescreen_reasoning,
-                        price_at_selection, technical_snapshot, created_at
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+                        price_at_selection, technical_snapshot, short_interest_pct, economic_events, created_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
                     ON CONFLICT (date, symbol) DO UPDATE SET
                         rank = EXCLUDED.rank,
                         direction = EXCLUDED.direction,
                         prescreen_score = EXCLUDED.prescreen_score,
                         technical_snapshot = EXCLUDED.technical_snapshot,
+                        short_interest_pct = EXCLUDED.short_interest_pct,
+                        economic_events = EXCLUDED.economic_events,
                         updated_at = NOW()
-                """, today, symbol, rank, "bull", s.get("volume_ratio", 0) * 10, summary, s.get("price", 0), tech_snapshot)
+                """, today, symbol, rank, "bull", s.get("volume_ratio", 0) * 10, summary, s.get("price", 0), tech_snapshot, short_interest, json.dumps(economic_events))
 
             # Insert bearish picks
             for rank, symbol in enumerate(bearish_picks, len(bullish_picks) + 1):
                 s = stock_lookup.get(symbol, {})
+                short_interest = s.get("short_interest_pct", 0) or 0
                 tech_snapshot = json.dumps({
-                    "short_interest_pct": s.get("short_interest_pct", 0),
+                    "short_interest_pct": short_interest,
                     "catalyst_earnings": s.get("catalyst_earnings", False),
                     "catalyst_short_squeeze": s.get("catalyst_short_squeeze", False),
                     "volume_ratio": s.get("volume_ratio", 0),
@@ -307,15 +322,17 @@ class PrescreenAgent:
                 await conn.execute("""
                     INSERT INTO shortlist_candidates (
                         date, symbol, rank, direction, prescreen_score, prescreen_reasoning,
-                        price_at_selection, technical_snapshot, created_at
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+                        price_at_selection, technical_snapshot, short_interest_pct, economic_events, created_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
                     ON CONFLICT (date, symbol) DO UPDATE SET
                         rank = EXCLUDED.rank,
                         direction = EXCLUDED.direction,
                         prescreen_score = EXCLUDED.prescreen_score,
                         technical_snapshot = EXCLUDED.technical_snapshot,
+                        short_interest_pct = EXCLUDED.short_interest_pct,
+                        economic_events = EXCLUDED.economic_events,
                         updated_at = NOW()
-                """, today, symbol, rank, "bear", s.get("volume_ratio", 0) * 10, summary, s.get("price", 0), tech_snapshot)
+                """, today, symbol, rank, "bear", s.get("volume_ratio", 0) * 10, summary, s.get("price", 0), tech_snapshot, short_interest, json.dumps(economic_events))
 
         total_picks = len(bullish_picks) + len(bearish_picks)
         earnings_count = sum(1 for s in stock_data if s.get("catalyst_earnings"))

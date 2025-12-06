@@ -72,7 +72,10 @@ def run_arbitrator(prev_result=None):
                         vision_flags,
                         social_score,
                         social_data,
-                        polymarket_prob
+                        polymarket_prob,
+                        insider_data,
+                        economic_events,
+                        short_interest_pct
                     FROM shortlist_candidates
                     WHERE date = $1
                     ORDER BY rank
@@ -83,11 +86,14 @@ def run_arbitrator(prev_result=None):
                 logger.warning("No SHORT_LIST found for today")
                 return {"success": False, "reason": "no_shortlist"}
 
-            # Build phase_data for arbitrator
+            # Build phase_data for arbitrator with all catalyst data
             phase_data = {
                 "short_list": [dict(s) for s in shortlist],
-                "vision_flags": {s["symbol"]: json.loads(s["vision_flags"]) for s in shortlist if s["vision_flags"]},
+                "vision_flags": {s["symbol"]: json.loads(s["vision_flags"]) if s["vision_flags"] else {} for s in shortlist},
                 "social_scores": {s["symbol"]: s["social_score"] for s in shortlist},
+                "insider_data": {s["symbol"]: json.loads(s["insider_data"]) if s["insider_data"] else {} for s in shortlist},
+                "economic_events": {s["symbol"]: json.loads(s["economic_events"]) if s["economic_events"] else [] for s in shortlist},
+                "short_interest": {s["symbol"]: float(s["short_interest_pct"]) if s["short_interest_pct"] else 0 for s in shortlist},
                 "market_context": {},  # add VIX/SPY later if needed
             }
 
@@ -252,6 +258,12 @@ def run_arbitrator(prev_result=None):
 
                     # Insert final pick with 3-tier targets + catalyst data
                     # NOTE: Only using target_primary/medium/moonshot (clean schema)
+                    # Get insider/economic catalyst flags from phase_data
+                    insider_data = phase_data.get("insider_data", {}).get(symbol, {})
+                    has_insider = bool(insider_data.get("has_activity") and insider_data.get("net_shares", 0) > 0)
+                    economic_events = phase_data.get("economic_events", {}).get(symbol, [])
+                    has_economic = len(economic_events) > 0
+
                     pick_id = await conn.fetchval("""
                         INSERT INTO picks (
                             symbol, direction, confidence, reasoning,
@@ -259,9 +271,10 @@ def run_arbitrator(prev_result=None):
                             confluence_score, confluence_methods, rsi_divergence, gann_alignment,
                             weekly_pivots,
                             has_earnings_catalyst, has_news_catalyst, short_interest_pct,
+                            has_insider_catalyst, insider_data, has_economic_catalyst, economic_events,
                             pick_context, created_at, expires_at
                         ) VALUES (
-                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
                             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '30 days'
                         ) RETURNING id
                     """,
@@ -280,6 +293,10 @@ def run_arbitrator(prev_result=None):
                         conf_targets.catalyst.has_earnings,
                         conf_targets.catalyst.has_news_catalyst,
                         short_interest_pct,
+                        has_insider,
+                        json.dumps(insider_data) if insider_data else None,
+                        has_economic,
+                        json.dumps(economic_events) if economic_events else None,
                         json.dumps(pick_context)
                     )
 

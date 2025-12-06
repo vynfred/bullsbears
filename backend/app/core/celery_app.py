@@ -25,6 +25,7 @@ celery_app = Celery(
         "app.tasks.fmp_bootstrap",
         "app.tasks.build_active_symbols",
         "app.tasks.run_prescreen",
+        "app.tasks.fetch_insider_trading",
         "app.tasks.generate_charts",
         "app.tasks.run_vision",
         "app.tasks.run_grok_social",
@@ -105,6 +106,13 @@ celery_app.conf.beat_schedule = {
     "run-prescreen-daily": {
         "task": "tasks.run_prescreen",
         "schedule": crontab(hour=8, minute=0),
+        "options": {"queue": "default"},
+    },
+
+    # 8:05 AM ET - Insider Trading: Fetch FMP insider data for shortlist
+    "fetch-insider-trading-daily": {
+        "task": "tasks.fetch_insider_trading",
+        "schedule": crontab(hour=8, minute=5),
         "options": {"queue": "default"},
     },
 

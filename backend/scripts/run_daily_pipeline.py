@@ -104,7 +104,7 @@ async def _run_pipeline_steps(results: dict):
 
     try:
         # Step 4: Prescreen
-        logger.info("🔍 Step 4/8: Prescreen (ACTIVE → SHORT_LIST)...")
+        logger.info("🔍 Step 4/9: Prescreen (ACTIVE → SHORT_LIST)...")
         agent_manager = await get_agent_manager()
         prescreen_result = await agent_manager.run_prescreen_agent()
         results["prescreen"] = prescreen_result
@@ -115,8 +115,20 @@ async def _run_pipeline_steps(results: dict):
         return {"status": "failed", "step": "prescreen", "results": results}
 
     try:
-        # Step 5: Generate Charts
-        logger.info("📈 Step 5/8: Generating charts...")
+        # Step 5: Insider Trading (FMP data for shortlist)
+        logger.info("📊 Step 5/9: Fetching insider trading data...")
+        from app.tasks.fetch_insider_trading import _fetch_insider_for_shortlist_async
+        insider_result = await _fetch_insider_for_shortlist_async()
+        results["insider_trading"] = insider_result
+        logger.info(f"✅ Insider trading complete: {insider_result.get('updated', 0)} stocks updated")
+    except Exception as e:
+        logger.error(f"⚠️ Insider trading failed (non-critical): {e}")
+        results["insider_trading"] = f"error: {e}"
+        # Don't fail pipeline - insider data is supplementary
+
+    try:
+        # Step 6: Generate Charts
+        logger.info("📈 Step 6/9: Generating charts...")
         from app.tasks.generate_charts import get_chart_generator
         chart_gen = await get_chart_generator()
         chart_result = await chart_gen.generate_all_charts()
@@ -128,8 +140,8 @@ async def _run_pipeline_steps(results: dict):
         return {"status": "failed", "step": "charts", "results": results}
 
     try:
-        # Step 6: Vision Analysis
-        logger.info("👁️ Step 6/8: Vision analysis (Fireworks Qwen3-VL)...")
+        # Step 7: Vision Analysis
+        logger.info("👁️ Step 7/9: Vision analysis (Fireworks Qwen3-VL)...")
         vision_result = await agent_manager.run_vision_agent()
         results["vision"] = vision_result
         logger.info(f"✅ Vision complete")
@@ -139,8 +151,8 @@ async def _run_pipeline_steps(results: dict):
         # Continue - social might still work
 
     try:
-        # Step 7: Social Analysis
-        logger.info("📱 Step 7/8: Social analysis (Grok)...")
+        # Step 8: Social Analysis
+        logger.info("📱 Step 8/9: Social analysis (Grok)...")
         social_result = await agent_manager.run_social_agent()
         results["social"] = social_result
         logger.info(f"✅ Social complete")
@@ -150,8 +162,8 @@ async def _run_pipeline_steps(results: dict):
         # Continue - arbitrator can work without social
 
     try:
-        # Step 8: Arbitrator (with Fib targets)
-        logger.info("🎯 Step 8/8: Arbitrator (final picks with Fib targets)...")
+        # Step 9: Arbitrator (with Fib targets)
+        logger.info("🎯 Step 9/9: Arbitrator (final picks with Fib targets)...")
         arbitrator_result = await agent_manager.run_arbitrator_agent()
         results["arbitrator"] = arbitrator_result
         logger.info(f"✅ Arbitrator complete: {arbitrator_result.get('picks_count', 0)} picks")

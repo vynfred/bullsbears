@@ -9,20 +9,21 @@ class StockClassification(Base):
     """
     Maps to stock_classifications table in SQL
     Tracks stock tier progression: ALL → ACTIVE → SHORT_LIST → PICKS
+    Updated weekly (Sunday 2 AM ET)
     """
     __tablename__ = 'stock_classifications'
 
     id = Column(Integer, primary_key=True)
     symbol = Column(String(10), nullable=False, unique=True, index=True)
-    exchange = Column(String(10), nullable=False, index=True)
+    exchange = Column(String(10), default='NASDAQ', index=True)
     current_tier = Column(String(20), nullable=False, index=True)  # ALL, ACTIVE, SHORT_LIST, PICKS
 
-    # Basic stock metrics for tier qualification
-    price = Column(DECIMAL(10, 2))
+    # v5 metrics for tier qualification
+    last_price = Column(DECIMAL(10, 2))
+    avg_volume_20d = Column(BigInteger)
     market_cap = Column(BigInteger)
-    daily_volume = Column(BigInteger)
 
-    # Company info fields (added via ALTER TABLE in SQL)
+    # Company info
     company_name = Column(String(255))
     sector = Column(String(100))
     industry = Column(String(100))

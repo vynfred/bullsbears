@@ -23,7 +23,7 @@ async def run_weekly_learner(week_start: date, week_end: date):
     """
     logger.info(f"Weekly learner running: {week_start} → {week_end}")
 
-    # 1. Pull real data from PostgreSQL with confluence + outcome data
+    # 1. Pull real data from PostgreSQL with confluence + catalyst + outcome data
     pool = await get_asyncpg_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
@@ -36,6 +36,10 @@ async def run_weekly_learner(week_start: date, week_end: date):
                 sc.picked_direction as direction,
                 sc.price_at_selection AS price_at_pick,
                 hd_30.close_price AS price_30d_later,
+                -- Catalyst data from shortlist
+                sc.insider_data,
+                sc.economic_events,
+                sc.short_interest_pct,
                 -- Confluence data from picks table
                 p.confluence_score,
                 p.confluence_methods,
@@ -43,6 +47,11 @@ async def run_weekly_learner(week_start: date, week_end: date):
                 p.gann_alignment,
                 p.target_primary,
                 p.target_moonshot,
+                -- Extended catalyst flags from picks
+                p.has_earnings_catalyst,
+                p.has_news_catalyst,
+                p.has_insider_catalyst,
+                p.has_economic_catalyst,
                 -- Outcome tracking
                 pod.hit_primary_target,
                 pod.hit_medium_target,
@@ -61,7 +70,7 @@ async def run_weekly_learner(week_start: date, week_end: date):
             ORDER BY sc.date DESC
         """, week_start, week_end)
 
-    # 2. Build candidate list with 30-day moves + confluence metrics
+    # 2. Build candidate list with 30-day moves + confluence + catalyst metrics
     candidates = []
     for r in rows:
         if r["price_at_pick"] and r["price_30d_later"] and r["price_at_pick"] > 0:
@@ -73,6 +82,11 @@ async def run_weekly_learner(week_start: date, week_end: date):
         confluence_methods = r["confluence_methods"] or []
         if isinstance(confluence_methods, str):
             confluence_methods = json.loads(confluence_methods) if confluence_methods else []
+
+        # Parse insider data
+        insider_data = r["insider_data"] or {}
+        if isinstance(insider_data, str):
+            insider_data = json.loads(insider_data) if insider_data else {}
 
         candidates.append({
             "symbol": r["symbol"],
@@ -87,6 +101,13 @@ async def run_weekly_learner(week_start: date, week_end: date):
             "confluence_methods": confluence_methods,
             "rsi_divergence": bool(r["rsi_divergence"]),
             "gann_alignment": bool(r["gann_alignment"]),
+            # Catalyst tracking (v5.1)
+            "has_earnings_catalyst": bool(r["has_earnings_catalyst"]),
+            "has_news_catalyst": bool(r["has_news_catalyst"]),
+            "has_insider_catalyst": bool(r["has_insider_catalyst"]),
+            "has_economic_catalyst": bool(r["has_economic_catalyst"]),
+            "insider_net_shares": insider_data.get("net_shares", 0),
+            "short_interest_pct": float(r["short_interest_pct"]) if r["short_interest_pct"] else 0,
             # 3-tier target hit tracking
             "hit_primary": bool(r["hit_primary_target"]),
             "hit_medium": bool(r["hit_medium_target"]),

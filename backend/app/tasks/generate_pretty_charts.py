@@ -74,13 +74,10 @@ class PrettyChartGenerator:
         logger.info("🎨 Generating pretty charts for final picks...")
 
         async with self.db.acquire() as conn:
-            # Get today's picks with 3-tier confluence targets
+            # Get today's picks with v5 3-tier targets (no legacy columns)
             picks = await conn.fetch("""
                 SELECT p.id, p.symbol, p.direction, p.confidence,
-                       p.target_low, p.target_high,
-                       COALESCE(p.target_primary, p.primary_target) as target_primary,
-                       p.target_medium,
-                       COALESCE(p.target_moonshot, p.moonshot_target) as target_moonshot,
+                       p.target_primary, p.target_medium, p.target_moonshot,
                        p.confluence_score, p.confluence_methods,
                        p.rsi_divergence, p.gann_alignment,
                        p.weekly_pivots,
@@ -142,12 +139,7 @@ class PrettyChartGenerator:
             swing_low = conf_analysis.get("swing_low")
             swing_high = conf_analysis.get("swing_high")
 
-            # Fallback to old field names or estimates
-            if target_primary is None:
-                target_primary = float(pick["target_low"]) if pick["target_low"] else None
-            if target_moonshot is None and pick["target_high"]:
-                target_moonshot = float(pick["target_high"])
-
+            # Estimate stop_loss if not provided
             if stop_loss is None:
                 if direction == "bullish":
                     stop_loss = swing_low or (entry_price * 0.92 if entry_price else None)
