@@ -274,10 +274,30 @@ async def init_database():
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_outcomes_pick_unique ON pick_outcomes_detailed(pick_id);
             """)
 
+            # Create pipeline_activity table for Recent Activity logging
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS pipeline_activity (
+                    id SERIAL PRIMARY KEY,
+                    timestamp TIMESTAMP DEFAULT NOW(),
+                    step VARCHAR(50) NOT NULL,
+                    action VARCHAR(100) NOT NULL,
+                    details JSONB,
+                    tier_counts JSONB,
+                    duration_seconds DECIMAL(10, 2),
+                    success BOOLEAN DEFAULT TRUE,
+                    error_message TEXT
+                )
+            """)
+
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_activity_timestamp ON pipeline_activity(timestamp DESC);
+                CREATE INDEX IF NOT EXISTS idx_activity_step ON pipeline_activity(step);
+            """)
+
         return {
             "success": True,
             "message": "Database tables created successfully",
-            "tables": ["stock_classifications", "prime_ohlc_90d", "picks", "shortlist_candidates", "pick_outcomes_detailed"]
+            "tables": ["stock_classifications", "prime_ohlc_90d", "picks", "shortlist_candidates", "pick_outcomes_detailed", "pipeline_activity"]
         }
 
     except Exception as e:
@@ -482,6 +502,23 @@ async def get_data_freshness():
             }
     except Exception as e:
         return {"error": str(e)}
+
+
+@router.get("/data/activity")
+async def get_recent_activity(limit: int = 50):
+    """Get recent pipeline activity for admin dashboard"""
+    try:
+        from app.services.activity_logger import get_recent_activity, get_tier_counts
+
+        activity = await get_recent_activity(limit)
+        tier_counts = await get_tier_counts()
+
+        return {
+            "activity": activity,
+            "tier_counts": tier_counts
+        }
+    except Exception as e:
+        return {"error": str(e), "activity": [], "tier_counts": {}}
 
 
 @router.get("/data/picks")

@@ -29,12 +29,22 @@ def run_arbitrator(prev_result=None):
     """
 
     async def _run():
+        from app.services.activity_logger import log_activity, get_tier_counts
+        start_time = datetime.now()
+
         # Kill switch — respects admin panel
         if not await is_system_on():
             logger.info("System is OFF – skipping arbitrator")
+            await log_activity("arbitrator", "skipped", {"reason": "system_off"})
             return {"skipped": True, "reason": "system_off"}
 
         logger.info("Starting final arbitrator with qwen2.5-72b-instruct (Fireworks)")
+
+        # Log start
+        tier_counts = await get_tier_counts()
+        await log_activity("arbitrator", "started",
+                          {"shortlist_count": tier_counts.get("shortlist", 0)},
+                          tier_counts=tier_counts)
         
         try:
             db = await get_asyncpg_pool()
@@ -301,7 +311,24 @@ def run_arbitrator(prev_result=None):
                     )
                     saved_count += 1
 
+            elapsed = (datetime.now() - start_time).total_seconds()
             logger.info(f"Arbitrator complete: {saved_count} new picks, {updated_count} updated")
+
+            # Log completion with pick details
+            tier_counts = await get_tier_counts()
+            pick_details = [
+                {
+                    "symbol": p.get("symbol"),
+                    "direction": p.get("direction"),
+                    "confidence": p.get("confidence")
+                }
+                for p in final_picks
+            ]
+            await log_activity("arbitrator", "completed",
+                              {"picks_count": saved_count, "updated_count": updated_count,
+                               "picks": pick_details, "model": "qwen2.5-72b-instruct"},
+                              tier_counts=tier_counts, duration_seconds=elapsed)
+
             return {
                 "success": True,
                 "picks_count": saved_count,
@@ -312,7 +339,10 @@ def run_arbitrator(prev_result=None):
             }
 
         except Exception as e:
+            elapsed = (datetime.now() - start_time).total_seconds()
             logger.exception("Arbitrator task failed")
+            await log_activity("arbitrator", "error", success=False,
+                              error_message=str(e), duration_seconds=elapsed)
             return {"success": False, "error": str(e)}
 
     return asyncio.run(_run())
