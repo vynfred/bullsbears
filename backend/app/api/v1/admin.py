@@ -195,7 +195,7 @@ async def init_database():
                 CREATE INDEX IF NOT EXISTS idx_ohlc_date ON prime_ohlc_90d(date);
             """)
 
-            # Create picks table
+            # Create picks table - v5 clean schema (3-tier Fib targets + confluence)
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS picks (
                     id SERIAL PRIMARY KEY,
@@ -203,8 +203,21 @@ async def init_database():
                     direction VARCHAR(10) NOT NULL,
                     confidence DECIMAL(5, 4) NOT NULL,
                     reasoning TEXT,
-                    target_low DECIMAL(10, 2),
-                    target_high DECIMAL(10, 2),
+                    -- 3-tier Fibonacci targets
+                    target_primary DECIMAL(10, 2),
+                    target_medium DECIMAL(10, 2),
+                    target_moonshot DECIMAL(10, 2),
+                    -- Confluence data
+                    confluence_score INTEGER DEFAULT 0,
+                    confluence_methods TEXT[],
+                    rsi_divergence BOOLEAN DEFAULT FALSE,
+                    gann_alignment BOOLEAN DEFAULT FALSE,
+                    weekly_pivots JSONB,
+                    -- Catalyst flags
+                    has_earnings_catalyst BOOLEAN DEFAULT FALSE,
+                    has_news_catalyst BOOLEAN DEFAULT FALSE,
+                    short_interest_pct DECIMAL(5, 2),
+                    -- Context & timestamps
                     pick_context JSONB,
                     created_at TIMESTAMP DEFAULT NOW(),
                     expires_at TIMESTAMP
@@ -217,19 +230,23 @@ async def init_database():
                 CREATE INDEX IF NOT EXISTS idx_picks_created ON picks(created_at);
             """)
 
-            # Create shortlist_candidates table
+            # Create shortlist_candidates table - v5 with rank, direction, reasoning
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS shortlist_candidates (
                     id SERIAL PRIMARY KEY,
                     date DATE NOT NULL,
                     symbol VARCHAR(10) NOT NULL,
+                    rank INTEGER,
+                    direction VARCHAR(10),
                     price_at_selection DECIMAL(10, 2),
                     prescreen_score DECIMAL(5, 2),
-                    technical_score DECIMAL(5, 2),
-                    fundamental_score DECIMAL(5, 2),
-                    sentiment_score DECIMAL(5, 2),
+                    prescreen_reasoning TEXT,
+                    technical_snapshot JSONB,
+                    fundamental_snapshot JSONB,
                     vision_flags JSONB,
                     social_score DECIMAL(5, 2),
+                    social_data JSONB,
+                    polymarket_prob DECIMAL(5, 4),
                     was_picked BOOLEAN DEFAULT FALSE,
                     picked_direction VARCHAR(10),
                     created_at TIMESTAMP DEFAULT NOW(),
@@ -244,20 +261,31 @@ async def init_database():
                 CREATE INDEX IF NOT EXISTS idx_shortlist_picked ON shortlist_candidates(was_picked);
             """)
 
-            # Create pick_outcomes_detailed table
+            # Create pick_outcomes_detailed table - v5 with 3-tier target tracking
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS pick_outcomes_detailed (
                     id SERIAL PRIMARY KEY,
                     pick_id INTEGER REFERENCES picks(id),
                     symbol VARCHAR(10) NOT NULL,
                     direction VARCHAR(10) NOT NULL,
-                    entry_price DECIMAL(10, 2),
-                    target_low DECIMAL(10, 2),
-                    target_high DECIMAL(10, 2),
+                    price_when_picked DECIMAL(10, 2),
+                    -- 3-tier targets (copied from pick for tracking)
+                    target_primary DECIMAL(10, 2),
+                    target_medium DECIMAL(10, 2),
+                    target_moonshot DECIMAL(10, 2),
+                    -- Hit tracking
+                    hit_primary_target BOOLEAN DEFAULT FALSE,
+                    hit_medium_target BOOLEAN DEFAULT FALSE,
+                    hit_moonshot_target BOOLEAN DEFAULT FALSE,
+                    -- Outcome metrics
                     outcome VARCHAR(20) DEFAULT 'pending',
-                    exit_price DECIMAL(10, 2),
+                    max_price DECIMAL(10, 2),
                     max_gain_pct DECIMAL(6, 2),
+                    days_to_primary INTEGER,
+                    days_to_medium INTEGER,
+                    days_to_moonshot INTEGER,
                     days_to_peak INTEGER,
+                    -- Timestamps
                     created_at TIMESTAMP DEFAULT NOW(),
                     resolved_at TIMESTAMP
                 )
@@ -305,6 +333,134 @@ async def init_database():
             "success": False,
             "message": f"Database initialization failed: {str(e)}"
         }
+
+
+@router.post("/reset-pipeline-tables")
+async def reset_pipeline_tables():
+    """
+    DROP and RECREATE the core v5 pipeline tables for a fresh start.
+    WARNING: This deletes all picks, shortlist, and outcomes data!
+    """
+    try:
+        from app.core.database import get_asyncpg_pool
+
+        db = await get_asyncpg_pool()
+        async with db.acquire() as conn:
+            # Drop tables in correct order (foreign key dependencies)
+            await conn.execute("DROP TABLE IF EXISTS pick_outcomes_detailed CASCADE")
+            await conn.execute("DROP TABLE IF EXISTS picks CASCADE")
+            await conn.execute("DROP TABLE IF EXISTS shortlist_candidates CASCADE")
+            await conn.execute("DROP TABLE IF EXISTS pipeline_activity CASCADE")
+
+            # Recreate picks table - v5 clean schema
+            await conn.execute("""
+                CREATE TABLE picks (
+                    id SERIAL PRIMARY KEY,
+                    symbol VARCHAR(10) NOT NULL,
+                    direction VARCHAR(10) NOT NULL,
+                    confidence DECIMAL(5, 4) NOT NULL,
+                    reasoning TEXT,
+                    target_primary DECIMAL(10, 2),
+                    target_medium DECIMAL(10, 2),
+                    target_moonshot DECIMAL(10, 2),
+                    confluence_score INTEGER DEFAULT 0,
+                    confluence_methods TEXT[],
+                    rsi_divergence BOOLEAN DEFAULT FALSE,
+                    gann_alignment BOOLEAN DEFAULT FALSE,
+                    weekly_pivots JSONB,
+                    has_earnings_catalyst BOOLEAN DEFAULT FALSE,
+                    has_news_catalyst BOOLEAN DEFAULT FALSE,
+                    short_interest_pct DECIMAL(5, 2),
+                    pick_context JSONB,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    expires_at TIMESTAMP
+                )
+            """)
+            await conn.execute("CREATE INDEX idx_picks_symbol ON picks(symbol)")
+            await conn.execute("CREATE INDEX idx_picks_direction ON picks(direction)")
+            await conn.execute("CREATE INDEX idx_picks_created ON picks(created_at)")
+
+            # Recreate shortlist_candidates table
+            await conn.execute("""
+                CREATE TABLE shortlist_candidates (
+                    id SERIAL PRIMARY KEY,
+                    date DATE NOT NULL,
+                    symbol VARCHAR(10) NOT NULL,
+                    rank INTEGER,
+                    direction VARCHAR(10),
+                    price_at_selection DECIMAL(10, 2),
+                    prescreen_score DECIMAL(5, 2),
+                    prescreen_reasoning TEXT,
+                    technical_snapshot JSONB,
+                    fundamental_snapshot JSONB,
+                    vision_flags JSONB,
+                    social_score DECIMAL(5, 2),
+                    social_data JSONB,
+                    polymarket_prob DECIMAL(5, 4),
+                    was_picked BOOLEAN DEFAULT FALSE,
+                    picked_direction VARCHAR(10),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(date, symbol)
+                )
+            """)
+            await conn.execute("CREATE INDEX idx_shortlist_date ON shortlist_candidates(date)")
+            await conn.execute("CREATE INDEX idx_shortlist_symbol ON shortlist_candidates(symbol)")
+            await conn.execute("CREATE INDEX idx_shortlist_picked ON shortlist_candidates(was_picked)")
+
+            # Recreate pick_outcomes_detailed table
+            await conn.execute("""
+                CREATE TABLE pick_outcomes_detailed (
+                    id SERIAL PRIMARY KEY,
+                    pick_id INTEGER REFERENCES picks(id),
+                    symbol VARCHAR(10) NOT NULL,
+                    direction VARCHAR(10) NOT NULL,
+                    price_when_picked DECIMAL(10, 2),
+                    target_primary DECIMAL(10, 2),
+                    target_medium DECIMAL(10, 2),
+                    target_moonshot DECIMAL(10, 2),
+                    hit_primary_target BOOLEAN DEFAULT FALSE,
+                    hit_medium_target BOOLEAN DEFAULT FALSE,
+                    hit_moonshot_target BOOLEAN DEFAULT FALSE,
+                    outcome VARCHAR(20) DEFAULT 'pending',
+                    max_price DECIMAL(10, 2),
+                    max_gain_pct DECIMAL(6, 2),
+                    days_to_primary INTEGER,
+                    days_to_medium INTEGER,
+                    days_to_moonshot INTEGER,
+                    days_to_peak INTEGER,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    resolved_at TIMESTAMP
+                )
+            """)
+            await conn.execute("CREATE INDEX idx_outcomes_pick ON pick_outcomes_detailed(pick_id)")
+            await conn.execute("CREATE INDEX idx_outcomes_symbol ON pick_outcomes_detailed(symbol)")
+            await conn.execute("CREATE UNIQUE INDEX idx_outcomes_pick_unique ON pick_outcomes_detailed(pick_id)")
+
+            # Recreate pipeline_activity table
+            await conn.execute("""
+                CREATE TABLE pipeline_activity (
+                    id SERIAL PRIMARY KEY,
+                    timestamp TIMESTAMP DEFAULT NOW(),
+                    step VARCHAR(50) NOT NULL,
+                    action VARCHAR(50) NOT NULL,
+                    details JSONB,
+                    tier_counts JSONB,
+                    duration_seconds DECIMAL(8, 2),
+                    success BOOLEAN DEFAULT TRUE,
+                    error_message TEXT
+                )
+            """)
+            await conn.execute("CREATE INDEX idx_activity_timestamp ON pipeline_activity(timestamp DESC)")
+            await conn.execute("CREATE INDEX idx_activity_step ON pipeline_activity(step)")
+
+        return {
+            "success": True,
+            "message": "Pipeline tables reset to v5 schema",
+            "tables_reset": ["picks", "shortlist_candidates", "pick_outcomes_detailed", "pipeline_activity"]
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 @router.post("/prime-data")

@@ -93,10 +93,46 @@ class AgentManager:
     
     async def run_arbitrator_agent(self) -> dict:
         """Run final arbitrator with Fib targets"""
-        from app.tasks.run_arbitrator import _run_arbitrator_async
-        
-        result = await _run_arbitrator_async()
-        return result
+        from app.services.cloud_agents.arbitrator_agent import get_final_picks
+        from app.services.fib_calculator import calculate_confluence_targets
+        import json
+
+        if not self.db:
+            self.db = await get_asyncpg_pool()
+
+        # Get latest shortlist
+        async with self.db.acquire() as conn:
+            latest = await conn.fetchrow("SELECT MAX(date) as latest_date FROM shortlist_candidates")
+            if not latest or not latest['latest_date']:
+                return {"status": "error", "message": "No shortlist found"}
+
+            shortlist_date = latest['latest_date']
+
+            shortlist = await conn.fetch("""
+                SELECT symbol, rank, direction, prescreen_score, prescreen_reasoning,
+                       price_at_selection, technical_snapshot, fundamental_snapshot,
+                       vision_flags, social_score, social_data, polymarket_prob
+                FROM shortlist_candidates
+                WHERE date = $1
+                ORDER BY rank
+                LIMIT 75
+            """, shortlist_date)
+
+        if not shortlist:
+            return {"status": "error", "message": "No shortlist found"}
+
+        # Build phase_data
+        phase_data = {
+            "short_list": [dict(s) for s in shortlist],
+            "vision_flags": {s["symbol"]: json.loads(s["vision_flags"]) for s in shortlist if s["vision_flags"]},
+            "social_scores": {s["symbol"]: s["social_score"] for s in shortlist},
+            "market_context": {},
+        }
+
+        result = await get_final_picks(phase_data)
+        picks_count = len(result.get("final_picks", []))
+
+        return {"status": "success", "picks_count": picks_count, "result": result}
     
     async def run_learner_agent(self) -> dict:
         """Run weekly learner to update weights"""

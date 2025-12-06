@@ -23,7 +23,7 @@ async def run_weekly_learner(week_start: date, week_end: date):
     """
     logger.info(f"Weekly learner running: {week_start} → {week_end}")
 
-    # 1. Pull real data from Render PostgreSQL with confluence + outcome data
+    # 1. Pull real data from PostgreSQL with confluence + outcome data
     pool = await get_asyncpg_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
@@ -32,9 +32,8 @@ async def run_weekly_learner(week_start: date, week_end: date):
                 sc.prescreen_score,
                 sc.social_score,
                 sc.vision_flags,
-                sc.polymarket_prob,
-                sc.selected,
-                fp.direction,
+                sc.was_picked as selected,
+                sc.picked_direction as direction,
                 sc.price_at_selection AS price_at_pick,
                 hd_30.close_price AS price_30d_later,
                 -- Confluence data from picks table
@@ -42,23 +41,22 @@ async def run_weekly_learner(week_start: date, week_end: date):
                 p.confluence_methods,
                 p.rsi_divergence,
                 p.gann_alignment,
-                p.primary_target,
-                p.moonshot_target,
+                p.target_primary,
+                p.target_moonshot,
                 -- Outcome tracking
                 pod.hit_primary_target,
+                pod.hit_medium_target,
                 pod.hit_moonshot_target,
                 pod.max_gain_pct
             FROM shortlist_candidates sc
-            LEFT JOIN final_picks fp
-                ON fp.shortlist_id = sc.id
             LEFT JOIN picks p
                 ON p.symbol = sc.symbol
-                AND p.created_at::date = sc.date::date
+                AND p.created_at::date = sc.date
             LEFT JOIN pick_outcomes_detailed pod
                 ON pod.pick_id = p.id
-            LEFT JOIN historical_data hd_30
+            LEFT JOIN prime_ohlc_90d hd_30
                 ON hd_30.symbol = sc.symbol
-                AND hd_30.date = sc.date::date + INTERVAL '30 days'
+                AND hd_30.date = sc.date + INTERVAL '30 days'
             WHERE sc.date >= $1 AND sc.date <= $2
             ORDER BY sc.date DESC
         """, week_start, week_end)
@@ -81,7 +79,6 @@ async def run_weekly_learner(week_start: date, week_end: date):
             "prescreen": round(float(r["prescreen_score"] or 0), 3),
             "social": int(r["social_score"] or 0),
             "vision": r["vision_flags"] or {},
-            "polymarket": round(float(r["polymarket_prob"] or 0), 3),
             "picked": bool(r["selected"]),
             "direction": r["direction"],
             "pct_30d": pct_30d,
@@ -90,7 +87,9 @@ async def run_weekly_learner(week_start: date, week_end: date):
             "confluence_methods": confluence_methods,
             "rsi_divergence": bool(r["rsi_divergence"]),
             "gann_alignment": bool(r["gann_alignment"]),
+            # 3-tier target hit tracking
             "hit_primary": bool(r["hit_primary_target"]),
+            "hit_medium": bool(r["hit_medium_target"]),
             "hit_moonshot": bool(r["hit_moonshot_target"]),
             "max_gain_pct": float(r["max_gain_pct"]) if r["max_gain_pct"] else None
         })

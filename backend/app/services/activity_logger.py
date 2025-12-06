@@ -80,18 +80,33 @@ async def get_recent_activity(limit: int = 50) -> list:
     """Get recent pipeline activity for admin dashboard"""
     try:
         from app.core.database import get_asyncpg_pool
-        
+
         db = await get_asyncpg_pool()
         async with db.acquire() as conn:
+            # Ensure table exists before querying
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS pipeline_activity (
+                    id SERIAL PRIMARY KEY,
+                    timestamp TIMESTAMP DEFAULT NOW(),
+                    step VARCHAR(50) NOT NULL,
+                    action VARCHAR(100) NOT NULL,
+                    details JSONB,
+                    tier_counts JSONB,
+                    duration_seconds DECIMAL(10, 2),
+                    success BOOLEAN DEFAULT TRUE,
+                    error_message TEXT
+                )
+            """)
+
             rows = await conn.fetch("""
-                SELECT 
-                    timestamp, step, action, details, tier_counts, 
+                SELECT
+                    timestamp, step, action, details, tier_counts,
                     duration_seconds, success, error_message
                 FROM pipeline_activity
                 ORDER BY timestamp DESC
                 LIMIT $1
             """, limit)
-            
+
             return [
                 {
                     "timestamp": row["timestamp"].isoformat() if row["timestamp"] else None,

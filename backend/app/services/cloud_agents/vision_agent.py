@@ -120,6 +120,10 @@ async def _analyze_one(client: httpx.AsyncClient, item: Dict[str, Any], prompt: 
         if "</think>" in content:
             json_content = content.split("</think>")[-1].strip()
 
+        # Strip markdown code blocks (```json ... ```)
+        import re
+        json_content = re.sub(r"^```json\s*|```$", "", json_content, flags=re.MULTILINE).strip()
+
         # Find the last JSON object (most reliable for thinking models)
         start = json_content.rfind("{")
         end = json_content.rfind("}") + 1
