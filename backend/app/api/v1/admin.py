@@ -134,13 +134,13 @@ async def get_data_freshness():
     try:
         db = await get_asyncpg_pool()
         async with db.acquire() as conn:
-            # OHLC data freshness
+            # OHLC data freshness (table: prime_ohlc_90d)
             ohlc = await conn.fetchrow("""
                 SELECT
                     MAX(date) as latest_date,
                     MIN(date) as oldest_date,
                     COUNT(*) as total_rows
-                FROM ohlc_daily
+                FROM prime_ohlc_90d
             """)
 
             # Shortlist freshness
@@ -159,9 +159,9 @@ async def get_data_freshness():
                 FROM picks
             """)
 
-            # Active symbols count
+            # Active symbols count (table: stock_classifications)
             active = await conn.fetchval("""
-                SELECT COUNT(*) FROM stock_universe WHERE classification = 'ACTIVE'
+                SELECT COUNT(*) FROM stock_classifications WHERE current_tier = 'ACTIVE'
             """)
 
             return {
@@ -195,9 +195,9 @@ async def get_data_stats():
             stocks = await conn.fetchrow("""
                 SELECT
                     COUNT(*) as total,
-                    COUNT(*) FILTER (WHERE classification = 'ALL') as all_tier,
-                    COUNT(*) FILTER (WHERE classification = 'ACTIVE') as active_tier
-                FROM stock_universe
+                    COUNT(*) FILTER (WHERE current_tier = 'ALL') as all_tier,
+                    COUNT(*) FILTER (WHERE current_tier = 'ACTIVE') as active_tier
+                FROM stock_classifications
             """)
 
             shortlist = await conn.fetchrow("""

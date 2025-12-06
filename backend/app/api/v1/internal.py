@@ -45,18 +45,23 @@ async def get_data_freshness_public():
     try:
         db = await get_asyncpg_pool()
         async with db.acquire() as conn:
-            # OHLC data freshness
+            # OHLC data freshness (table: prime_ohlc_90d)
             ohlc = await conn.fetchrow("""
                 SELECT
                     MAX(date) as latest_date,
                     MIN(date) as oldest_date,
                     COUNT(*) as total_rows
-                FROM ohlc_daily
+                FROM prime_ohlc_90d
             """)
 
-            # Active symbols count
+            # Active symbols count (table: stock_classifications)
             active = await conn.fetchval("""
-                SELECT COUNT(*) FROM stock_universe WHERE classification = 'ACTIVE'
+                SELECT COUNT(*) FROM stock_classifications WHERE current_tier = 'ACTIVE'
+            """)
+
+            # All tier count
+            all_tier = await conn.fetchval("""
+                SELECT COUNT(*) FROM stock_classifications WHERE current_tier = 'ALL'
             """)
 
             # Shortlist today
@@ -72,6 +77,7 @@ async def get_data_freshness_public():
             return {
                 "ohlc_latest": str(ohlc["latest_date"]) if ohlc["latest_date"] else None,
                 "ohlc_rows": ohlc["total_rows"] or 0,
+                "all_tier": all_tier or 0,
                 "active_symbols": active or 0,
                 "shortlist_today": shortlist_today or 0,
                 "picks_today": picks_today or 0,
